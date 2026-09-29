@@ -1,0 +1,24 @@
+defaults:
+  - retriever: naive
+  - _self_
+
+seed: 20260811
+
+embedding:
+  model_name: nlpai-lab/KURE-v1
+  normalize: true
+  device: cpu
+  batch_size: 16
+
+data:
+  # 저장소 루트 기준 상대경로. Hydra는 경로를 해석하지 않는다 — 쓰는 쪽에서 ROOT와 결합한다.
+  chunks_path: data/processed/chunks/sent1024-ov128/chunks.jsonl
+  embeddings_path: data/processed/chunks/sent1024-ov128/embeddings.npy
+  queries_path: data/processed/queries_summary_q.jsonl
+  sample_ids_path: data/processed/sample_doc_ids.txt
+  # 질의 벡터 캐시. embeddings.npy + qids.txt + config.json이 들어간다
+  query_emb_dir: data/processed/query_emb/summary_q_sample
+
+eval:
+  # 문서 단위 Recall을 찍을 k (ADR 0005)
+  recall_ks: [1, 5, 10]
