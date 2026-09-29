@@ -1,5 +1,5 @@
 [project]
-name = "mit-rag"
+name = "meet-rag"
 version = "0.1.0"
 description = "국회 회의록 기반 한국어 RAG 질의응답 시스템"
 requires-python = "==3.12.*"
