@@ -2,7 +2,7 @@
 
 ## 기본 규칙
 
-1. `main`에 직접 커밋하지 않는다.
+1. `main`에 직접 커밋하지 않는다. 예외는 아래 "핸드오프" 절차의 `docs/STATUS.md` 하나뿐이다.
 2. 모든 작업은 최신 `main`에서 딴 브랜치에서 시작한다.
 3. 브랜치 하나에는 목적 하나만 둔다.
 4. 작업이 끝나면 PR을 만든다.
@@ -39,3 +39,15 @@ Claude가 브랜치를 push하고 `gh pr create`로 PR을 만든다. diff 확인
 3. 본문에 대응 문서(SLICE·EXP), 변경, 검증 결과, self-review 지적과 반영 여부, 범위 밖 항목을 적는다
 
 병합은 merge commit으로 한다. squash나 rebase를 쓰면 EXP 문서에 적은 커밋 해시가 `main`에서 사라진다.
+
+## 핸드오프
+
+STATUS는 세션마다 덮어쓰는 스냅샷이고 코드가 아니므로 PR을 거치지 않는다.
+
+- 작업 PR이 병합된 뒤 핸드오프하면 `main`에 직접 커밋한다
+  1. `git switch main`, `git pull --ff-only`로 원격과 맞춘다
+  2. `docs/STATUS.md`를 덮어쓴다
+  3. `git add docs/STATUS.md` 후 `git diff --cached --name-only`가 이 파일 하나뿐인지 확인한다
+  4. `docs: STATUS 갱신`으로 커밋하고 push한다
+- 작업 도중 세션이 끝나면 STATUS 커밋을 작업 브랜치에 태운다
+- 다른 파일을 고칠 거리가 생기면 이 경로를 쓰지 않고 브랜치를 만든다
