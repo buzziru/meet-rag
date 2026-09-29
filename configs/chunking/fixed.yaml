@@ -1,0 +1,4 @@
+# 베이스라인 고정 토큰 길이 청킹. 값은 S4에서 정한다
+name: fixed
+chunk_tokens: ???
+overlap_tokens: ???

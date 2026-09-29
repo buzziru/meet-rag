@@ -1,0 +1,11 @@
+# 평가 프로토콜 v1 (docs/SPEC.md). 실험 중 수정하지 않는다
+recall_ks: [1, 5, 10]
+mrr_k: 10
+primary: recall@5
+breakdowns: [meeting_name, qna_type]
+bootstrap:
+  n_resamples: 10000
+  unit: conference_number
+  seed: 20260929
+  alpha: 0.05
+  min_gain: 0.01

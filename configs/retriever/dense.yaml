@@ -1,0 +1,5 @@
+type: dense
+# 반환할 서로 다른 문서 수 (SPEC: 10개 이상)
+top_k: 10
+# 문서 top_k개를 채우려고 먼저 뽑는 청크 수. S5에서 정한다
+chunk_pool: ???
