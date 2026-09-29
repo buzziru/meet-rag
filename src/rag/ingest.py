@@ -25,7 +25,8 @@ def iter_labels(raw_dir: Path) -> Iterator[tuple[str, dict]]:
         for zip_path in sorted((raw_dir / split / "02.라벨링데이터").glob(f"{prefix}*.zip")):
             with zipfile.ZipFile(zip_path) as zf:
                 for name in zf.namelist():
-                    if name.endswith(".json"):
+                    base = name.rsplit("/", 1)[-1]
+                    if base.startswith("LAB_") and base.endswith(".json"):
                         yield split, json.loads(zf.read(name))
 
 
