@@ -7,6 +7,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 환경: `uv sync --extra cpu` (GPU 환경은 `--extra cu126`)
 - 테스트: `uv run pytest -q`
 - 린트: `uv run ruff check .`
+- 데이터 적재: `uv run python -m rag.ingest` (라벨 zip → `data/processed/` 코퍼스·질의, 약 10초)
 - 파이프라인 명령(데이터 적재, 분할, 인덱스, 검색, 평가, 생성)은 해당 SLICE가 끝날 때 여기에 추가한다. 빠른 확인은 dev-small로 한다
 
 한글 출력이 깨지면 `PYTHONUTF8=1`로 실행한다. 파일은 `encoding="utf-8"`로 연다.
