@@ -1,0 +1,6 @@
+# Google AI Studio OpenAI 호환 엔드포인트 (docs/DECISIONS.md D-01)
+base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+api_key_env: GOOGLE_API_KEY
+# 정확한 모델 ID는 S6 스모크 테스트에서 확인한다
+model: ???
+temperature: 0.0

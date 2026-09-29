@@ -32,7 +32,7 @@
 
 ## PR
 
-`gh` CLI가 동작하지 않는다. Claude는 브랜치를 push하고 PR 제목·본문을 작성한다. PR 생성, diff 확인, 병합은 사용자가 GitHub 웹에서 한다.
+Claude가 브랜치를 push하고 `gh pr create`로 PR을 만든다. diff 확인과 병합은 사용자가 한다.
 
 1. `uv run pytest -q`, `uv run ruff check .` 통과를 확인한다
 2. 사용자 요청에 따라 self-review를 한다. 작성 맥락과 분리하려고 `/code-review`나 subagent로 실행한다
