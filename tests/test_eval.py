@@ -3,7 +3,9 @@ import pandas as pd
 import pytest
 
 from rag.eval.bootstrap import paired_bootstrap, verdict
-from rag.eval.metrics import gold_ranks, metric_table, per_query
+from rag.eval.metrics import gold_ranks, metric_table, min_docs, per_query
+
+N_MIN = min_docs([1, 5, 10], 10)
 
 
 def make_gold(n=4):
@@ -32,7 +34,7 @@ def make_run(gold, positions):
 def test_metrics_match_hand_computation():
     gold = make_gold()
     run = make_run(gold, {"q0": 1, "q1": 3, "q2": 7, "q3": None})
-    scores = per_query(gold_ranks(run, gold), [1, 5, 10], 10)
+    scores = per_query(gold_ranks(run, gold, N_MIN), [1, 5, 10], 10)
 
     assert scores["recall@1"].tolist() == [1, 0, 0, 0]
     assert scores["recall@5"].tolist() == [1, 1, 0, 0]
@@ -53,7 +55,7 @@ def test_duplicate_docs_keep_best_rank_and_rerank():
     q1 = ["x0", "x0", "g1"] + [f"y{j}" for j in range(9)]
     run = pd.concat([run[run["qid"] == "q0"],
                      pd.DataFrame({"qid": "q1", "rank": range(1, 13), "doc_id": q1})])
-    assert gold_ranks(run, gold).tolist() == [1, 2]
+    assert gold_ranks(run, gold, N_MIN).tolist() == [1, 2]
 
 
 @pytest.mark.parametrize("mutate, message", [
@@ -65,7 +67,15 @@ def test_duplicate_docs_keep_best_rank_and_rerank():
 def test_invalid_runs_raise(mutate, message):
     gold = make_gold()
     with pytest.raises(ValueError, match=message):
-        gold_ranks(mutate(make_run(gold, {})), gold)
+        gold_ranks(mutate(make_run(gold, {})), gold, N_MIN)
+
+
+def test_min_docs_follows_deepest_metric():
+    assert min_docs([1, 5, 10], 10) == 10
+    assert min_docs([1, 5, 20], 10) == 20
+    gold = make_gold()
+    with pytest.raises(ValueError, match="20개 미만"):
+        gold_ranks(make_run(gold, {}), gold, min_docs([1, 5, 20], 10))
 
 
 def test_identical_runs_give_zero_and_hold():

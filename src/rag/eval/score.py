@@ -10,6 +10,7 @@ from rag.eval.metrics import (
     load_cfg,
     load_gold,
     metric_table,
+    min_docs,
     per_query,
     read_run,
     sha256,
@@ -27,8 +28,10 @@ def main() -> None:
 
     cfg = load_cfg()
     gold = load_gold(cfg, args.layer, args.allow_test)
-    scores = per_query(gold_ranks(read_run(args.run), gold), cfg.eval.recall_ks, cfg.eval.mrr_k)
-    table = metric_table(scores, gold, cfg.eval.breakdowns)
+    ev = cfg.eval
+    ranks = gold_ranks(read_run(args.run), gold, min_docs(ev.recall_ks, ev.mrr_k))
+    scores = per_query(ranks, ev.recall_ks, ev.mrr_k)
+    table = metric_table(scores, gold, ev.breakdowns)
 
     digest = sha256(args.run)
     print(f"layer: {args.layer}\nrun: {args.run} (sha256 {digest})\n")

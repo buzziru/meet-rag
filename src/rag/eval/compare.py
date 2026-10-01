@@ -8,7 +8,15 @@ import json
 from pathlib import Path
 
 from rag.eval.bootstrap import paired_bootstrap, verdict
-from rag.eval.metrics import gold_ranks, load_cfg, load_gold, per_query, read_run, sha256
+from rag.eval.metrics import (
+    gold_ranks,
+    load_cfg,
+    load_gold,
+    min_docs,
+    per_query,
+    read_run,
+    sha256,
+)
 
 LAYER = "dev-full"
 
@@ -23,9 +31,10 @@ def main() -> None:
     cfg = load_cfg()
     ev = cfg.eval
     gold = load_gold(cfg, LAYER)
+    n_min = min_docs(ev.recall_ks, ev.mrr_k)
     runs = {"base": args.base, "cand": args.cand}
     scores = {
-        name: per_query(gold_ranks(read_run(path), gold), ev.recall_ks, ev.mrr_k)
+        name: per_query(gold_ranks(read_run(path), gold, n_min), ev.recall_ks, ev.mrr_k)
         for name, path in runs.items()
     }
     diff = scores["cand"][ev.primary] - scores["base"][ev.primary]

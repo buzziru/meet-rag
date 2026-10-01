@@ -12,7 +12,6 @@ from hydra import compose, initialize_config_dir
 
 ROOT = Path(__file__).resolve().parents[3]
 LAYERS = ("dev-small", "dev-full", "test")
-MIN_DOCS = 10  # SPEC "출력": 서로 다른 문서 10개 이상
 
 
 def load_cfg():
@@ -61,7 +60,15 @@ def read_run(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, dtype={"qid": str, "doc_id": str, "rank": int})
 
 
-def gold_ranks(run: pd.DataFrame, gold: pd.DataFrame) -> pd.Series:
+def min_docs(recall_ks, mrr_k: int) -> int:
+    """질의마다 필요한 서로 다른 문서 수. 지표가 보는 가장 깊은 순위다 (SPEC "출력").
+
+    지표 깊이에서 계산해, recall_ks·mrr_k를 바꾸면 하한도 함께 바뀌게 한다.
+    """
+    return max(*recall_ks, mrr_k)
+
+
+def gold_ranks(run: pd.DataFrame, gold: pd.DataFrame, n_min: int) -> pd.Series:
     """질의별 정답 문서 순위(목록에 없으면 NaN). 같은 문서는 가장 높은 순위만 남기고 다시 매긴다."""
     qids = set(run["qid"])
     extra = qids - set(gold.index)
@@ -75,10 +82,10 @@ def gold_ranks(run: pd.DataFrame, gold: pd.DataFrame) -> pd.Series:
 
     run = run.sort_values(["qid", "rank"]).drop_duplicates(["qid", "doc_id"])
     n_docs = run.groupby("qid").size()
-    short = n_docs[n_docs < MIN_DOCS]
+    short = n_docs[n_docs < n_min]
     if len(short):
         raise ValueError(
-            f"서로 다른 문서가 {MIN_DOCS}개 미만인 qid {len(short)}개: {list(short.index[:5])}"
+            f"서로 다른 문서가 {n_min}개 미만인 qid {len(short)}개: {list(short.index[:5])}"
         )
     run = run.assign(rank=run.groupby("qid").cumcount() + 1)
 
