@@ -9,6 +9,8 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 린트: `uv run ruff check .`
 - 데이터 적재: `uv run python -m rag.ingest` (라벨 zip → `data/processed/` 코퍼스·질의, 약 10초)
 - 평가 분할: `uv run python -m rag.splits` (→ `data/splits/queries.csv`, `dev_small_docs.txt`, 약 7초. 해시는 DECISIONS D-02)
+- 채점: `uv run python -m rag.eval.score --run <순위.csv> --layer dev-small|dev-full [--out <결과.json>]` (순위 파일 열 `qid`, `rank`, `doc_id`)
+- 판정: `uv run python -m rag.eval.compare --base <기준.csv> --cand <후보.csv> [--out <결과.json>]` (dev-full 고정, 회의 단위 paired bootstrap)
 - 파이프라인 명령(데이터 적재, 분할, 인덱스, 검색, 평가, 생성)은 해당 SLICE가 끝날 때 여기에 추가한다. 빠른 확인은 dev-small로 한다
 
 한글 출력이 깨지면 `PYTHONUTF8=1`로 실행한다. 파일은 `encoding="utf-8"`로 연다.
