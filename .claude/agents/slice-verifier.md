@@ -22,7 +22,7 @@ model: sonnet
 
 아래가 필요한 기준은 실행하지 않고 "사용자 승인 필요"로 보고한다.
 
-- Colab 등 외부 GPU, OpenRouter 같은 유료 API 호출
+- Colab 등 외부 GPU, OpenRouter 같은 유료 API 호출. Colab에서 만든 산출물(인덱스·임베딩)은 메인이 로컬 `data/`에 내려받아 둔 파일로만 검증한다
 - test 분할 질의를 읽거나 test 점수를 계산하는 명령
 - dev-full 규모 실행(노트북 RAM 8GB에서 오래 걸린다). 메인이 프롬프트에서 명시적으로 허용한 경우만 실행한다
 - `summary_q`를 Google AI Studio·Gemini 무료 쿼터로 보내는 명령

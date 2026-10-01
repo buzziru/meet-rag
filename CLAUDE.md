@@ -54,10 +54,13 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 
 **목표:** SLICE 구현과 EXP 판정에서 검증·감사·판정을 작성 맥락과 분리해 평가 오염을 막는다.
 
-**호출 조건:** SLICE 구현, EXP 실행·판정, G 항목(사람 검수 게이트)의 표본 추출·집계·결정 기록, PR 준비, 세션 마무리, STATUS "다음 행동" 진행을 요청받으면 `meet-rag` 스킬을 사용한다. 같은 세션에서 다음 조각·게이트·실험으로 넘어갈 때도 스킬의 0단계부터 다시 한다. 단순 질문에는 직접 답해도 된다.
+**호출 조건:** SLICE 구현, EXP 실행·판정, G 항목(사람 검수 게이트)의 표본 추출·집계·결정 기록, Colab GPU 작업(전체 코퍼스 임베딩·인덱스 구축), PR 준비, 세션 마무리, STATUS "다음 행동" 진행을 요청받으면 `meet-rag` 스킬을 사용한다. 같은 세션에서 다음 조각·게이트·실험으로 넘어갈 때도 스킬의 0단계부터 다시 한다. 단순 질문에는 직접 답해도 된다.
 
 **변경 이력:**
 | 날짜 | 변경 내용 | 대상 | 사유 |
 | --- | --- | --- | --- |
 | 2026-09-29 | Harness v2로 처음 구성 | 전체 | - |
 | 2026-10-01 | 0단계 재시작 규정, A1 지시서 별도 커밋·확인 전 멈춤, D 흐름(사람 검수 게이트) 추가, 트리거·호출 조건 확장, STATUS 흐름 표기 | skills/meet-rag, agents/protocol-auditor, CLAUDE.md | S1 뒤 같은 세션의 S2·G1에서 스킬이 다시 쓰이지 않아 지시서 확인이 빠지고 G 항목은 대응 흐름이 없었음 |
+| 2026-10-01 | colab-operator 스킬 추가, 오케스트레이터 E절(GPU 작업: 승인 → 지정 GPU 할당, 실패 시 T4 → 실행·기록 → 정리) 추가, slice-verifier·protocol-guard에 Colab 산출물 기준 추가 | skills/colab-operator, skills/meet-rag, agents/slice-verifier, skills/protocol-guard, CLAUDE.md | KURE-v1 등 임베딩을 직접 해야 해 GPU 작업을 Colab CLI로 하기로 함 |
+| 2026-10-01 | E절 비용·재할당 규칙(비용 변동으로 멈추지 않음, 예상 밖 재할당은 보고 후 사용자 결정) 명시, Colab 실행 기록 위치 `outputs/notebooks/`, P5 소량 질의 허용 | skills/meet-rag, skills/protocol-guard | PR #11 사용자 코멘트 |
+| 2026-10-01 | `outputs/`를 진행 중 커밋 금지(완료 후 공개)로 정하고 `.gitignore`의 `output/`을 `outputs/`로 교체 | skills/meet-rag, skills/protocol-guard, .gitignore | PR #11 사용자 결정 |
