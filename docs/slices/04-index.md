@@ -37,7 +37,7 @@
 - 배치는 토큰 수 상한(`embedding.max_batch_tokens`)으로 묶는다. 청크를 길이순으로 정렬한 뒤 `배치 크기 × 배치 안 최대 길이`가 상한을 넘지 않게 자른다. 8,192 토큰 청크를 고정 배치 크기로 묶으면 L4(24GB)에서도 메모리가 부족하다. 상한은 GPU에 맞춰 명령에서 바꾼다
 - 장치·정밀도는 `embedding.device`, `embedding.dtype`으로 정한다. 로컬은 `cpu`·`float32`, Colab은 명령에서 `embedding.device=cuda embedding.dtype=float16`으로 바꾼다
 - 인덱스 디렉터리는 `paths.index_dir`에 범위를 더한 경로다(`data/index/{임베딩}-{청킹}-{크기}-{overlap}/{범위}/`). 담는 것
-  - `chunks.jsonl`: `chunk_id`, `doc_id`, `start`, `end`(원문 문자 offset), `n_tokens`
+  - `chunks.jsonl`: `chunk_id`, `doc_id`, `start`, `end`(원문 문자 offset), `n_tokens`, `text`(청크 원문. Colab에서 코퍼스를 다시 읽지 않고 S6 생성에도 쓴다)
   - `emb/part-NNNNN.npy`: 청크 `index.shard_size`개씩 나눈 임베딩. 이미 있는 조각은 건너뛰어 재개한다
   - `meta.json`: 모델, 청킹 설정, 범위, 청크 수, 차원, 장치·정밀도, 소요 시간
 - 디버그용 `index.max_docs`(기본 `null`)를 주면 앞에서부터 그 수만큼만 처리한다. 로컬 사전 확인에 쓴다
