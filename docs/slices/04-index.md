@@ -1,6 +1,6 @@
 # S4 청킹·임베딩·인덱스
 
-코퍼스를 고정 토큰 길이로 나누고 KURE-v1로 임베딩해 인덱스로 저장한다. dev-small에서 청크 크기 후보 네 개를 비교해 `chunk_tokens`·`overlap_tokens`를 정하고, 정한 설정으로 전체 코퍼스 인덱스를 만든다. 임베딩은 Colab T4에서 한다(meet-rag 스킬 E절).
+코퍼스를 고정 토큰 길이로 나누고 KURE-v1로 임베딩해 인덱스로 저장한다. dev-small에서 청크 크기 후보 네 개를 비교해 `chunk_tokens`·`overlap_tokens`를 정하고, 정한 설정으로 전체 코퍼스 인덱스를 만든다. 임베딩은 Colab L4에서 하고, 할당이 실패하면 T4로 바꾼다(meet-rag 스킬 E절).
 
 ## 만드는 것
 
@@ -34,7 +34,7 @@
 ### 임베딩과 저장
 
 - `embedding.normalize: true`로 정규화한 벡터를 저장해 내적이 코사인 유사도가 되게 한다
-- 배치는 토큰 수 상한(`embedding.max_batch_tokens`)으로 묶는다. 청크를 길이순으로 정렬한 뒤 `배치 크기 × 배치 안 최대 길이`가 상한을 넘지 않게 자른다. 8,192 토큰 청크를 고정 배치 크기로 묶으면 T4(16GB) 메모리가 부족하다
+- 배치는 토큰 수 상한(`embedding.max_batch_tokens`)으로 묶는다. 청크를 길이순으로 정렬한 뒤 `배치 크기 × 배치 안 최대 길이`가 상한을 넘지 않게 자른다. 8,192 토큰 청크를 고정 배치 크기로 묶으면 L4(24GB)에서도 메모리가 부족하다. 상한은 GPU에 맞춰 명령에서 바꾼다
 - 장치·정밀도는 `embedding.device`, `embedding.dtype`으로 정한다. 로컬은 `cpu`·`float32`, Colab은 명령에서 `embedding.device=cuda embedding.dtype=float16`으로 바꾼다
 - 인덱스 디렉터리는 `paths.index_dir`에 범위를 더한 경로다(`data/index/{임베딩}-{청킹}-{크기}-{overlap}/{범위}/`). 담는 것
   - `chunks.jsonl`: `chunk_id`, `doc_id`, `start`, `end`(원문 문자 offset), `n_tokens`
@@ -53,19 +53,20 @@
 `chunk_sweep`이 후보별 순위 파일을 `rag.eval.metrics`로 검증·채점한다.
 
 - 주지표: Recall@5. 보조 지표: Recall@1·5·10, MRR@1·5·10. 지표 목록은 `chunk_sweep` 절에 두고 `configs/eval/`은 바꾸지 않는다
-- 표: 후보별 전체 지표와 청크 수. 회의구분·`qna_type`별 Recall@5도 함께 낸다
+- 표: 후보별 주지표·보조 지표 전부와 청크 수, 문서당 평균 청크 수. 회의구분·`qna_type`별로도 같은 지표를 낸다
+- 저장: 표와 후보별 질의 단위 결과(질의마다 각 후보의 정답 순위)를 `data/runs/chunk_sweep.json`에 남긴다. 나중에 한 문서를 여러 크기로 나눠 함께 쓰는 실험(백로그 H5)에서 어느 질의를 어느 크기가 맞히는지 비교하는 자료로 쓴다. dev-small 네 후보 인덱스도 지우지 않는다
 - 잡음 범위: Recall@5가 가장 높은 후보를 기준으로 다른 후보와의 차이를 `rag.eval.bootstrap.paired_bootstrap`(회의 단위, `configs/eval/spec_v1.yaml`의 반복·seed·alpha)으로 구한다
 - 결정 규칙(점수를 보기 전에 정함): Recall@5 최고 후보를 고른다. 95% 구간이 0을 포함하는 후보가 있으면 그중 청크 수가 가장 적은(크기가 큰) 후보를 고른다. 보조 지표는 판단 근거로 함께 보고하고, 주지표 규칙과 다른 결론을 가리키면 사용자에게 알려 정한다
-- 결정은 `configs/chunking/fixed.yaml`에 적고 비교표·근거를 `docs/DECISIONS.md`에 기록한다
+- 결정은 `configs/chunking/fixed.yaml`에 적고, 전체 지표 비교표·세부 표·근거를 `docs/DECISIONS.md`에 기록한다
 
 dev-small은 방해 문서가 약 1,000개라 전체 코퍼스(38,516)에서 순위가 달라질 수 있다. 이 한계를 DECISIONS에 함께 적고, 전체 규모 확인은 H3에서 한다.
 
 ## 실행 순서
 
 1. 로컬: 합성 테스트, `index.max_docs=20`으로 네 후보 인덱스 생성, 끊었다가 다시 실행해 재개 확인, 질의 임베딩, 검색
-2. Colab T4(E2 승인 후): dev-small 네 후보 임베딩. 소요 시간과 compute unit을 기록한다
+2. Colab L4(E2 승인 후): dev-small 네 후보 임베딩. 소요 시간과 compute unit을 기록한다
 3. 로컬: 내려받은 인덱스로 검색, `chunk_sweep`, 결정 기록
-4. Colab T4(E2 승인 후, 2의 처리량으로 예상치 산정): 정한 설정으로 전체 코퍼스 인덱스. 소요 시간과 compute unit을 기록한다
+4. Colab L4(E2 승인 후, 2의 처리량으로 예상치 산정): 정한 설정으로 전체 코퍼스 인덱스. 소요 시간과 compute unit을 기록한다
 
 ## 명령
 
@@ -88,7 +89,7 @@ uv run python -m rag.chunk_sweep
 | 5 | Colab에서 만든 dev-small 네 후보 인덱스 | 각 `chunks.jsonl`이 dev-small 1,007문서를 모두 포함하고 행 수 = 임베딩 행 수 |
 | 6 | `rag.search` 네 후보 | 순위 파일이 `rag.eval.score --layer dev-small` 검증을 통과(질의 1,039건, 질의당 문서 10개 이상) |
 | 7 | 6을 두 번 실행 | 순위 파일 SHA-256 일치 |
-| 8 | `rag.chunk_sweep` | 네 후보의 지표표, 청크 수, 기준 대비 차이·95% 구간 출력 |
+| 8 | `rag.chunk_sweep` | 네 후보의 Recall@1·5·10, MRR@1·5·10, 청크 수 표와 회의구분·`qna_type`별 표, 기준 대비 Recall@5 차이·95% 구간 출력. `data/runs/chunk_sweep.json`에 표와 질의 단위 정답 순위 저장 |
 | 9 | 전체 코퍼스 인덱스 | `chunks.jsonl`이 38,516문서를 모두 포함하고 행 수 = 임베딩 행 수, NaN 없음 |
 | 10 | 문서 기록 | 2·4의 Colab 소요 시간과 compute unit이 이 문서 "실행 기록"에, 비교표와 결정이 DECISIONS에 있음 |
 
@@ -102,10 +103,11 @@ uv run python -m rag.chunk_sweep
 
 - `src/rag/chunking.py`, `src/rag/index.py`, `src/rag/search.py`, `src/rag/chunk_sweep.py`, `tests/test_chunking.py`, `tests/test_index.py`, `tests/test_search.py`
 - `configs/config.yaml`(`index_dir` 경로, `embedding`·`index`·`chunk_sweep` 절), `configs/chunking/fixed.yaml`(결정 값)
-- `docs/DECISIONS.md`(비교표·결정), `CLAUDE.md` "명령" 절, `docs/PLAN.md` S4 체크, 이 문서
+- `docs/DECISIONS.md`(비교표·결정), `CLAUDE.md` "명령" 절, `docs/PLAN.md` S4 체크와 백로그 H5(다중 크기 청킹) 추가, 이 문서
 
 ## 범위 밖
 
 - dev-full 검색과 `chunk_pool`(S5), ANN 인덱스(FAISS 등)
-- overlap 비교, 문장 경계 청킹(H3, H4)
+- overlap 비교, 문장 경계 청킹(H3, H4), 다중 크기 청킹(H5)
+- 생성 프롬프트에 넣을 청크 길이(S6에서 다룬다)
 - `configs/eval/`, `src/rag/eval/` 수정
