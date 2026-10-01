@@ -1,6 +1,6 @@
 ---
 name: colab-operator
-description: colab CLI(google-colab-cli 0.6.0)로 Google Colab VM을 다루는 명령 사용법. 세션 생성·종료(colab new/stop), 원격 Python·셸 실행(colab exec/run), 파일 업로드·다운로드, 인증 오류 진단, 세션 복구. meet-rag에서 전체 코퍼스 임베딩·인덱스 구축·재임베딩처럼 GPU가 필요한 작업을 할 때 쓴다. meet-rag에서는 이 스킬만으로 VM을 만들지 않는다. 승인·GPU 선택·산출물 취급 규칙은 meet-rag 스킬의 E절(GPU 작업)을 먼저 따른다. 노트북 CPU에서 하는 dev-small 실행, Gemma 4 생성 호출에는 쓰지 않는다. 본문은 `colab skill` 출력을 그대로 옮긴 것이다.
+description: colab CLI(google-colab-cli 0.6.0)로 Google Colab VM을 다루는 명령 사용법. 세션 생성·종료(colab new/stop), 원격 Python·셸 실행(colab exec/run), 파일 업로드·다운로드, 인증 오류 진단, 세션 복구. meet-rag에서 전체 코퍼스 임베딩·인덱스 구축·재임베딩처럼 GPU가 필요한 작업을 할 때 쓴다. meet-rag에서는 이 스킬만으로 VM을 만들지 않는다. 승인·GPU 선택·산출물 취급 규칙은 meet-rag 스킬의 E절(GPU 작업)을 먼저 따른다. 로컬 PC CPU에서 하는 동작 확인, Jupyter 노트북에서 산출물을 확인하는 일, Gemma 4 생성 호출에는 쓰지 않는다. 본문은 `colab skill` 출력을 그대로 옮긴 것이다.
 ---
 
 # Skill: Colab Session Operator
