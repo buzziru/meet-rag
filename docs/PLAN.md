@@ -8,7 +8,7 @@ naive RAG(고정 길이 청킹 → KURE-v1 dense 검색 → 생성)로 베이스
 - [x] S2 평가 분할: `data/splits/queries.csv`, `data/splits/dev_small_docs.txt` 생성 (S1 필요) → slices/02-splits.md
 - [x] G1 `summary_q` 검수: dev 100건을 사람이 검수하고 필터 규칙 여부를 정한다. SPEC 미결 1 (S2 필요, S5 평가 실행 전에 끝낸다) → DECISIONS D-03
 - [x] S3 평가 모듈: 순위 파일(`qid`, `rank`, `doc_id`) → Recall@1·5·10, MRR@10, 회의구분·`qna_type`별 지표, 회의 단위 paired bootstrap. 합성 입력으로 검증한다. 완료 후 수정 금지 대상 → slices/03-eval.md
-- [ ] S4 청킹·임베딩·인덱스: 고정 토큰 길이 청킹, KURE-v1 임베딩, 중간 산출물 저장 후 재개 가능. dev-small은 노트북, 전체는 Colab (S1 필요) → slices/04-index.md
+- [x] S4 청킹·임베딩·인덱스: 고정 토큰 길이 청킹, KURE-v1 임베딩, 중간 산출물 저장 후 재개 가능. dev-small은 노트북, 전체는 Colab (S1 필요) → slices/04-index.md
   - 인덱스 경로에 설정 식별자를 넣고(예: `data/index/{임베딩모델}-{청킹}-{청크크기}/`) 어느 인덱스를 쓸지 config에 적는다. `data/`는 브랜치를 따라 바뀌지 않으므로, 브랜치를 옮기면 코드와 인덱스가 어긋날 수 있다
   - Colab에서는 저장소를 clone해 실행하고, 인덱스는 git에 올리지 않고 내려받아 로컬 `data/`에 둔다
 - [ ] S5 dense 검색 + 평가 실행: dev-small, dev-full 순위 파일 생성과 평가. 같은 명령을 두 번 실행해 점수가 같아야 한다 (S2, S3, S4, G1 필요) → slices/05-retrieve.md
@@ -28,6 +28,8 @@ S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를
 - [대기] H6 임베딩 모델 교체: `BAAI/bge-m3`, `dragonkue/BGE-m3-ko` (효과 불명 / 재임베딩 2회)
 - [대기] H7 청크 점수의 문서 집계 방식: 최고점 대신 상위 n개 합 등 (효과 소 / 비용 없음)
 - [보류] H8 질의 재작성·HyDE (LLM 호출 비용. `summary_q`를 유료 경로로 보내야 하므로 비용 추정 후 판단)
+- [대기] H9 다중 크기 청킹: 한 문서를 여러 크기(예: 256·512·1024)로 나눠 함께 검색하고 문서 순위로 합침. 자료는 S4 `data/runs/chunk_sweep.json`과 dev-small 네 인덱스 (효과 중 / 재임베딩)
+- [대기] H10 생성 컨텍스트 단위: 청크 / 앞뒤 청크 확장 / 문서 전체 비교 (DECISIONS D-05). 생성 평가를 SPEC에 추가한 뒤 시험 (효과 미상 / 재임베딩 없음)
 
 순서는 예상 효과 대비 비용 순이다. 실험 결과가 나올 때마다 다시 정렬한다. 결과 수치는 EXPERIMENTS.md에 둔다.
 
