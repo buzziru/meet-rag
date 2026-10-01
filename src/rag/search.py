@@ -41,7 +41,7 @@ def query_embeddings(cfg, qids: list[str]) -> np.ndarray:
             q = json.loads(line)
             if q["qid"] in keep:
                 text[q["qid"]] = q["query"]
-    model = load_model(cfg, 512)  # 질의는 짧다
+    model = load_model(cfg, cfg.embedding.query_max_tokens)
     emb = encoder(model, cfg)([text[q] for q in qids])
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(path, qids=np.array(qids), emb=emb)

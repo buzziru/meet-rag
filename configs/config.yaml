@@ -35,6 +35,8 @@ embedding:
   # 배치 크기 × 배치 안 최대 토큰 수의 상한. GPU 메모리에 맞춰 바꾼다
   max_batch_tokens: 16384
   max_batch_size: 64
+  # 질의 임베딩 최대 길이. summary_q는 최대 약 260자(약 130토큰)
+  query_max_tokens: 512
 
 # 평가 분할. 값은 docs/SPEC.md "분할"·"평가 층"과 같다
 splits:

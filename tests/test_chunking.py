@@ -20,7 +20,8 @@ def test_chunks_bounded_overlapping_and_covering(n, ct, ov):
     assert spans[0][0] == 0 and spans[-1][1] == len(text)  # 문서 전체를 덮는다
     for (_, e1, _), (s2, _, _) in zip(spans, spans[1:], strict=False):
         assert last_tok[e1] - first_tok[s2] + 1 == ov  # 이웃 청크는 정확히 ov 토큰 겹친다
-    assert all(text[s:e] in text for s, e, _ in spans)
+    # 청크 경계가 토큰 경계와 맞아 원문을 토큰 중간에서 자르지 않는다
+    assert all(s in first_tok and e in last_tok for s, e, _ in spans)
 
 
 def test_short_doc_is_one_chunk():
