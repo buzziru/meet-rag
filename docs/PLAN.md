@@ -6,7 +6,7 @@ naive RAG(고정 길이 청킹 → KURE-v1 dense 검색 → 생성)로 베이스
 
 - [x] S1 데이터 적재: 라벨 zip에서 코퍼스(`corpus_context.jsonl`)와 질의(`queries_summary_q.jsonl`)를 재생성 → slices/01-data.md
 - [x] S2 평가 분할: `data/splits/queries.csv`, `data/splits/dev_small_docs.txt` 생성 (S1 필요) → slices/02-splits.md
-- [ ] G1 `summary_q` 검수: dev 100건을 사람이 검수하고 필터 규칙 여부를 정한다. SPEC 미결 1 (S2 필요, S5 평가 실행 전에 끝낸다)
+- [x] G1 `summary_q` 검수: dev 100건을 사람이 검수하고 필터 규칙 여부를 정한다. SPEC 미결 1 (S2 필요, S5 평가 실행 전에 끝낸다) → DECISIONS D-03
 - [ ] S3 평가 모듈: 순위 파일(`qid`, `rank`, `doc_id`) → Recall@1·5·10, MRR@10, 회의구분·`qna_type`별 지표, 회의 단위 paired bootstrap. 합성 입력으로 검증한다. 완료 후 수정 금지 대상 → slices/03-eval.md
 - [ ] S4 청킹·임베딩·인덱스: 고정 토큰 길이 청킹, KURE-v1 임베딩, 중간 산출물 저장 후 재개 가능. dev-small은 노트북, 전체는 Colab (S1 필요) → slices/04-index.md
   - 인덱스 경로에 설정 식별자를 넣고(예: `data/index/{임베딩모델}-{청킹}-{청크크기}/`) 어느 인덱스를 쓸지 config에 적는다. `data/`는 브랜치를 따라 바뀌지 않으므로, 브랜치를 옮기면 코드와 인덱스가 어긋날 수 있다
