@@ -1,29 +1,37 @@
 # STATUS (세션 종료 시 덮어씀)
 
 ## 현재 위치
-- S1 데이터 적재 병합 완료(PR #5). `uv run python -m rag.ingest`로 `data/processed/`를 재생성한다
-- S2 평가 분할은 PR #6(`feat/s02-splits`), G1 표본 추출 도구는 PR #7(`chore/g1-sample`)로 올렸다. 둘 다 사용자 검토·병합 대기
-- 병합 순서: #6 → #7. #7의 표본은 #6의 분할(`queries.csv` SHA-256 `091235be…`, DECISIONS D-02)에서 뽑았다. #6에서 분할이 바뀌면 `uv run python -m rag.sample_review`로 표본을 다시 뽑는다
-- 두 PR 모두 slice-verifier 검증(S2)과 protocol-auditor 감사를 통과했다. 두 PR이 함께 고치는 `configs/config.yaml`은 병합 충돌이 없다(`git merge-tree`)
+- S1~S4 완료. S4는 청크 512/64(DECISIONS D-04), 전체 코퍼스 인덱스 `data/index/kure-v1-fixed-512-64/full/`(청크 118,039, Colab L4 약 32분·0.73 CU)
+- G1 완료(D-03, `summary_q` 전체 사용). S6 naive 컨텍스트는 문서별 최고 점수 청크(D-05)
+- 하네스: Colab 보조 스크립트 `.claude/skills/meet-rag/scripts/colab_job.py`, `_workspace/` 작업 기록 규칙(PR #13). SPEC 자원 제약 개정: dev-small은 Jupyter 노트북으로 기록, GPU 계산은 Colab(D-06, PR #14)
+- PR #15(`docs/s04-notebook`, `notebooks/04_01_청크크기비교.ipynb`)는 사용자 검토 대기
 
 ## 실행 중 작업
-- 없음
+- 없음 (`colab sessions` 활성 세션 없음 확인)
 
 ## 판정 대기
 - 없음
 
 ## 미완 상태
-- 로컬 `data/`에는 S1·S2 산출물과 G1 표본이 있다. `data/splits/`의 해시는 D-02와 같다
-- G1 표본: `data/review/g1_summary_q.csv`(dev 100건, 82회의, SHA-256 `97f3674c…`). 사용자가 `verdict`·`issue`·`note` 칸을 채우는 중
-- configs의 `???` 값은 해당 SLICE에서 정한다: `chunking.chunk_tokens`·`overlap_tokens`(S4), `retriever.chunk_pool`(S5), `generator.model`(S6)
+- 로컬 `data/`: processed, splits, dev-small 네 후보 인덱스와 full 512/64 인덱스, `data/runs/`(dev-small 순위 파일 넷, `chunk_sweep.json`), 질의 임베딩 캐시 `data/index/kure-v1/queries-dev-small.npz`
+- KURE 모델은 `.hf_cache/`. `.env`의 `HF_HOME`은 절대경로(노트북 커널이 `notebooks/`에서 실행되기 때문)
+- `_workspace/s04_main_progress.md`에 S5로 넘길 것이 있다. `00_main_harness-pending.md`는 전부 반영됨
+- configs의 `???`: `retriever.chunk_pool`(S5), `generator.model`(S6)
 
 ## 시도했다 버린 것
-- `.venv`가 `src/rag` 생성 전에 설치돼 `rag` import가 실패했다. `uv sync --extra cpu --reinstall-package meet-rag`로 해결
+- 로컬 CPU로 네 후보 임베딩: 문서 20개·256 토큰에 368.8초라 중단, dev-small도 Colab으로
+- Colab 기본 Python 3.13에 패키지 설치: `requires-python ==3.12`로 실패. S4는 `PYTHONPATH=src`로 했고, 이후는 `colab_job.py setup`의 `uv sync`(VM에서 아직 미검증)
 
 ## 다음 행동
-1. 사용자가 알려 준 병합 결과를 확인한다(`gh pr view 6`, `gh pr view 7`). 병합됐으면 `main`을 pull하고 로컬 브랜치를 지운다
-2. G1 검수 결과를 집계한다: 불량 유형별 건수·비율. 필터 규칙을 둘지 사용자와 정해 DECISIONS에 기록하고 PLAN G1을 체크한다(`docs/` 브랜치)
-3. 그다음 S3 평가 모듈(`docs/slices/03-eval.md`)을 시작한다. S4는 G1과 상관없이 진행할 수 있다
+1. [C] PR #15 결과 확인. 병합되면 `main` pull, `docs/s04-notebook` 로컬 브랜치 삭제
+2. [A] S5 dense 검색 + 평가(`docs/slices/05-retrieve.md` 작성부터). 넘길 것
+   - 검색 방식은 naive 단계에서 numpy 전수 검색(exact kNN) 유지(사용자 결정). 지시서와 DECISIONS에 적는다
+   - dev-full 인덱스는 512/64 full. 118,039청크(float32 약 480MB)는 질의를 나눠 내적한다. `chunk_pool`을 정한다
+   - dev-small 과정·결과는 `notebooks/05_*.ipynb`로 남긴다(SPEC D-06)
+   - 같은 명령 두 번 점수 일치. 끝나면 SPEC 미결 2(수치 목표)를 베이스라인 dev-full 점수로 정한다
+3. [A] S6 생성(S5 필요)
 
 ## 사용자 확인 필요
-- 보호 경로(`src/rag/eval/`, `configs/eval/`, `data/splits/`)를 훅으로 막을지: S2·S3 완료 시점에 결정
+- SPEC 평가 층 표의 "dev-small은 판정에 쓰지 않는다"에서 "판정"이 EXP 채택·기각 판정만 뜻한다고 문구로 명시할지(S4 감사는 그렇게 해석)
+- `colab_job.py`의 VM 쪽 명령(setup·upload·launch·poll·fetch·finish)은 실행해 보지 않았다. 다음 Colab 작업 전에 CPU 세션으로 짧게 시험할지
+- 보호 경로 훅은 파이프라인 완성 후 검토(결정됨, 그 전에는 두지 않음)
