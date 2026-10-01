@@ -5,16 +5,23 @@
 """
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
 
 import numpy as np
+from dotenv import load_dotenv
 from hydra import compose, initialize_config_dir
 
 from rag.chunking import chunk_text
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# HF_HOME은 .env에서 읽는다. transformers를 import하기 전에 정해야 캐시 위치가 바뀐다
+load_dotenv(ROOT / ".env")
+if os.environ.get("HF_HOME") and not Path(os.environ["HF_HOME"]).is_absolute():
+    os.environ["HF_HOME"] = str(ROOT / os.environ["HF_HOME"])
 
 
 def load_cfg(overrides=()):

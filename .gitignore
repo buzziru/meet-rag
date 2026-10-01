@@ -9,6 +9,9 @@ outputs/
 .claude/settings.local.json
 .env
 
+# HF 모델 캐시 (HF_HOME, .env에서 지정)
+.hf_cache/
+
 # 파이썬 환경
 .venv/
 __pycache__/
