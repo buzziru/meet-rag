@@ -71,7 +71,7 @@ dev-small은 방해 문서가 약 1,000개라 전체 코퍼스(38,516)에서 순
 ## 명령
 
 ```
-uv run python -m rag.index scope=dev-small|full chunking.chunk_tokens=N chunking.overlap_tokens=M [embedding.device=cuda embedding.dtype=float16] [index.max_docs=K]
+uv run python -m rag.index index.scope=dev-small|full chunking.chunk_tokens=N chunking.overlap_tokens=M [embedding.device=cuda embedding.dtype=float16] [index.max_docs=K]
 uv run python -m rag.search chunking.chunk_tokens=N chunking.overlap_tokens=M
 uv run python -m rag.chunk_sweep
 ```
@@ -84,7 +84,7 @@ uv run python -m rag.chunk_sweep
 | --- | --- | --- |
 | 1 | `uv run pytest -q` | 통과. 합성 입력만 쓴다. 포함: 청크 길이 ≤ `chunk_tokens`, 이웃 청크가 정확히 `overlap_tokens` 겹침, 청크들이 문서 전체를 덮음, offset으로 자른 텍스트가 원문 부분 문자열, 짧은 문서는 청크 하나, 배치의 토큰 수 ≤ 상한, 전수 검색의 문서 중복 제거·순위 |
 | 2 | `uv run ruff check .` | 통과 |
-| 3 | 로컬 `rag.index scope=dev-small index.max_docs=20`(네 후보) | 종료 코드 0. `chunks.jsonl` 행 수 = 임베딩 행 수, 벡터 노름 1, NaN 없음 |
+| 3 | 로컬 `rag.index index.scope=dev-small index.max_docs=20`(네 후보) | 종료 코드 0. `chunks.jsonl` 행 수 = 임베딩 행 수, 벡터 노름 1, NaN 없음 |
 | 4 | 3을 조각 하나만 만든 뒤 끊고 다시 실행 | 이미 있는 조각을 건너뛰고, 처음부터 한 번에 만든 결과와 임베딩이 같음(같은 장치) |
 | 5 | Colab에서 만든 dev-small 네 후보 인덱스 | 각 `chunks.jsonl`이 dev-small 1,007문서를 모두 포함하고 행 수 = 임베딩 행 수 |
 | 6 | `rag.search` 네 후보 | 순위 파일이 `rag.eval.score --layer dev-small` 검증을 통과(질의 1,039건, 질의당 문서 10개 이상) |
