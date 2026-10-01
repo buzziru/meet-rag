@@ -20,17 +20,36 @@ paths:
   dev_small_docs: data/splits/dev_small_docs.txt
   g1_sample: data/review/g1_summary_q.csv
   # 설정마다 경로를 분리한다. data/는 브랜치를 따라 바뀌지 않는다
-  index_dir: data/index/${embedding.slug}-${chunking.name}-${chunking.chunk_tokens}-${chunking.overlap_tokens}
+  index_dir: data/index/${embedding.slug}-${chunking.name}-${chunking.chunk_tokens}-${chunking.overlap_tokens}/${index.scope}
+  # dev-small 질의 임베딩. 청킹과 무관해 후보끼리 다시 쓴다
+  query_emb: data/index/${embedding.slug}/queries-dev-small.npz
+  runs_dir: data/runs
 
 embedding:
   model_name: nlpai-lab/KURE-v1
   slug: kure-v1
   normalize: true
   device: cpu
-  batch_size: 16
+  # 로컬 cpu·float32, Colab은 명령에서 cuda·float16으로 바꾼다
+  dtype: float32
+  # 배치 크기 × 배치 안 최대 토큰 수의 상한. GPU 메모리에 맞춰 바꾼다
+  max_batch_tokens: 16384
+  max_batch_size: 64
 
 # 평가 분할. 값은 docs/SPEC.md "분할"·"평가 층"과 같다
 splits:
   dev_min_queries: 3000
   test_min_queries: 3000
   dev_small_min_docs: 1000
+
+# 인덱스 생성 (docs/slices/04-index.md)
+index:
+  scope: dev-small  # dev-small | full
+  shard_size: 2048  # 임베딩 조각당 청크 수. 조각 단위로 재개한다
+  max_docs: null  # 디버그용. 앞에서부터 이 수의 문서만 처리한다
+
+# 청크 크기 비교. overlap은 크기의 1/8
+chunk_sweep:
+  candidates: [[256, 32], [512, 64], [1024, 128], [8192, 1024]]
+  recall_ks: [1, 5, 10]
+  mrr_ks: [1, 5, 10]
