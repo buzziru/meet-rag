@@ -47,7 +47,7 @@ test 질의를 읽거나 test 점수를 계산하는 코드 경로가 새로 생
 
 ### P5. 커밋 금지 파일
 
-`data/` 아래 파일, `.env`가 스테이징·커밋되면 위반이다. 노트북 출력에 들어간 회의록 발언 원문은 공개 자료라 허용되지만, `summary_q`·`summary_a`·`context_learn`(AI Hub 생성물)이 출력에 대량으로 남았으면 보고한다. Colab 실행 흔적(`colab exec -f`가 만든 `*_output.ipynb`, `colab log -o`로 내보낸 기록)이 스테이징됐으면 같은 기준으로 본다.
+`data/` 아래 파일, `.env`가 스테이징·커밋되면 위반이다. 노트북 출력에 들어간 회의록 발언 원문은 공개 자료라 허용되지만, `summary_q`·`summary_a`·`context_learn`(AI Hub 생성물)이 출력에 대량으로 남았으면 보고한다. Colab 실행 기록(`colab exec -f`가 만든 `*_output.ipynb`, `colab log -o`로 내보낸 기록)은 `outputs/notebooks/`에 두며 같은 기준으로 본다. 질의가 조금 들어간 것은 보고하지 않는다.
 
 ### P6. 무료 쿼터로 평가 질의 전송
 
