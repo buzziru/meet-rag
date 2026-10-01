@@ -44,7 +44,7 @@
 
 ### 검색 (dev-small)
 
-- 질의 임베딩은 로컬 CPU `float32`로 한 번 만들어 `data/index/{임베딩}/queries-dev-small.npy`에 두고 후보끼리 다시 쓴다. 질의를 Colab에 올리지 않는다
+- 질의 임베딩은 로컬 CPU `float32`로 한 번 만들어 `data/index/{임베딩}/queries-dev-small.npz`에 두고 후보끼리 다시 쓴다. 질의를 Colab에 올리지 않는다
 - dev-small 청크는 최대 1만 개 안팎이라 질의마다 모든 청크와 내적을 계산한다(전수 검색). 청크 순위에서 문서가 처음 나온 순위를 문서 순위로 써 상위 `retriever.top_k`개 문서를 순위 파일로 쓴다. 전수 검색이라 `chunk_pool`(S5)이 결과에 끼어들지 않는다
 - 순위 파일은 `data/runs/{인덱스 이름}-dev-small.csv`(`qid`, `rank`, `doc_id`)
 
@@ -54,7 +54,7 @@
 
 - 주지표: Recall@5. 보조 지표: Recall@1·5·10, MRR@1·5·10. 지표 목록은 `chunk_sweep` 절에 두고 `configs/eval/`은 바꾸지 않는다
 - 표: 후보별 주지표·보조 지표 전부와 청크 수, 문서당 평균 청크 수. 회의구분·`qna_type`별로도 같은 지표를 낸다
-- 저장: 표와 후보별 질의 단위 결과(질의마다 각 후보의 정답 순위)를 `data/runs/chunk_sweep.json`에 남긴다. 나중에 한 문서를 여러 크기로 나눠 함께 쓰는 실험(백로그 H5)에서 어느 질의를 어느 크기가 맞히는지 비교하는 자료로 쓴다. dev-small 네 후보 인덱스도 지우지 않는다
+- 저장: 표와 후보별 질의 단위 결과(질의마다 각 후보의 정답 순위)를 `data/runs/chunk_sweep.json`에 남긴다. 나중에 한 문서를 여러 크기로 나눠 함께 쓰는 실험(백로그 H9)에서 어느 질의를 어느 크기가 맞히는지 비교하는 자료로 쓴다. dev-small 네 후보 인덱스도 지우지 않는다
 - 잡음 범위: Recall@5가 가장 높은 후보를 기준으로 다른 후보와의 차이를 `rag.eval.bootstrap.paired_bootstrap`(회의 단위, `configs/eval/spec_v1.yaml`의 반복·seed·alpha)으로 구한다
 - 결정 규칙(점수를 보기 전에 정함): Recall@5 최고 후보를 고른다. 95% 구간이 0을 포함하는 후보가 있으면 그중 청크 수가 가장 적은(크기가 큰) 후보를 고른다. 보조 지표는 판단 근거로 함께 보고하고, 주지표 규칙과 다른 결론을 가리키면 사용자에게 알려 정한다
 - 결정은 `configs/chunking/fixed.yaml`에 적고, 전체 지표 비교표·세부 표·근거를 `docs/DECISIONS.md`에 기록한다
@@ -107,12 +107,12 @@ uv run python -m rag.chunk_sweep
 ## 수정 허용 파일
 
 - `src/rag/chunking.py`, `src/rag/index.py`, `src/rag/search.py`, `src/rag/chunk_sweep.py`, `tests/test_chunking.py`, `tests/test_index.py`, `tests/test_search.py`
-- `configs/config.yaml`(`index_dir` 경로, `embedding`·`index`·`chunk_sweep` 절), `configs/chunking/fixed.yaml`(결정 값)
-- `docs/DECISIONS.md`(비교표·결정), `CLAUDE.md` "명령" 절, `docs/PLAN.md` S4 체크와 백로그 H5(다중 크기 청킹) 추가, 이 문서
+- `configs/config.yaml`(`paths`의 `index_dir`·`query_emb`·`runs_dir`, `embedding`·`index`·`chunk_sweep` 절), `configs/chunking/fixed.yaml`(결정 값)
+- `docs/DECISIONS.md`(비교표·결정), `CLAUDE.md` "명령" 절, `docs/PLAN.md` S4 체크와 백로그 H9(다중 크기 청킹)·H10(생성 컨텍스트 단위) 추가, 이 문서
 
 ## 범위 밖
 
 - dev-full 검색과 `chunk_pool`(S5), ANN 인덱스(FAISS 등)
-- overlap 비교, 문장 경계 청킹(H3, H4), 다중 크기 청킹(H5)
+- overlap 비교, 문장 경계 청킹(H3, H4), 다중 크기 청킹(H9)
 - 생성 프롬프트에 넣을 청크 길이(S6에서 다룬다)
 - `configs/eval/`, `src/rag/eval/` 수정
