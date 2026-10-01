@@ -107,8 +107,19 @@ def setup(session: str, commit: str) -> None:
     poll(session, interval=30, max_polls=40)
 
 
+def blocked(path: str) -> bool:
+    """평가 질의(queries_*), 분할(queries.csv), 자격증명(.env)은 VM에 올리지 않는다.
+
+    질의 임베딩은 로컬에서 한다(SPEC 누수 방지). dev_small_docs.txt 같은 문서 목록은 허용한다.
+    """
+    name = path.replace("\\", "/").rsplit("/", 1)[-1]
+    return name in (".env", "queries.csv") or name.startswith("queries_")
+
+
 def upload(session: str, local: str, remote: str) -> None:
     src = Path(local)
+    if blocked(local) or blocked(remote):
+        sys.exit(f"올리지 않는 파일이다(질의·분할·.env): {local}")
     target = f"{VM_REPO}/{remote}"
     vm_sh(session, f"mkdir -p {shlex.quote(str(Path(target).parent.as_posix()))}")
     if src.stat().st_size > 20_000_000:  # 큰 파일은 압축해 보낸다(159MB 코퍼스 → 73MB)
@@ -142,6 +153,8 @@ def poll(session: str, interval: int, max_polls: int) -> None:
 
 
 def fetch(session: str, remote: str, dest: Path) -> None:
+    if not remote.startswith("data/"):
+        sys.exit("산출물은 data/ 아래 경로만 받는다. 추적 파일을 VM 결과로 덮어쓰지 않기 위해서다")
     tgz = "/content/fetch.tgz"
     vm_sh(session, f"cd {VM_REPO} && tar czf {tgz} {shlex.quote(remote)} && ls -l {tgz}")
     with tempfile.TemporaryDirectory() as tmp:
