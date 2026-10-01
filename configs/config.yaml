@@ -24,3 +24,9 @@ embedding:
   normalize: true
   device: cpu
   batch_size: 16
+
+# 평가 분할. 값은 docs/SPEC.md "분할"·"평가 층"과 같다
+splits:
+  dev_min_queries: 3000
+  test_min_queries: 3000
+  dev_small_min_docs: 1000
