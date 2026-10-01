@@ -8,7 +8,7 @@ naive RAG(고정 길이 청킹 → KURE-v1 dense 검색 → 생성)로 베이스
 - [x] S2 평가 분할: `data/splits/queries.csv`, `data/splits/dev_small_docs.txt` 생성 (S1 필요) → slices/02-splits.md
 - [x] G1 `summary_q` 검수: dev 100건을 사람이 검수하고 필터 규칙 여부를 정한다. SPEC 미결 1 (S2 필요, S5 평가 실행 전에 끝낸다) → DECISIONS D-03
 - [x] S3 평가 모듈: 순위 파일(`qid`, `rank`, `doc_id`) → Recall@1·5·10, MRR@10, 회의구분·`qna_type`별 지표, 회의 단위 paired bootstrap. 합성 입력으로 검증한다. 완료 후 수정 금지 대상 → slices/03-eval.md
-- [ ] S4 청킹·임베딩·인덱스: 고정 토큰 길이 청킹, KURE-v1 임베딩, 중간 산출물 저장 후 재개 가능. dev-small은 노트북, 전체는 Colab (S1 필요) → slices/04-index.md
+- [x] S4 청킹·임베딩·인덱스: 고정 토큰 길이 청킹, KURE-v1 임베딩, 중간 산출물 저장 후 재개 가능. dev-small은 노트북, 전체는 Colab (S1 필요) → slices/04-index.md
   - 인덱스 경로에 설정 식별자를 넣고(예: `data/index/{임베딩모델}-{청킹}-{청크크기}/`) 어느 인덱스를 쓸지 config에 적는다. `data/`는 브랜치를 따라 바뀌지 않으므로, 브랜치를 옮기면 코드와 인덱스가 어긋날 수 있다
   - Colab에서는 저장소를 clone해 실행하고, 인덱스는 git에 올리지 않고 내려받아 로컬 `data/`에 둔다
 - [ ] S5 dense 검색 + 평가 실행: dev-small, dev-full 순위 파일 생성과 평가. 같은 명령을 두 번 실행해 점수가 같아야 한다 (S2, S3, S4, G1 필요) → slices/05-retrieve.md
