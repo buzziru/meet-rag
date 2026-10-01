@@ -28,7 +28,7 @@ CSV, 열은 `qid`, `rank`, `doc_id`. `rank`는 1부터 시작하는 정수다.
 
 | `--layer` | 질의 | 정답 메타데이터 |
 | --- | --- | --- |
-| `dev-small` | dev 질의 중 정답 `doc_id`가 `paths.dev_small_docs`에 있는 것 | 정답 `doc_id`, `qna_type`(`paths.queries`), `meeting_name`·`conference_number`(`paths.corpus`) |
+| `dev-small` | dev 질의 중 정답 `doc_id`가 `paths.dev_small_docs`에 있는 것 | 정답 `doc_id`, `qna_type`(`paths.queries`), `conference_number`(`paths.splits`), `meeting_name`(`paths.corpus`) |
 | `dev-full` | `paths.splits`에서 `split == dev`인 질의 전체 | 같음 |
 | `test` | `split == test`인 질의 전체 | 같음 |
 
