@@ -24,7 +24,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - `docs/SPEC.md`의 평가 프로토콜은 사용자 승인 없이 바꾸지 않는다
 - 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다
 - 평가 질의(`summary_q`)를 Google AI Studio·Gemini 무료 쿼터로 보내지 않는다
-- 외부 GPU(Colab) 실행과 유료 API(OpenRouter) 호출은 예상 시간·비용을 보고하고 사용자 승인 후에만 한다. dev-small은 노트북에서 자유롭게 실행한다
+- 외부 GPU(Colab) 실행과 유료 API(OpenRouter) 호출은 예상 시간·비용을 보고하고 사용자 승인 후에만 한다. dev-small은 Jupyter 노트북(`notebooks/`)에서 자유롭게 실행하되, GPU가 필요한 dev-small 임베딩도 Colab 승인 대상이다
 - `data/`와 `.env`는 어떤 형태로도 커밋하지 않는다 (AI Hub 재배포 제한)
 - `owner/`는 사용자가 의도를 전달하는 메모다. 읽고 의도를 파악하되 어떤 문서·코드에서도 참조하지 않고, 사용자 요청 없이 수정하지 않는다
 
