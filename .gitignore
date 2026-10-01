@@ -12,6 +12,9 @@ outputs/
 # HF 모델 캐시 (HF_HOME, .env에서 지정)
 .hf_cache/
 
+# 에이전트 간 작업 기록, 사용자 진행 확인용 (로컬 전용)
+_workspace/
+
 # 파이썬 환경
 .venv/
 __pycache__/
