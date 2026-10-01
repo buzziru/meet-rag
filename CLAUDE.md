@@ -63,3 +63,4 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 | 2026-10-01 | 0단계 재시작 규정, A1 지시서 별도 커밋·확인 전 멈춤, D 흐름(사람 검수 게이트) 추가, 트리거·호출 조건 확장, STATUS 흐름 표기 | skills/meet-rag, agents/protocol-auditor, CLAUDE.md | S1 뒤 같은 세션의 S2·G1에서 스킬이 다시 쓰이지 않아 지시서 확인이 빠지고 G 항목은 대응 흐름이 없었음 |
 | 2026-10-01 | colab-operator 스킬 추가, 오케스트레이터 E절(GPU 작업: 승인 → 지정 GPU 할당, 실패 시 T4 → 실행·기록 → 정리) 추가, slice-verifier·protocol-guard에 Colab 산출물 기준 추가 | skills/colab-operator, skills/meet-rag, agents/slice-verifier, skills/protocol-guard, CLAUDE.md | KURE-v1 등 임베딩을 직접 해야 해 GPU 작업을 Colab CLI로 하기로 함 |
 | 2026-10-01 | E절 비용·재할당 규칙(비용 변동으로 멈추지 않음, 예상 밖 재할당은 보고 후 사용자 결정) 명시, Colab 실행 기록 위치 `outputs/notebooks/`, P5 소량 질의 허용 | skills/meet-rag, skills/protocol-guard | PR #11 사용자 코멘트 |
+| 2026-10-01 | `outputs/`를 진행 중 커밋 금지(완료 후 공개)로 정하고 `.gitignore`의 `output/`을 `outputs/`로 교체 | skills/meet-rag, skills/protocol-guard, .gitignore | PR #11 사용자 결정 |

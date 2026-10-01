@@ -76,7 +76,7 @@ A2(S4 등 전체 인덱스)와 B3(재임베딩 실험)에서 dev-full 규모 임
 
 산출물 취급:
 - 내려받은 인덱스·임베딩은 `data/` 아래에만 둔다. 원문을 담고 있어 AI Hub 재배포 제한을 받는다
-- `colab exec -f nb.ipynb`가 만드는 `*_output.ipynb`와 `colab log -o`로 내보낸 기록은 `outputs/notebooks/`에 둔다. 출력에 질의가 조금 들어가는 것은 괜찮다. 회의록 발언 원문은 AI Hub 생성물이 아니지만, 질의응답쌍과 그 분할은 AI Hub 고유 자료일 수 있어 대량으로 남기지 않는다
+- `colab exec -f nb.ipynb`가 만드는 `*_output.ipynb`와 `colab log -o`로 내보낸 기록은 `outputs/notebooks/`에 둔다. `outputs/`는 프로젝트 진행 중 커밋하지 않고(`.gitignore`) 완료 후 결과 공개 때 공개한다. 출력에 질의가 조금 들어가는 것은 괜찮다. 회의록 발언 원문은 AI Hub 생성물이 아니지만, 질의응답쌍과 그 분할은 AI Hub 고유 자료일 수 있어 대량으로 남기지 않는다
 - `colab auth`, `colab drivemount`는 사람이 터미널에서 해야 하므로 필요하면 사용자에게 요청한다
 
 ## 오류 처리
