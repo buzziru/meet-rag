@@ -1,4 +1,4 @@
-# 베이스라인 고정 토큰 길이 청킹. 값은 S4에서 정한다
+# 베이스라인 고정 토큰 길이 청킹. 값은 S4 dev-small 비교로 정했다 (DECISIONS D-04)
 name: fixed
-chunk_tokens: ???
-overlap_tokens: ???
+chunk_tokens: 512
+overlap_tokens: 64
