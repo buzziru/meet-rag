@@ -4,7 +4,7 @@ S4의 512/64 인덱스로 dev-small·dev-full 질의를 검색해 순위 파일�
 
 ## 만드는 것
 
-- `src/rag/search.py`: dev-small 전용이던 검색을 `index.scope=full`(dev-full 질의)까지 넓힌다
+- `src/rag/search.py`: dev-small 전용이던 검색을 `index.scope=full`(dev-full 질의)까지 넓히고, dev 질의 파일 내보내기와 질의 임베딩만 하는 실행 방식을 더한다
 - `notebooks/05_01_베이스라인검색.ipynb`: dev-full 베이스라인 점수와 세부 분석. 결정 기록보다 먼저 쓴다
 
 ## 규칙
@@ -23,8 +23,14 @@ S4의 512/64 인덱스로 dev-small·dev-full 질의를 검색해 순위 파일�
 
 ### 질의 임베딩
 
-- SPEC 자원 제약에 따라 평가 질의는 Colab에 올리지 않고 로컬 CPU `float32`로 임베딩한다. dev 질의 3,016건이다
-- 캐시는 `data/index/{임베딩}/queries-{범위}.npz`다. dev-small 캐시(`queries-dev-small.npz`)는 경로가 그대로라 S4 결과를 다시 쓴다. 질의 목록이 캐시와 다르면 다시 만든다
+- dev-full 질의 3,016건은 Colab T4에서 임베딩한다(사용자 지시, D-07). 질의가 짧아 L4가 필요 없다. 정밀도는 dev-small 질의(로컬 CPU)와 같은 `float32`로 둔다
+- `search.mode`로 실행 방식을 고른다
+  - `run`(기본): 검색과 순위 파일 쓰기. 질의 임베딩 캐시가 없거나 질의 목록이 다르면 로컬에서 임베딩한다
+  - `export-queries`(로컬): dev 질의를 `paths.queries_dev`(`data/processed/queries_summary_q.dev.jsonl`)로 내보낸다. 원본과 같은 스키마(jsonl, `qid` 키)이고 dev-full 채점 순서(`load_gold`)를 따른다. `test` 질의는 들어가지 않는다
+  - `embed-queries`(VM): `paths.queries_dev`만 읽어 임베딩하고 `paths.query_emb`에 저장한다. 원본 질의 파일과 분할 파일을 읽지 않아 VM에 둘 필요가 없다. `index.scope=full`에서만 쓴다
+- VM에 올리는 입력은 `queries_summary_q.dev.jsonl` 하나다. `colab_job.py upload`가 모든 `qid`가 dev인지 확인한다. 코퍼스·인덱스는 올리지 않는다
+- 캐시는 `data/index/{임베딩}/queries-{범위}.npz`다. dev-small 캐시(`queries-dev-small.npz`)는 경로가 그대로라 S4 결과를 다시 쓴다
+- Colab 절차는 meet-rag 스킬 E절을 따른다. T4 요율은 사용자가 실행 때 웹 화면에서 확인해 알려 준다
 
 ### 출력
 
@@ -47,7 +53,9 @@ S4의 512/64 인덱스로 dev-small·dev-full 질의를 검색해 순위 파일�
 ## 명령
 
 ```
-uv run python -m rag.search [index.scope=dev-small|full]
+uv run python -m rag.search index.scope=full search.mode=export-queries            # 로컬
+uv run python -m rag.search index.scope=full search.mode=embed-queries embedding.device=cuda   # VM
+uv run python -m rag.search [index.scope=dev-small|full]                              # 로컬 검색
 uv run python -m rag.eval.score --run data/runs/kure-v1-fixed-512-64-dev-full.csv --layer dev-full --out data/runs/kure-v1-fixed-512-64-dev-full.json
 ```
 
@@ -56,22 +64,24 @@ uv run python -m rag.eval.score --run data/runs/kure-v1-fixed-512-64-dev-full.cs
 | # | 명령 | 기대 결과 |
 | --- | --- | --- |
 | 1 | `uv run pytest -q` | 통과. 합성 입력만 쓴다. 포함: `chunk_pool`을 쓴 문서 순위가 전체 정렬 결과와 같음(무작위 점수, 전체 정렬로 넘어가는 경우 포함), 질의 배치 크기가 결과를 바꾸지 않음 |
+| 1a | `rag.search index.scope=full search.mode=export-queries` | `queries_summary_q.dev.jsonl` 3,016행, 모든 `qid`가 dev, 순서가 `load_gold(dev-full)`와 같음 |
+| 1b | Colab에서 만든 `queries-full.npz` | 행 수 3,016, `qids`가 1a 순서와 같음, 노름 1, NaN 없음 |
 | 2 | `uv run ruff check .` | 통과(노트북 포함) |
 | 3 | `rag.search index.scope=dev-small` | 순위 파일 SHA-256이 S4 결과(`1102ce66…29a8`)와 같음 |
 | 4 | `rag.search index.scope=full` | 순위 파일이 `rag.eval.score --layer dev-full` 검증을 통과(질의 3,016건, 질의당 문서 10개) |
 | 5 | 4와 채점을 두 번 실행 | 순위 파일 SHA-256과 채점 결과 일치 |
 | 6 | 노트북 처음부터 실행 | 오류 없음, 수치가 5의 채점 결과와 같음 |
-| 7 | 문서 기록 | DECISIONS에 검색 방식과 수치 목표, `CLAUDE.md` "명령"에 dev-full 검색, PLAN S5 체크. 이 문서 "실행 기록"에 로컬 질의 임베딩·검색 시간 |
+| 7 | 문서 기록 | DECISIONS에 검색 방식과 수치 목표, `CLAUDE.md` "명령"에 dev-full 검색, PLAN S5 체크. 이 문서 "실행 기록"에 Colab 세션 시간·compute unit·VM 패키지 버전과 로컬 검색 시간 |
 
 ## 실행 기록
 
-| 날짜 | 범위 | 질의 임베딩 | 검색 | 전체 정렬로 넘어간 질의 |
-| --- | --- | --- | --- | --- |
+| 날짜 | 작업 | GPU·장치 | 세션·실행 시간 | compute unit | 비고 |
+| --- | --- | --- | --- | --- | --- |
 
 ## 수정 허용 파일
 
 - `src/rag/search.py`, `tests/test_search.py`
-- `configs/config.yaml`(`paths.query_emb`), `configs/retriever/dense.yaml`(`chunk_pool`, `query_batch`)
+- `configs/config.yaml`(`paths.query_emb`·`paths.queries_dev`, `search` 절), `configs/retriever/dense.yaml`(`chunk_pool`, `query_batch`)
 - `notebooks/05_01_베이스라인검색.ipynb`
 - `docs/DECISIONS.md`, `docs/PLAN.md` S5 체크, `CLAUDE.md` "명령" 절, 이 문서
 - `docs/SPEC.md` 미결 2 해결 표시(사용자 승인 후에만)
@@ -79,7 +89,7 @@ uv run python -m rag.eval.score --run data/runs/kure-v1-fixed-512-64-dev-full.cs
 ## 범위 밖
 
 - ANN 인덱스·벡터 DB, 재순위화, 하이브리드 검색(백로그)
-- Colab 실행(이 조각은 GPU가 필요 없다)
+- 코퍼스 재임베딩(Colab은 질의 임베딩에만 쓴다)
 - `test` 분할 검색·채점
 - `configs/eval/`, `src/rag/eval/`, `data/splits/` 수정
 - 생성(S6)
