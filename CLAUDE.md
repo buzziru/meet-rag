@@ -24,7 +24,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - test 분할의 질의를 읽거나 test 점수를 계산하지 않는다. 검색 단계 종료 시 사용자 지시로 1회만 실행한다
 - `docs/SPEC.md`의 평가 프로토콜은 사용자 승인 없이 바꾸지 않는다
 - 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다
-- 평가 질의(`summary_q`)를 Google AI Studio·Gemini 무료 쿼터로 보내지 않는다
+- 평가 질의(`summary_q`)는 dev 분할만 Google AI Studio 무료 쿼터로 보낸다. 질의 전체처럼 많이 보내는 실행은 호출 수·소요 시간(RPD·TPM 한도)을 보고하고 사용자 승인 후에 한다(D-10)
 - 외부 GPU(Colab) 실행과 유료 API(OpenRouter) 호출은 예상 시간·비용을 보고하고 사용자 승인 후에만 한다. dev-small은 Jupyter 노트북(`notebooks/`)에서 자유롭게 실행하되, GPU가 필요한 dev-small 임베딩도 Colab 승인 대상이다
 - `data/`와 `.env`는 어떤 형태로도 커밋하지 않는다 (AI Hub 재배포 제한)
 - `owner/`는 사용자가 의도를 전달하는 메모다. 읽고 의도를 파악하되 어떤 문서·코드에서도 참조하지 않고, 사용자 요청 없이 수정하지 않는다
@@ -69,3 +69,4 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 | 2026-10-01 | `outputs/`를 진행 중 커밋 금지(완료 후 공개)로 정하고 `.gitignore`의 `output/`을 `outputs/`로 교체 | skills/meet-rag, skills/protocol-guard, .gitignore | PR #11 사용자 결정 |
 | 2026-10-01 | Colab 보조 스크립트(`scripts/colab_job.py`: preflight·setup(uv sync)·upload·launch(nohup)·poll·fetch·finish) 도입, E절을 스크립트 절차로 재작성(colab-operator 호출 단계, 요율 기반 CU 예상), `_workspace/` 작업 기록 규칙, 검증의 CPU 임베딩 규모 최소화 | skills/meet-rag, agents/slice-verifier, .gitignore | S4 Colab 두 번에서 같은 함정 반복(경로 변환, cp949, 미push, override 오타, Python 3.13, 연결 끊김), colab-operator 미호출, 검증 20분 지연, 사용자 `_workspace` 요청 |
 | 2026-10-02 | "결정과 PR의 순서" 절 추가(근거 노트북을 결정보다 먼저 쓰고, 사용자 결정을 반영한 뒤 PR), A1·A5·B6·D4에 연결, git.md PR 절. dev 질의 Colab 업로드 허용·`test` 질의 금지: `colab_job.py upload`를 이름 대신 `.jsonl` 내용의 qid 분할 확인으로, E6 문구, SPEC 자원 제약(D-07). 질의를 담은 데이터는 jsonl·`qid` 키로 고정하고 protocol-guard P1에 점검 추가 | skills/meet-rag, scripts/colab_job.py, skills/protocol-guard, rules/git.md, SPEC, DECISIONS | PR #15 코멘트(S4 노트북이 결정 뒤에 쓰임), PR 뒤 결정 반영으로 PR 수정 반복, 로컬 질의 임베딩 시간(사용자 지시) |
+| 2026-10-02 | dev 평가 질의의 무료 쿼터 전송 허용(D-10): protocol-guard P6을 "dev만, `test` 금지, 대량 실행은 보고·승인"으로, slice-verifier 실행 금지 항목과 protocol-auditor 설명 수정 | skills/protocol-guard, agents/slice-verifier, agents/protocol-auditor, CLAUDE.md 금지 절 | 사용자 판단: 질의 노출 주의 규칙이 과도해 데이터셋으로 생성 개발이 불가능 |
