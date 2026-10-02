@@ -28,6 +28,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
    - STATUS "다음 행동" 진행 요청 → 항목에 적힌 흐름 표기(`[A]`·`[B]`·`[C]`·`[D]`)를 따른다
    - "검증만 다시", "감사만 다시" → 해당 에이전트만 다시 부른다. 직전 지적 목록을 프롬프트에 넣는다
    - 세션 마무리, 핸드오프 → C
+   - 하네스(`.claude/`의 스킬·에이전트·규약·보조 스크립트) 수정, 하네스 피드백 반영 → F
    - 전체 코퍼스 임베딩·인덱스 구축 등 GPU 작업 → 해당 A·B 단계 안에서 E
 
 ## 작업 기록 (`_workspace/`)
@@ -99,6 +100,14 @@ A2(S4 등 전체 인덱스)와 B3(재임베딩 실험)에서 GPU 임베딩이 �
 - 내려받은 인덱스·임베딩은 `data/` 아래에만 둔다. 원문을 담고 있어 AI Hub 재배포 제한을 받는다
 - `colab exec -f nb.ipynb`가 만드는 `*_output.ipynb`와 `colab log -o`로 내보낸 기록은 `outputs/notebooks/`에 둔다. `outputs/`는 프로젝트 진행 중 커밋하지 않고(`.gitignore`) 완료 후 결과 공개 때 공개한다. 출력에 질의가 조금 들어가는 것은 괜찮다. 회의록 발언 원문은 AI Hub 생성물이 아니지만, 질의응답쌍과 그 분할은 AI Hub 고유 자료일 수 있어 대량으로 남기지 않는다
 - `colab auth`, `colab drivemount`는 사람이 터미널에서 해야 하므로 필요하면 사용자에게 요청한다
+
+## F. 하네스 수정
+
+1. **evolve 불러오기**: `harness:evolve`를 Skill 도구로 불러온 뒤 시작한다. 절차를 기억으로 대신하지 않는다. 기억으로 진행하면 단계별 검증과 트리거 검증이 빠진다(S4의 `colab-operator`, PR #19·이번 하네스 브랜치의 `harness:evolve` 미호출, ADR-0015)
+2. **브랜치**: 작업 PR과 섞지 않고 `chore/` 브랜치에서 한다. `_workspace/00_main_harness-pending.md`의 대기 항목을 근거로 쓴다
+3. **변경마다 검증**: 변경을 하나씩 적용하고, 그때마다 frontmatter·참조 경로를 확인한다. description을 바꾸면 should-trigger·near-miss 요청 각 3개 이상으로 트리거를 검증한다. 검증은 작성 맥락과 분리하려고 서브에이전트에 맡긴다
+4. **기록**: evolve Phase 4의 CLAUDE.md 변경 이력 표 대신 `docs/harness/adr/`에 ADR을 추가하고 목록을 갱신한다(ADR-0014). 앞 ADR을 바꾸면 그 상태를 고친다
+5. **감사·PR**: `protocol-auditor`를 작업 종류 하네스로 부르고, 수정안을 사용자에게 보인 뒤 PR을 올린다("결정과 PR의 순서")
 
 ## 오류 처리
 
