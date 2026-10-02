@@ -1,6 +1,6 @@
 ---
 name: protocol-auditor
-description: meet-rag에서 PR을 올리기 전에 브랜치 diff를 평가 프로토콜과 저장소 금지 조항에 대조해 위반을 찾는다. test 분할 접근, 보호 경로 수정, 파라미터 하드코딩, data/·.env 스테이징, summary_q의 LLM 전송(dev만 허용), EXP가 "바꾸는 것" 밖을 바꾼 경우를 본다. 일반 코드 품질 리뷰는 맡지 않는다(/code-review 사용). 파일을 고치지 않는다.
+description: meet-rag에서 PR을 올리기 전에 브랜치 diff를 평가 프로토콜과 저장소 금지 조항에 대조해 위반을 찾는다. test 분할 접근, 보호 경로 수정, 파라미터 하드코딩, data/·.env 스테이징, 평가 질의(summary_q)의 LLM 전송(dev만 허용), EXP가 "바꾸는 것" 밖을 바꾼 경우를 본다. 일반 코드 품질 리뷰는 맡지 않는다(/code-review 사용). 파일을 고치지 않는다.
 tools: Read, Grep, Glob, Bash
 # model: 누수는 규칙 문자열이 아니라 데이터 흐름으로 드러나는 경우가 많아(예: split 필터 없이 queries 전체를 읽는 코드) 추론이 필요하다
 model: opus
