@@ -1,6 +1,6 @@
 ---
 name: protocol-guard
-description: meet-rag 브랜치 diff에서 평가 오염과 저장소 금지 조항 위반을 찾는 점검표. test 분할 접근, src/rag/eval·configs/eval·data/splits 수정, 파라미터 하드코딩, data/·.env 스테이징, summary_q의 무료 쿼터 전송, EXP 범위 밖 변경을 판정한다. protocol-auditor 에이전트가 PR 전 감사에서 쓰고, 메인이 커밋 직전 빠른 확인에 쓴다. 일반 코드 리뷰에는 쓰지 않는다.
+description: meet-rag 브랜치 diff에서 평가 오염과 저장소 금지 조항 위반을 찾는 점검표. test 분할 접근, src/rag/eval·configs/eval·data/splits 수정, 파라미터 하드코딩, data/·.env 스테이징, summary_q의 LLM 전송(dev만 허용), EXP 범위 밖 변경을 판정한다. protocol-auditor 에이전트가 PR 전 감사에서 쓰고, 메인이 커밋 직전 빠른 확인에 쓴다. 일반 코드 리뷰에는 쓰지 않는다.
 ---
 
 # protocol-guard: 평가 프로토콜 점검표
@@ -50,9 +50,9 @@ test 질의를 읽거나 test 점수를 계산하는 코드 경로가 새로 생
 
 `data/` 아래 파일, `.env`가 스테이징·커밋되면 위반이다. 노트북 출력에 들어간 회의록 발언 원문은 공개 자료라 허용되지만, `summary_q`·`summary_a`·`context_learn`(AI Hub 생성물)이 출력에 대량으로 남았으면 보고한다. Colab 실행 기록(`colab exec -f`가 만든 `*_output.ipynb`, `colab log -o`로 내보낸 기록)은 `outputs/notebooks/`에 둔다. `outputs/`는 프로젝트 진행 중 커밋하지 않으므로(완료 후 공개) 스테이징됐으면 위반이다. 공개 시점의 내용 점검은 위 기준을 따르고, 질의가 조금 들어간 것은 보고하지 않는다.
 
-### P6. 무료 쿼터로 평가 질의 전송
+### P6. 평가 질의의 LLM 전송
 
-`summary_q`(질의 파일의 `query`)를 Google AI Studio·Gemini 무료 쿼터 경로로 보내는 코드면 위반이다. 질의를 LLM에 넣는 실험은 유료 경로(OpenRouter)를 써야 하고, 그 경우 비용 보고와 사용자 승인이 필요하다. `context`만 보내는 생성 경로는 해당하지 않는다.
+`summary_q`(질의 파일의 `query`)를 LLM(Google AI Studio 무료 쿼터 등)에 보내는 코드는 dev 질의만 보내야 한다(D-10). split으로 거르지 않은 질의 파일이나 `test` 질의가 LLM 호출 경로에 들어갈 수 있으면 위반이다. 예외는 검색 단계 종료 시 사용자 지시로 하는 `test` 1회 실행이다(P1과 같다). 질의 전체처럼 많이 보내는 실행이 SLICE·EXP 문서에 호출 수·소요 시간과 사용자 승인 기록 없이 들어 있으면 보고한다. `context`만 보내는 생성 경로는 해당하지 않는다.
 
 ### P7. EXP 범위 밖 변경 (EXP 작업일 때)
 

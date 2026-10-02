@@ -12,7 +12,7 @@ naive RAG(고정 길이 청킹 → KURE-v1 dense 검색 → 생성)로 베이스
   - 인덱스 경로에 설정 식별자를 넣고(예: `data/index/{임베딩모델}-{청킹}-{청크크기}/`) 어느 인덱스를 쓸지 config에 적는다. `data/`는 브랜치를 따라 바뀌지 않으므로, 브랜치를 옮기면 코드와 인덱스가 어긋날 수 있다
   - Colab에서는 저장소를 clone해 실행하고, 인덱스는 git에 올리지 않고 내려받아 로컬 `data/`에 둔다
 - [x] S5 dense 검색 + 평가 실행: dev-small, dev-full 순위 파일 생성과 평가. 같은 명령을 두 번 실행해 점수가 같아야 한다 (S2, S3, S4, G1 필요) → slices/05-retrieve.md
-- [ ] S6 생성: 검색 결과를 넣은 프롬프트로 Gemma 4 31B(Google AI Studio, OpenAI 호환 엔드포인트, DECISIONS D-01)를 호출하고 답변과 근거 URL(`original`)을 낸다. 직접 쓴 질의로 동작만 확인하고 정량 평가는 하지 않는다 (S5 필요) → slices/06-generate.md
+- [ ] S6 생성: 검색 결과를 넣은 프롬프트로 Gemma 4 31B(Google AI Studio, OpenAI 호환 엔드포인트, DECISIONS D-01)를 호출하고 답변과 근거 URL(`original`)을 낸다. dev 질의(D-10)로 동작만 확인하고 정량 평가는 하지 않는다 (S5 필요) → slices/06-generate.md
 
 S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를 정한다. → DECISIONS D-09(Recall@5 0.90)
 
@@ -27,7 +27,7 @@ S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를
 - [대기] H5 청크에 메타데이터 접두(회의명·위원회·안건·날짜) (효과 중 / 재임베딩)
 - [대기] H6 임베딩 모델 교체: `BAAI/bge-m3`, `dragonkue/BGE-m3-ko` (효과 불명 / 재임베딩 2회)
 - [대기] H7 청크 점수의 문서 집계 방식: 최고점 대신 상위 n개 합 등 (효과 소 / 비용 없음)
-- [보류] H8 질의 재작성·HyDE (LLM 호출 비용. `summary_q`를 유료 경로로 보내야 하므로 비용 추정 후 판단)
+- [대기] H8 질의 재작성·HyDE (dev 질의를 무료 쿼터로 보낼 수 있다(D-10). 질의 전체 재작성은 호출 수·소요 시간을 보고하고 승인 후)
 - [대기] H9 다중 크기 청킹: 한 문서를 여러 크기(예: 256·512·1024)로 나눠 함께 검색하고 문서 순위로 합침. 자료는 S4 `data/runs/chunk_sweep.json`과 dev-small 네 인덱스 (효과 중 / 재임베딩)
 - [대기] H10 생성 컨텍스트 단위: 청크 / 앞뒤 청크 확장 / 문서 전체 비교 (DECISIONS D-05). 생성 평가를 SPEC에 추가한 뒤 시험 (효과 미상 / 재임베딩 없음)
 
