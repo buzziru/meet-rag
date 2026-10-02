@@ -1,7 +1,7 @@
 # STATUS (세션 종료 시 덮어씀)
 
 ## 현재 위치
-- S1~S4 완료. S4는 청크 512/64(DECISIONS D-04), 전체 코퍼스 인덱스 `data/index/kure-v1-fixed-512-64/full/`(청크 118,039, Colab L4 약 32분·0.73 CU)
+- S1\~S4 완료. S4는 청크 512/64(DECISIONS D-04), 전체 코퍼스 인덱스 `data/index/kure-v1-fixed-512-64/full/`(청크 118,039, Colab L4 약 32분·0.73 CU)
 - G1 완료(D-03, `summary_q` 전체 사용). S6 naive 컨텍스트는 문서별 최고 점수 청크(D-05)
 - 하네스: Colab 보조 스크립트 `.claude/skills/meet-rag/scripts/colab_job.py`, `_workspace/` 작업 기록 규칙(PR #13). SPEC 자원 제약 개정: dev-small은 Jupyter 노트북으로 기록, GPU 계산은 Colab(D-06, PR #14)
 - PR #15(`docs/s04-notebook`, `notebooks/04_01_청크크기비교.ipynb`)는 사용자 검토 대기

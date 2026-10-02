@@ -83,7 +83,7 @@ uv run python -m rag.eval.compare --base <기준.csv> --cand <후보.csv> [--out
 | 7 | 4를 두 번 실행 | 출력 일치 |
 | 8 | `score --layer test`를 `--allow-test` 없이 실행 | 오류로 멈추고 `test` 질의를 채점하지 않음 |
 
-3~7의 순위 파일은 검증 중에 `paths.splits`·`paths.corpus`·`paths.dev_small_docs`로 만든다. 질의 텍스트는 쓰지 않고 `test` 질의는 만들지 않는다. 8은 순위 파일 없이 `--layer test`만 확인한다.
+3\~7의 순위 파일은 검증 중에 `paths.splits`·`paths.corpus`·`paths.dev_small_docs`로 만든다. 질의 텍스트는 쓰지 않고 `test` 질의는 만들지 않는다. 8은 순위 파일 없이 `--layer test`만 확인한다.
 
 ## 수정 허용 파일
 
