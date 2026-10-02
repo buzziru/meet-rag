@@ -1,7 +1,7 @@
 import numpy as np
 from omegaconf import OmegaConf
 
-from rag.generate import best_chunks, build_messages, recipe
+from rag.generate import answer_start, best_chunks, build_messages, recipe, split_thought
 from rag.index import load_cfg
 
 
@@ -42,3 +42,12 @@ def test_recipe_tracks_prompt_content():
     changed = OmegaConf.merge(cfg, {"prompt": {"system": "다른 지시"}})
     assert recipe(changed, meta, stream=False)["prompt_sha256"] != base["prompt_sha256"]
     assert recipe(cfg, meta, stream=True)["stream"] is True
+
+
+def test_split_thought():
+    assert split_thought("<thought>생각</thought>\n답변 [1]") == ("생각", "답변 [1]")
+    assert split_thought("바로 답변") == ("", "바로 답변")
+    assert split_thought("<thought>끝나지 않음") == ("끝나지 않음", "")
+    assert answer_start("<tho") is None
+    assert answer_start("<thought>생각</thought>답") == len("<thought>생각</thought>")
+    assert answer_start("바로") == 0

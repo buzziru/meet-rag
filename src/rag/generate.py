@@ -24,6 +24,26 @@ from rag.index import ROOT, encoder, load_cfg, load_embeddings, load_model
 from rag.search import rank_with_pool
 
 CONTEXT_META = ["date", "committee_name", "meeting_number", "session_number", "original"]
+# Gemma 4는 이 엔드포인트에서 사고 과정을 끌 수 없어 답변 앞에 붙여 낸다
+THOUGHT_START, THOUGHT_END = "<thought>", "</thought>"
+
+
+def split_thought(text: str) -> tuple[str, str]:
+    """응답을 (사고 과정, 답변)으로 나눈다. 사고 과정이 없으면 빈 문자열."""
+    if not text.lstrip().startswith(THOUGHT_START):
+        return "", text.strip()
+    head, sep, tail = text.partition(THOUGHT_END)
+    if not sep:
+        return head.lstrip()[len(THOUGHT_START):].strip(), ""
+    return head.lstrip()[len(THOUGHT_START):].strip(), tail.strip()
+
+
+def answer_start(text: str) -> int | None:
+    """스트리밍 중 답변이 시작하는 위치. 아직 사고 과정 안이면 None."""
+    if not text.lstrip().startswith(THOUGHT_START[: len(text.lstrip())]):
+        return 0
+    end = text.find(THOUGHT_END)
+    return None if end < 0 else end + len(THOUGHT_END)
 
 
 def best_chunks(scores: np.ndarray, chunk_doc_ids: np.ndarray, k: int, pool: int) -> list[int]:
@@ -128,18 +148,24 @@ class Pipeline:
         params = OmegaConf.to_container(g.params)
         if not stream:
             r = self.client.chat.completions.create(model=g.model, messages=messages, **params)
-            return {"answer": r.choices[0].message.content, "usage": r.usage.model_dump()}
-        parts, usage = [], None
-        for chunk in self.client.chat.completions.create(
-                model=g.model, messages=messages, stream=True,
-                stream_options={"include_usage": True}, **params):
-            if chunk.choices and chunk.choices[0].delta.content:
-                parts.append(chunk.choices[0].delta.content)
-                print(parts[-1], end="", flush=True)
-            if chunk.usage:
-                usage = chunk.usage.model_dump()
-        print()
-        return {"answer": "".join(parts), "usage": usage}
+            text, usage = r.choices[0].message.content, r.usage.model_dump()
+        else:
+            text, usage, printed = "", None, 0
+            for chunk in self.client.chat.completions.create(
+                    model=g.model, messages=messages, stream=True,
+                    stream_options={"include_usage": True}, **params):
+                if chunk.choices and chunk.choices[0].delta.content:
+                    text += chunk.choices[0].delta.content
+                    start = answer_start(text)
+                    if start is not None:  # 사고 과정은 출력하지 않고 답변만 흘려보낸다
+                        piece = text[max(printed, start):]
+                        print(piece.lstrip() if printed <= start else piece, end="", flush=True)
+                        printed = len(text)
+                if chunk.usage:
+                    usage = chunk.usage.model_dump()
+            print()
+        thought, answer = split_thought(text)
+        return {"answer": answer, "thought": thought, "usage": usage}
 
     def run(self, query: str, q_emb: np.ndarray, qid: str | None = None,
             stream: bool | None = None) -> dict:
