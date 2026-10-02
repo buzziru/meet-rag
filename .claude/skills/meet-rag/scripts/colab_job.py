@@ -23,6 +23,7 @@
 
 import argparse
 import gzip
+import json
 import os
 import re
 import shlex
@@ -33,6 +34,8 @@ import tarfile
 import tempfile
 import time
 from pathlib import Path
+
+import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[4]
 REPO_URL = "https://github.com/buzziru/meet-rag.git"
@@ -108,18 +111,29 @@ def setup(session: str, commit: str) -> None:
 
 
 def blocked(path: str) -> bool:
-    """평가 질의(queries_*), 분할(queries.csv), 자격증명(.env)은 VM에 올리지 않는다.
-
-    질의 임베딩은 로컬에서 한다(SPEC 누수 방지). dev_small_docs.txt 같은 문서 목록은 허용한다.
-    """
+    """분할(queries.csv), 자격증명(.env)은 VM에 올리지 않는다."""
     name = path.replace("\\", "/").rsplit("/", 1)[-1]
-    return name in (".env", "queries.csv") or name.startswith("queries_")
+    return name in (".env", "queries.csv")
+
+
+def non_dev_qids(path: Path) -> int:
+    """jsonl에서 qid가 있고 dev 분할이 아닌 행 수. test 질의는 VM에 올리지 않는다(SPEC 자원 제약).
+
+    파일 이름과 무관하게 내용으로 판정한다. qid가 없는 행(코퍼스)은 세지 않는다.
+    """
+    splits = pd.read_csv(ROOT / "data/splits/queries.csv", dtype=str)
+    dev = set(splits.loc[splits["split"] == "dev", "qid"])
+    with path.open(encoding="utf-8") as f:
+        rows = (json.loads(line) for line in f)
+        return sum("qid" in r and r["qid"] not in dev for r in rows)
 
 
 def upload(session: str, local: str, remote: str) -> None:
     src = Path(local)
     if blocked(local) or blocked(remote):
-        sys.exit(f"올리지 않는 파일이다(질의·분할·.env): {local}")
+        sys.exit(f"올리지 않는 파일이다(분할·.env): {local}")
+    if src.suffix == ".jsonl" and (n := non_dev_qids(src)):
+        sys.exit(f"dev가 아닌 질의 {n}건이 있다. dev 질의만 거른 파일을 올린다: {local}")
     target = f"{VM_REPO}/{remote}"
     vm_sh(session, f"mkdir -p {shlex.quote(str(Path(target).parent.as_posix()))}")
     if src.stat().st_size > 20_000_000:  # 큰 파일은 압축해 보낸다(159MB 코퍼스 → 73MB)

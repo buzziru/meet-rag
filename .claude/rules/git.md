@@ -34,7 +34,7 @@
 
 Claude가 브랜치를 push하고 `gh pr create`로 PR을 만든다. diff 확인과 병합은 사용자가 한다.
 
-1. `uv run pytest -q`, `uv run ruff check .` 통과를 확인한다
+1. `uv run pytest -q`, `uv run ruff check .` 통과를 확인한다. PR 내용이 사용자 결정에 따라 바뀌는 작업이면 결정을 받아 반영한 뒤 올린다(사소한 결정은 PR 코멘트로 받는다). 결정 전에 올리면 PR을 다시 고치게 된다
 2. 사용자 요청에 따라 self-review를 한다. 작성 맥락과 분리하려고 `/code-review`나 subagent로 실행한다
 3. 본문에 대응 문서(SLICE·EXP), 변경, 검증 결과, self-review 지적과 반영 여부, 범위 밖 항목을 적는다
 
