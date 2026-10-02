@@ -1,6 +1,14 @@
 # Google AI Studio OpenAI 호환 엔드포인트 (docs/DECISIONS.md D-01)
 base_url: https://generativelanguage.googleapis.com/v1beta/openai/
 api_key_env: GOOGLE_API_KEY
-# 정확한 모델 ID는 S6 스모크 테스트에서 확인한다
-model: ???
-temperature: 0.0
+# 엔드포인트 /models 목록에서 확인 (S6)
+model: models/gemma-4-31b-it
+# 프롬프트에 넣는 상위 문서 수. 문서마다 최고 점수 청크 하나(D-05)
+context_docs: 5
+# 답변을 받는 대로 출력할지. 함수 인자로도 고른다
+stream: false
+# 생성 파라미터. 레시피로 기록한다
+params:
+  temperature: 0.0
+  top_p: 1.0
+  max_tokens: 1024
