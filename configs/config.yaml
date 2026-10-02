@@ -3,6 +3,7 @@ defaults:
   - chunking: fixed
   - retriever: dense
   - generator: gemma
+  - prompt: v1
   - _self_
 
 # 분할·표본 추출용. 값은 docs/SPEC.md와 같다
@@ -26,6 +27,8 @@ paths:
   # 범위별 질의 임베딩. 청킹과 무관해 후보끼리 다시 쓴다
   query_emb: data/index/${embedding.slug}/queries-${index.scope}.npz
   runs_dir: data/runs
+  # 생성 호출 기록. 호출마다 JSON 하나
+  generate_dir: data/runs/generate
 
 embedding:
   model_name: nlpai-lab/KURE-v1
@@ -55,6 +58,11 @@ index:
 # 검색 실행 방식 (docs/slices/05-retrieve.md)
 search:
   mode: run  # run | export-queries(로컬) | embed-queries(VM)
+
+# 생성 질의 (rag.generate). dev 질의는 qid, 자유 질의는 query 하나만 준다
+ask:
+  qid: null
+  query: null
 
 # 청크 크기 비교. overlap은 크기의 1/8
 chunk_sweep:

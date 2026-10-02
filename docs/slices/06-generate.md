@@ -17,8 +17,8 @@
 
 - 검색은 S5와 같다(`rag.search.rank_with_pool`, 512/64 전체 인덱스)
 - 질의는 두 가지로 받는다
-  - `qid=…`: dev 질의. 원문은 `paths.queries_dev`(dev만 담은 파일)에서, 임베딩은 S5 캐시(`queries-full.npz`)에서 읽는다. KURE를 불러오지 않는다
-  - `query=…`: 자유 질의. 데이터셋에 없는 질의라 KURE로 로컬 CPU에서 임베딩한다(배포 후 사용자 질의와 같은 경로)
+  - `ask.qid=…`: dev 질의. 원문은 `paths.queries_dev`(dev만 담은 파일)에서, 임베딩은 S5 캐시(`queries-full.npz`)에서 읽는다. KURE를 불러오지 않는다
+  - `ask.query=…`: 자유 질의. 데이터셋에 없는 질의라 KURE로 로컬 CPU에서 임베딩한다(배포 후 사용자 질의와 같은 경로)
 - 근거는 상위 `generator.context_docs`(5)개 문서마다 점수가 가장 높은 청크 하나다(D-05). 5는 주지표 Recall@5에 맞춘 값이고 데이터를 보고 정한 값이 아니다
 - 근거마다 번호 `[1]`\~`[5]`, 회의 정보(`date`, `committee_name`, `meeting_number`·`session_number`), 청크 원문을 프롬프트에 넣는다. `original` URL은 프롬프트에 넣지 않고 출력의 근거 목록에만 붙인다(토큰 절약, 모델이 URL을 지어내지 않게)
 
@@ -57,8 +57,9 @@ S6에서 정하는 값(모델 ID, 문서 수 5, 프롬프트 v1)은 데이터나
 ## 명령
 
 ```
-uv run python -m rag.generate qid=<dev qid>
-uv run python -m rag.generate "query=질문 문장"
+uv run python -m rag.generate ask.qid=<dev qid>
+uv run python -m rag.generate "ask.query='질문 문장'"   # 한글·공백·물음표는 작은따옴표로 감싼다(Hydra)
+uv run python -m rag.generate ask.qid=<dev qid> generator.stream=true prompt=v1
 ```
 
 ## 완료 기준
@@ -68,8 +69,8 @@ uv run python -m rag.generate "query=질문 문장"
 | 1 | `uv run pytest -q` | 통과. API를 부르지 않는다. 포함: 문서별 최고 점수 청크 선택, 근거 번호·회의 정보가 들어간 프롬프트, URL이 프롬프트에 없고 근거 목록에 있음, 프롬프트 버전 파일 로드, 기록 JSON의 레시피 필드 |
 | 2 | `uv run ruff check .` | 통과(노트북 포함) |
 | 3 | 모델 목록 조회 | Gemma 4 31B 모델 ID를 찾아 `generator.model`에 적음 |
-| 4 | `rag.generate qid=…`로 무작위 dev 질의 3개 | 종료 코드 0, 답변이 비어 있지 않음, 근거 5개와 `original` URL 출력, 기록 JSON 저장. 근거에 정답 문서가 있는지 함께 적는다(통과 기준 아님) |
-| 5 | `rag.generate "query=…"`로 회의록과 무관한 자유 질의 1개 | 종료 코드 0, 기록 저장. 답변이 근거 부족을 밝히는지는 관찰해 노트북에 적는다(통과 기준 아님) |
+| 4 | `rag.generate ask.qid=…`로 무작위 dev 질의 3개 | 종료 코드 0, 답변이 비어 있지 않음, 근거 5개와 `original` URL 출력, 기록 JSON 저장. 근거에 정답 문서가 있는지 함께 적는다(통과 기준 아님) |
+| 5 | `rag.generate "ask.query='…'"`로 회의록과 무관한 자유 질의 1개 | 종료 코드 0, 기록 저장. 답변이 근거 부족을 밝히는지는 관찰해 노트북에 적는다(통과 기준 아님) |
 | 6 | 4의 질의 하나를 `generator.stream=true`로 다시 실행 | 답변이 스트리밍으로 출력되고, 근거 목록(`doc_id`, `chunk_id`)과 레시피(스트리밍 여부 제외)가 4와 같음. 답변 문구는 같지 않아도 된다 |
 | 6a | LangSmith | 4\~6의 실행이 프로젝트에 남고(`langsmith.Client().list_runs`), 검색·근거 구성·생성 하위 실행과 레시피 메타데이터가 있음 |
 | 7 | 노트북 처음부터 실행 | 오류 없음, 확인 질의마다 질의·검색 결과·근거·프롬프트·생성 답변이 출력됨 |
@@ -83,7 +84,7 @@ uv run python -m rag.generate "query=질문 문장"
 ## 수정 허용 파일
 
 - `src/rag/generate.py`, `tests/test_generate.py`
-- `configs/generator/gemma.yaml`, `configs/prompt/v1.yaml`, `configs/config.yaml`(`defaults`의 `prompt`, `paths.generate_dir`)
+- `configs/generator/gemma.yaml`, `configs/prompt/v1.yaml`, `configs/config.yaml`(`defaults`의 `prompt`, `paths.generate_dir`, `ask` 절)
 - `notebooks/06_01_생성확인.ipynb`
 - `docs/DECISIONS.md`, `docs/PLAN.md` S6 체크, `CLAUDE.md` "명령" 절, 이 문서
 
