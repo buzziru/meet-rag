@@ -26,7 +26,7 @@ S4의 512/64 인덱스로 dev-small·dev-full 질의를 검색해 순위 파일�
 - dev-full 질의 3,016건은 Colab T4에서 임베딩한다(사용자 지시, D-07). 질의가 짧아 L4가 필요 없다. 정밀도는 dev-small 질의(로컬 CPU)와 같은 `float32`로 둔다
 - `search.mode`로 실행 방식을 고른다
   - `run`(기본): 검색과 순위 파일 쓰기. 질의 임베딩 캐시가 없거나 질의 목록이 다르면 로컬에서 임베딩한다
-  - `export-queries`(로컬): dev 질의를 `paths.queries_dev`(`data/processed/queries_summary_q.dev.jsonl`)로 내보낸다. 원본과 같은 스키마(jsonl, `qid` 키)이고 dev-full 채점 순서(`load_gold`)를 따른다. `test` 질의는 들어가지 않는다
+  - `export-queries`(로컬): dev 질의를 `paths.queries_dev`(`data/processed/queries_summary_q.dev.jsonl`)로 내보낸다. jsonl에 `qid`·`query` 키만 쓰고(답변 등 다른 필드는 VM에 보내지 않는다) dev-full 채점 순서(`load_gold`)를 따른다. `test` 질의는 들어가지 않는다
   - `embed-queries`(VM): `paths.queries_dev`만 읽어 임베딩하고 `paths.query_emb`에 저장한다. 원본 질의 파일과 분할 파일을 읽지 않아 VM에 둘 필요가 없다. `index.scope=full`에서만 쓴다
 - VM에 올리는 입력은 `queries_summary_q.dev.jsonl` 하나다. `colab_job.py upload`가 모든 `qid`가 dev인지 확인한다. 코퍼스·인덱스는 올리지 않는다
 - 캐시는 `data/index/{임베딩}/queries-{범위}.npz`다. dev-small 캐시(`queries-dev-small.npz`)는 경로가 그대로라 S4 결과를 다시 쓴다
