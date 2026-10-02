@@ -117,18 +117,22 @@ def blocked(path: str) -> bool:
 
 
 def non_dev_qids(path: Path) -> int:
-    """질의 파일에서 dev 분할이 아닌 qid 수. test 질의는 VM에 올리지 않는다(SPEC 자원 제약)."""
+    """jsonl에서 qid가 있고 dev 분할이 아닌 행 수. test 질의는 VM에 올리지 않는다(SPEC 자원 제약).
+
+    파일 이름과 무관하게 내용으로 판정한다. qid가 없는 행(코퍼스)은 세지 않는다.
+    """
     splits = pd.read_csv(ROOT / "data/splits/queries.csv", dtype=str)
     dev = set(splits.loc[splits["split"] == "dev", "qid"])
     with path.open(encoding="utf-8") as f:
-        return sum(json.loads(line)["qid"] not in dev for line in f)
+        rows = (json.loads(line) for line in f)
+        return sum("qid" in r and r["qid"] not in dev for r in rows)
 
 
 def upload(session: str, local: str, remote: str) -> None:
     src = Path(local)
     if blocked(local) or blocked(remote):
         sys.exit(f"올리지 않는 파일이다(분할·.env): {local}")
-    if src.name.startswith("queries_") and (n := non_dev_qids(src)):
+    if src.suffix == ".jsonl" and (n := non_dev_qids(src)):
         sys.exit(f"dev가 아닌 질의 {n}건이 있다. dev 질의만 거른 파일을 올린다: {local}")
     target = f"{VM_REPO}/{remote}"
     vm_sh(session, f"mkdir -p {shlex.quote(str(Path(target).parent.as_posix()))}")
