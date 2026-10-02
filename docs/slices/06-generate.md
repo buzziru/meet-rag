@@ -6,22 +6,27 @@
 
 ## 만드는 것
 
-- `src/rag/generate.py`: 질의 → 질의 임베딩(로컬 CPU) → 전수 검색 → 근거 구성 → 프롬프트 → 생성 호출 → 답변·근거 출력과 기록 저장
-- `configs/generator/gemma.yaml`: 모델 ID, 넣을 문서 수, 출력 길이, 프롬프트
-- `notebooks/06_01_생성확인.ipynb`: 저장된 기록을 불러와 질의별 근거와 답변을 보여 준다. 노트북에서 API를 호출하지 않는다
+- `src/rag/generate.py`: 질의 → 질의 임베딩(로컬 CPU) → 전수 검색 → 근거 구성 → 프롬프트 → 생성 호출 → 답변·근거 출력과 기록 저장. 단계마다 LangSmith로 추적한다
+- `configs/generator/gemma.yaml`: 모델 ID, 넣을 문서 수, 생성 파라미터, 스트리밍 여부
+- `configs/prompt/v1.yaml`: 프롬프트 v1(시스템 지시, 근거 서식, 사용자 메시지 틀)
+- `notebooks/06_01_생성확인.ipynb`: 확인 질의마다 파이프라인을 단계별로 실행해 질의, 검색 결과, 근거, 프롬프트, 생성 답변을 보여 준다
 
 ## 규칙
 
 ### 검색과 근거
 
 - 검색은 S5와 같다(`rag.search.rank_with_pool`, 512/64 전체 인덱스). 질의 하나라 질의 임베딩은 로컬 CPU에서 하고 캐시하지 않는다
+- KURE 질의 임베딩이 필요한 이유: 새 질의는 코퍼스와 같은 벡터 공간에 있어야 검색할 수 있다. 이미 임베딩한 dev 질의(`summary_q`)는 생성 단계에서 질의 원문을 무료 쿼터로 보내야 해서 쓸 수 없다(D-01). 배포 후 사용자 질의도 같은 경로를 탄다
 - 근거는 상위 `generator.context_docs`(5)개 문서마다 점수가 가장 높은 청크 하나다(D-05). 5는 주지표 Recall@5에 맞춘 값이고 데이터를 보고 정한 값이 아니다
 - 근거마다 번호 `[1]`\~`[5]`, 회의 정보(`date`, `committee_name`, `meeting_number`·`session_number`), 청크 원문을 프롬프트에 넣는다. `original` URL은 프롬프트에 넣지 않고 출력의 근거 목록에만 붙인다(토큰 절약, 모델이 URL을 지어내지 않게)
 
 ### 프롬프트와 호출
 
-- 시스템 지시: 근거 안의 내용으로만 한국어로 답하고, 문장마다 근거 번호를 `[n]`으로 붙이며, 근거로 답할 수 없으면 그렇다고 말한다. 문구는 config에 두고 `generator.prompt_version`(v1)으로 구분한다
-- 호출은 `openai` SDK로 `generator.base_url`에 보낸다. 키는 `.env`의 `GOOGLE_API_KEY`(`generator.api_key_env`). `temperature` 0, 출력 상한 `generator.max_tokens`
+- 프롬프트는 이후 실험 대상이다. Hydra 설정 그룹 `configs/prompt/`에 버전마다 파일 하나(`v1.yaml`, `v2.yaml` …)를 두고 `prompt=v2`로 고른다. 파일에는 `version`, 시스템 지시, 근거 한 개의 서식, 사용자 메시지 틀이 들어간다. 한 번 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다
+- v1 시스템 지시: 근거 안의 내용으로만 한국어로 답하고, 문장마다 근거 번호를 `[n]`으로 붙이며, 근거로 답할 수 없으면 그렇다고 말한다
+- 호출은 `openai` SDK로 `generator.base_url`에 보낸다. 키는 `.env`의 `GOOGLE_API_KEY`(`generator.api_key_env`)
+- 생성 파라미터는 config에 고정한다: `temperature` 0, `top_p` 1, `max_tokens`. API 쪽 비결정성이 있어 같은 레시피에서도 답변 문구는 달라질 수 있다
+- 스트리밍: `generator.stream`(기본 `false`) 또는 함수 인자로 고른다. 스트리밍이면 답변을 받는 대로 출력하고, 끝나면 비스트리밍과 같은 기록을 남긴다
 - 모델 ID(`generator.model`, 지금 `???`)는 엔드포인트의 모델 목록(`/models`)에서 Gemma 4 31B 항목을 찾아 정한다. 목록 조회에는 질의를 보내지 않는다
 - 무료 등급 한도(2026-10-02 사용자 화면): Gemma 4 31B RPM 30, TPM 16K, RPD 14.4K. 근거 5개(약 2,500 KURE 토큰)와 지시를 합치면 요청 하나가 수천 토큰이라 분당 몇 번이 한도다. 확인 호출은 한 번에 하나씩 하고, 한도 오류(429)는 다시 시도하지 않고 그대로 보고한다
 
@@ -32,8 +37,15 @@
 
 ### 기록
 
-- 호출마다 `paths.generate_dir`(`data/runs/generate/`)에 JSON 하나를 쓴다: 질의, 모델 ID, `prompt_version`, 인덱스 이름, 근거 목록(번호, `doc_id`, `chunk_id`, 점수, 청크 원문, 회의 정보, `original`), 답변, 토큰 사용량, 시각
+- 호출마다 `paths.generate_dir`(`data/runs/generate/`)에 JSON 하나를 쓴다: 질의, 근거 목록(번호, `doc_id`, `chunk_id`, 점수, 청크 원문, 회의 정보, `original`), 답변, 토큰 사용량, 시각, LangSmith 실행 ID, 레시피
+- 레시피는 같은 결과를 다시 만드는 데 필요한 값 전부다: git 커밋과 미커밋 변경 여부, 임베딩 모델, 인덱스 이름·청크 수, 검색 파라미터(`top_k`, `chunk_pool`, `context_docs`), 프롬프트 버전과 프롬프트 내용 SHA-256, 모델 ID, 생성 파라미터, 스트리밍 여부
 - 나중의 근거 기반 평가는 이 기록만으로 할 수 있어야 한다. `data/` 아래라 커밋하지 않는다
+
+### LangSmith 추적
+
+- 베이스라인부터 파이프라인을 LangSmith로 추적한다. `langsmith.traceable`로 검색·근거 구성·생성 단계를 감싸고, OpenAI 클라이언트는 `wrap_openai`로 감싼다. 프로젝트·키는 `.env`의 `LANGSMITH_*`를 쓴다
+- 최상위 실행의 메타데이터에 레시피를 넣어 LangSmith 화면에서도 설정을 볼 수 있게 한다
+- 키 문제 등으로 추적이 안 되면 생성은 그대로 하고 사용자에게 보고한다
 
 ### 노트북과 결정 순서
 
@@ -49,13 +61,14 @@ uv run python -m rag.generate "query=질문 문장"
 
 | # | 명령 | 기대 결과 |
 | --- | --- | --- |
-| 1 | `uv run pytest -q` | 통과. API를 부르지 않는다. 포함: 문서별 최고 점수 청크 선택, 근거 번호·회의 정보가 들어간 프롬프트, URL이 프롬프트에 없고 근거 목록에 있음, 기록 JSON 필드 |
+| 1 | `uv run pytest -q` | 통과. API를 부르지 않는다. 포함: 문서별 최고 점수 청크 선택, 근거 번호·회의 정보가 들어간 프롬프트, URL이 프롬프트에 없고 근거 목록에 있음, 프롬프트 버전 파일 로드, 기록 JSON의 레시피 필드 |
 | 2 | `uv run ruff check .` | 통과(노트북 포함) |
 | 3 | 모델 목록 조회 | Gemma 4 31B 모델 ID를 찾아 `generator.model`에 적음 |
 | 4 | `rag.generate`로 회의록 주제 질의 3개(직접 작성) | 종료 코드 0, 답변이 비어 있지 않음, 근거 5개와 `original` URL 출력, 기록 JSON 저장 |
 | 5 | `rag.generate`로 회의록과 무관한 질의 1개 | 종료 코드 0, 기록 저장. 답변이 근거 부족을 밝히는지는 관찰해 노트북에 적는다(통과 기준 아님) |
-| 6 | 4의 질의 하나를 다시 실행 | 근거 목록(`doc_id`, `chunk_id`)이 같음. 답변 문구는 같지 않아도 된다 |
-| 7 | 노트북 처음부터 실행 | 오류 없음, 4·5의 기록을 보여 줌 |
+| 6 | 4의 질의 하나를 `generator.stream=true`로 다시 실행 | 답변이 스트리밍으로 출력되고, 근거 목록(`doc_id`, `chunk_id`)과 레시피(스트리밍 여부 제외)가 4와 같음. 답변 문구는 같지 않아도 된다 |
+| 6a | LangSmith | 4\~6의 실행이 프로젝트에 남고(`langsmith.Client().list_runs`), 검색·근거 구성·생성 하위 실행과 레시피 메타데이터가 있음 |
+| 7 | 노트북 처음부터 실행 | 오류 없음, 확인 질의마다 질의·검색 결과·근거·프롬프트·생성 답변이 출력됨 |
 | 8 | 문서 기록 | `CLAUDE.md` "명령"에 생성 명령, PLAN S6 체크, DECISIONS에 모델 ID·근거 문서 수·프롬프트 v1, 이 문서 "실행 기록"에 호출 수·토큰 사용량 |
 
 ## 실행 기록
@@ -66,7 +79,7 @@ uv run python -m rag.generate "query=질문 문장"
 ## 수정 허용 파일
 
 - `src/rag/generate.py`, `tests/test_generate.py`
-- `configs/generator/gemma.yaml`, `configs/config.yaml`(`paths.generate_dir`)
+- `configs/generator/gemma.yaml`, `configs/prompt/v1.yaml`, `configs/config.yaml`(`defaults`의 `prompt`, `paths.generate_dir`)
 - `notebooks/06_01_생성확인.ipynb`
 - `docs/DECISIONS.md`, `docs/PLAN.md` S6 체크, `CLAUDE.md` "명령" 절, 이 문서
 
@@ -74,6 +87,6 @@ uv run python -m rag.generate "query=질문 문장"
 
 - 답변 품질·근거 기반 여부의 정량 평가(SPEC 개정 후)
 - 생성 컨텍스트 단위 비교(H10), 재순위화·하이브리드 검색
-- 한도 대기·재시도, 스트리밍, 대화 기록, 웹 UI·배포
-- LangSmith 트레이싱
+- 한도 대기·재시도, 대화 기록, 웹 UI·배포
+- LangSmith 평가 데이터셋·평가기(답변 평가 기준을 정한 뒤)
 - `summary_q`를 넣는 생성 호출
