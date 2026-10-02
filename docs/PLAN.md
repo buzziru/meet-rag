@@ -12,7 +12,7 @@ naive RAG(고정 길이 청킹 → KURE-v1 dense 검색 → 생성)로 베이스
   - 인덱스 경로에 설정 식별자를 넣고(예: `data/index/{임베딩모델}-{청킹}-{청크크기}/`) 어느 인덱스를 쓸지 config에 적는다. `data/`는 브랜치를 따라 바뀌지 않으므로, 브랜치를 옮기면 코드와 인덱스가 어긋날 수 있다
   - Colab에서는 저장소를 clone해 실행하고, 인덱스는 git에 올리지 않고 내려받아 로컬 `data/`에 둔다
 - [x] S5 dense 검색 + 평가 실행: dev-small, dev-full 순위 파일 생성과 평가. 같은 명령을 두 번 실행해 점수가 같아야 한다 (S2, S3, S4, G1 필요) → slices/05-retrieve.md
-- [ ] S6 생성: 검색 결과를 넣은 프롬프트로 Gemma 4 31B(Google AI Studio, OpenAI 호환 엔드포인트, DECISIONS D-01)를 호출하고 답변과 근거 URL(`original`)을 낸다. 직접 쓴 질의로 동작만 확인하고 정량 평가는 하지 않는다 (S5 필요) → slices/06-generate.md
+- [ ] S6 생성: 검색 결과를 넣은 프롬프트로 Gemma 4 31B(Google AI Studio, OpenAI 호환 엔드포인트, DECISIONS D-01)를 호출하고 답변과 근거 URL(`original`)을 낸다. dev 질의(D-10)로 동작만 확인하고 정량 평가는 하지 않는다 (S5 필요) → slices/06-generate.md
 
 S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를 정한다. → DECISIONS D-09(Recall@5 0.90)
 
