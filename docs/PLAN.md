@@ -11,10 +11,10 @@ naive RAG(고정 길이 청킹 → KURE-v1 dense 검색 → 생성)로 베이스
 - [x] S4 청킹·임베딩·인덱스: 고정 토큰 길이 청킹, KURE-v1 임베딩, 중간 산출물 저장 후 재개 가능. dev-small은 노트북, 전체는 Colab (S1 필요) → slices/04-index.md
   - 인덱스 경로에 설정 식별자를 넣고(예: `data/index/{임베딩모델}-{청킹}-{청크크기}/`) 어느 인덱스를 쓸지 config에 적는다. `data/`는 브랜치를 따라 바뀌지 않으므로, 브랜치를 옮기면 코드와 인덱스가 어긋날 수 있다
   - Colab에서는 저장소를 clone해 실행하고, 인덱스는 git에 올리지 않고 내려받아 로컬 `data/`에 둔다
-- [ ] S5 dense 검색 + 평가 실행: dev-small, dev-full 순위 파일 생성과 평가. 같은 명령을 두 번 실행해 점수가 같아야 한다 (S2, S3, S4, G1 필요) → slices/05-retrieve.md
+- [x] S5 dense 검색 + 평가 실행: dev-small, dev-full 순위 파일 생성과 평가. 같은 명령을 두 번 실행해 점수가 같아야 한다 (S2, S3, S4, G1 필요) → slices/05-retrieve.md
 - [ ] S6 생성: 검색 결과를 넣은 프롬프트로 Gemma 4 31B(Google AI Studio, OpenAI 호환 엔드포인트, DECISIONS D-01)를 호출하고 답변과 근거 URL(`original`)을 낸다. 직접 쓴 질의로 동작만 확인하고 정량 평가는 하지 않는다 (S5 필요) → slices/06-generate.md
 
-S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를 정한다.
+S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를 정한다. → DECISIONS D-09(Recall@5 0.90)
 
 ## 실험 백로그
 
@@ -35,5 +35,6 @@ S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를
 
 ## 이후 단계
 
+- [ ] G2 질의 문서 특정 가능성 보조 분석: 검색 단계 종료 시, 검색 결과를 보지 않은 채 dev 무작위 표본을 "질의만으로 정답 문서를 특정할 수 있는가"로 사람이 검수하고, 특정 가능한 질의에서의 Recall@5를 주 지표와 따로 보고한다. 주 지표와 질의 집합은 바꾸지 않는다 (DECISIONS D-09)
 - 생성 단계 평가: 검색 단계 종료(test 1회 보고) 후 SPEC을 개정해 지표를 정하고, 그 뒤 백로그를 만든다.
 - 배포(HF Spaces): 생성 단계 이후 조각으로 추가한다.
