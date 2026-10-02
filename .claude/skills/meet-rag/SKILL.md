@@ -36,7 +36,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 
 - 파일 이름은 `{작업}_{작성자}_{내용}.md`다. 예: `s05_main_progress.md`, `exp002_main_progress.md`
 - 진행 기록: 흐름을 시작할 때 만들고, 단계가 끝날 때마다 상태·산출물 경로·커밋·다음 단계가 알아야 할 것을 갱신한다. 에이전트를 부를 때 프롬프트에 이 경로를 넣는다
-- `00_main_harness-pending.md`: 작업 중 발견한 하네스 개선 거리를 바로 적어 두는 대기 목록이다. 작업 PR 뒤 `chore/` 브랜치에서 `harness:evolve`로 반영하고 상태를 바꾼다
+- `00_main_harness-pending.md`: 작업 중 발견한 하네스 개선 거리를 바로 적어 두는 대기 목록이다. 작업 PR 뒤 `chore/` 브랜치에서 `harness:evolve`로 반영하고 상태를 바꾼다. 반영한 결정은 `docs/harness/adr/`에 ADR로 남긴다(CLAUDE.md 변경 이력 표 대신)
 - 최종 결과와 결정은 여기에 두지 않는다. SLICE·EXP 문서, DECISIONS, STATUS가 기록처다
 
 ## 결정과 PR의 순서

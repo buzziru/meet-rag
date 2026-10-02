@@ -60,14 +60,4 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 
 **호출 조건:** SLICE 구현, EXP 실행·판정, G 항목(사람 검수 게이트)의 표본 추출·집계·결정 기록, Colab GPU 작업(전체 코퍼스 임베딩·인덱스 구축), PR 준비, 세션 마무리, STATUS "다음 행동" 진행을 요청받으면 `meet-rag` 스킬을 사용한다. 같은 세션에서 다음 조각·게이트·실험으로 넘어갈 때도 스킬의 0단계부터 다시 한다. 단순 질문에는 직접 답해도 된다.
 
-**변경 이력:**
-| 날짜 | 변경 내용 | 대상 | 사유 |
-| --- | --- | --- | --- |
-| 2026-09-29 | Harness v2로 처음 구성 | 전체 | - |
-| 2026-10-01 | 0단계 재시작 규정, A1 지시서 별도 커밋·확인 전 멈춤, D 흐름(사람 검수 게이트) 추가, 트리거·호출 조건 확장, STATUS 흐름 표기 | skills/meet-rag, agents/protocol-auditor, CLAUDE.md | S1 뒤 같은 세션의 S2·G1에서 스킬이 다시 쓰이지 않아 지시서 확인이 빠지고 G 항목은 대응 흐름이 없었음 |
-| 2026-10-01 | colab-operator 스킬 추가, 오케스트레이터 E절(GPU 작업: 승인 → 지정 GPU 할당, 실패 시 T4 → 실행·기록 → 정리) 추가, slice-verifier·protocol-guard에 Colab 산출물 기준 추가 | skills/colab-operator, skills/meet-rag, agents/slice-verifier, skills/protocol-guard, CLAUDE.md | KURE-v1 등 임베딩을 직접 해야 해 GPU 작업을 Colab CLI로 하기로 함 |
-| 2026-10-01 | E절 비용·재할당 규칙(비용 변동으로 멈추지 않음, 예상 밖 재할당은 보고 후 사용자 결정) 명시, Colab 실행 기록 위치 `outputs/notebooks/`, P5 소량 질의 허용 | skills/meet-rag, skills/protocol-guard | PR #11 사용자 코멘트 |
-| 2026-10-01 | `outputs/`를 진행 중 커밋 금지(완료 후 공개)로 정하고 `.gitignore`의 `output/`을 `outputs/`로 교체 | skills/meet-rag, skills/protocol-guard, .gitignore | PR #11 사용자 결정 |
-| 2026-10-01 | Colab 보조 스크립트(`scripts/colab_job.py`: preflight·setup(uv sync)·upload·launch(nohup)·poll·fetch·finish) 도입, E절을 스크립트 절차로 재작성(colab-operator 호출 단계, 요율 기반 CU 예상), `_workspace/` 작업 기록 규칙, 검증의 CPU 임베딩 규모 최소화 | skills/meet-rag, agents/slice-verifier, .gitignore | S4 Colab 두 번에서 같은 함정 반복(경로 변환, cp949, 미push, override 오타, Python 3.13, 연결 끊김), colab-operator 미호출, 검증 20분 지연, 사용자 `_workspace` 요청 |
-| 2026-10-02 | "결정과 PR의 순서" 절 추가(근거 노트북을 결정보다 먼저 쓰고, 사용자 결정을 반영한 뒤 PR), A1·A5·B6·D4에 연결, git.md PR 절. dev 질의 Colab 업로드 허용·`test` 질의 금지: `colab_job.py upload`를 이름 대신 `.jsonl` 내용의 qid 분할 확인으로, E6 문구, SPEC 자원 제약(D-07). 질의를 담은 데이터는 jsonl·`qid` 키로 고정하고 protocol-guard P1에 점검 추가 | skills/meet-rag, scripts/colab_job.py, skills/protocol-guard, rules/git.md, SPEC, DECISIONS | PR #15 코멘트(S4 노트북이 결정 뒤에 쓰임), PR 뒤 결정 반영으로 PR 수정 반복, 로컬 질의 임베딩 시간(사용자 지시) |
-| 2026-10-02 | dev 평가 질의의 무료 쿼터 전송 허용(D-10): protocol-guard P6을 "dev만, `test` 금지, 대량 실행은 보고·승인"으로, slice-verifier 실행 금지 항목과 protocol-auditor 설명 수정 | skills/protocol-guard, agents/slice-verifier, agents/protocol-auditor, CLAUDE.md 금지 절, SPEC, DECISIONS, PLAN, .env.example | 사용자 판단: 질의 노출 주의 규칙이 과도해 데이터셋으로 생성 개발이 불가능 |
+**변경 기록:** 하네스(`.claude/`의 스킬·에이전트·규약)를 바꾸면 `docs/harness/adr/`에 ADR(상태·맥락·결정·결과·삭제 조건)을 하나 추가하고 목록(`docs/harness/adr/README.md`)을 갱신한다.
