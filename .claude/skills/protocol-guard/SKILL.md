@@ -26,6 +26,7 @@ test 질의를 읽거나 test 점수를 계산하는 코드 경로가 새로 생
 - `split == "test"`, `"test"` 문자열로 분할을 고르는 코드
 - `data/splits/queries.csv`를 읽고 split으로 거르지 않은 채 질의 전체를 쓰는 코드. 필터가 없으면 test가 섞인다
 - config에서 평가 분할을 바꿀 수 있게 하면서 기본값이나 호출부가 test인 경우
+- 질의를 담은 데이터 파일을 jsonl이 아닌 형식으로 쓰거나, 질의 ID를 `qid`가 아닌 키로 쓰는 코드. `colab_job.py upload`의 dev 확인은 `.jsonl`의 `qid` 키로만 판정하므로, 다른 형식이면 test 질의가 검사 없이 VM으로 나갈 수 있다(D-07)
 
 `tests/` 디렉터리(pytest)는 분할과 무관하다. 이름만 보고 판정하지 않는다.
 
