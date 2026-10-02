@@ -12,7 +12,7 @@ naive RAG(고정 길이 청킹 → KURE-v1 dense 검색 → 생성)로 베이스
   - 인덱스 경로에 설정 식별자를 넣고(예: `data/index/{임베딩모델}-{청킹}-{청크크기}/`) 어느 인덱스를 쓸지 config에 적는다. `data/`는 브랜치를 따라 바뀌지 않으므로, 브랜치를 옮기면 코드와 인덱스가 어긋날 수 있다
   - Colab에서는 저장소를 clone해 실행하고, 인덱스는 git에 올리지 않고 내려받아 로컬 `data/`에 둔다
 - [x] S5 dense 검색 + 평가 실행: dev-small, dev-full 순위 파일 생성과 평가. 같은 명령을 두 번 실행해 점수가 같아야 한다 (S2, S3, S4, G1 필요) → slices/05-retrieve.md
-- [ ] S6 생성: 검색 결과를 넣은 프롬프트로 Gemma 4 31B(Google AI Studio, OpenAI 호환 엔드포인트, DECISIONS D-01)를 호출하고 답변과 근거 URL(`original`)을 낸다. dev 질의(D-10)로 동작만 확인하고 정량 평가는 하지 않는다 (S5 필요) → slices/06-generate.md
+- [x] S6 생성: 검색 결과를 넣은 프롬프트로 Gemma 4 31B(Google AI Studio, OpenAI 호환 엔드포인트, DECISIONS D-01)를 호출하고 답변과 근거 URL(`original`)을 낸다. dev 질의(D-10)로 동작만 확인하고 정량 평가는 하지 않는다 (S5 필요) → slices/06-generate.md
 
 S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를 정한다. → DECISIONS D-09(Recall@5 0.90)
 
@@ -30,6 +30,7 @@ S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를
 - [대기] H8 질의 재작성·HyDE (dev 질의를 무료 쿼터로 보낼 수 있다(D-10). 질의 전체 재작성은 호출 수·소요 시간을 보고하고 승인 후)
 - [대기] H9 다중 크기 청킹: 한 문서를 여러 크기(예: 256·512·1024)로 나눠 함께 검색하고 문서 순위로 합침. 자료는 S4 `data/runs/chunk_sweep.json`과 dev-small 네 인덱스 (효과 중 / 재임베딩)
 - [대기] H10 생성 컨텍스트 단위: 청크 / 앞뒤 청크 확장 / 문서 전체 비교 (DECISIONS D-05). 생성 평가를 SPEC에 추가한 뒤 시험 (효과 미상 / 재임베딩 없음)
+- [대기] H11 생성 평가용 OpenRouter 경로: 생성 평가처럼 요청이 많을 때 `generator=openrouter`로 고른다. Gemma 4 31B 입력 $0.09·출력 $0.34(100만 토큰당), 호출당 약 $0.0005로 dev-full 3,016건 약 $1.4(2026-10-02 추정, 사고 과정을 출력으로 계산). 사용 전 비용 보고·승인 (효과: 처리량 / 비용 소)
 
 순서는 예상 효과 대비 비용 순이다. 실험 결과가 나올 때마다 다시 정렬한다. 결과 수치는 EXPERIMENTS.md에 둔다.
 
