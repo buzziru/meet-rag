@@ -77,6 +77,8 @@ uv run python -m rag.eval.score --run data/runs/kure-v1-fixed-512-64-dev-full.cs
 
 | 날짜 | 작업 | GPU·장치 | 세션·실행 시간 | compute unit | 비고 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-10-02 | dev-full 질의 3,016건 임베딩(`embed-queries`, float32) | Colab T4 | 세션 약 6분(15:44:31~15:50:18, setup 1분 미만, 임베딩은 모델 로드 포함 2분 이내) | 요율 1.04 CU/시간 환산 약 0.10 | `uv sync --extra cu126`: Python 3.12.3, torch 2.13.0+cu126, transformers 5.14.1, sentence-transformers 5.6.1. 업로드는 `queries_summary_q.dev.jsonl`(`qid`·`query`, 635KB) 하나 |
+| 2026-10-02 | dev-full 검색 | 로컬 CPU | 18~19초(두 번), 전체 정렬로 넘어간 질의 0건 | - | 순위 파일 SHA-256 `f1568843…bbe2` 두 번 일치, 채점 결과 일치 |
 
 ## 수정 허용 파일
 
