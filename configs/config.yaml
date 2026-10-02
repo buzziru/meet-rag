@@ -16,13 +16,15 @@ paths:
   raw_dir: data
   corpus: data/processed/corpus_context.jsonl
   queries: data/processed/queries_summary_q.jsonl
+  # dev 질의만 내보낸 파일. Colab 질의 임베딩에 올린다(D-07)
+  queries_dev: data/processed/queries_summary_q.dev.jsonl
   splits: data/splits/queries.csv
   dev_small_docs: data/splits/dev_small_docs.txt
   g1_sample: data/review/g1_summary_q.csv
   # 설정마다 경로를 분리한다. data/는 브랜치를 따라 바뀌지 않는다
   index_dir: data/index/${embedding.slug}-${chunking.name}-${chunking.chunk_tokens}-${chunking.overlap_tokens}/${index.scope}
-  # dev-small 질의 임베딩. 청킹과 무관해 후보끼리 다시 쓴다
-  query_emb: data/index/${embedding.slug}/queries-dev-small.npz
+  # 범위별 질의 임베딩. 청킹과 무관해 후보끼리 다시 쓴다
+  query_emb: data/index/${embedding.slug}/queries-${index.scope}.npz
   runs_dir: data/runs
 
 embedding:
@@ -49,6 +51,10 @@ index:
   scope: dev-small  # dev-small | full
   shard_size: 2048  # 임베딩 조각당 청크 수. 조각 단위로 재개한다
   max_docs: null  # 디버그용. 앞에서부터 이 수의 문서만 처리한다
+
+# 검색 실행 방식 (docs/slices/05-retrieve.md)
+search:
+  mode: run  # run | export-queries(로컬) | embed-queries(VM)
 
 # 청크 크기 비교. overlap은 크기의 1/8
 chunk_sweep:
