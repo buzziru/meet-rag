@@ -92,7 +92,7 @@ A2(S4 등 전체 인덱스)와 B3(재임베딩 실험)에서 GPU 임베딩이 �
 4. **사전 점검**: `colab_job.py preflight <override...>`. 커밋되지 않은 변경, 원격에 없는 HEAD, 틀린 override를 VM 할당 전에 막는다
 5. **할당과 환경**: `colab new -s meet-rag-<작업> --gpu <GPU>` 뒤 `colab_job.py setup -s <세션> --commit <HEAD>`. VM에 uv를 깔고 `uv sync --extra cu126`으로 Python 3.12와 `uv.lock` 버전을 그대로 맞춘다. 로컬과 같은 버전이어야 결과를 재현할 수 있다. 출력된 Python·torch·transformers·sentence-transformers 버전을 실행 기록에 남긴다
    - 할당이 실패하면(400 등) `--gpu T4`로 바꿔 다시 할당한다. 이 대체는 승인 범위 안이라 다시 승인받지 않고 바뀐 GPU와 다시 잡은 예상 시간만 알린다. T4도 실패하면 멈추고 보고한다. 비용이 예상과 달라졌다는 이유만으로 작업을 멈추지는 않는다
-6. **입력과 실행**: `colab_job.py upload`로 입력(`data/processed/` 코퍼스, 필요하면 범위에 맞게 거른 파일)을 올리고, `colab_job.py launch -s <세션> -- python -m <모듈> <override...>`로 VM 안 nohup 실행을 띄운 뒤 `colab_job.py poll`로 로그를 본다. 질의 파일은 올리지 않는다. `docs/STATUS.md` "실행 중 작업"과 `_workspace/` 진행 기록에 세션 이름, 커밋, 예상 종료 시각을 적는다
+6. **입력과 실행**: `colab_job.py upload`로 입력(`data/processed/` 코퍼스, 필요하면 범위에 맞게 거른 파일)을 올리고, `colab_job.py launch -s <세션> -- python -m <모듈> <override...>`로 VM 안 nohup 실행을 띄운 뒤 `colab_job.py poll`로 로그를 본다. 질의는 dev 질의만 거른 파일을 올린다(`upload`가 dev가 아닌 qid가 있으면 막는다). `test` 질의와 분할 파일(`queries.csv`)은 올리지 않는다(SPEC 자원 제약, DECISIONS D-07). 노트북에는 질의 원문을 대량 출력하지 않는다. `docs/STATUS.md` "실행 중 작업"과 `_workspace/` 진행 기록에 세션 이름, 커밋, 예상 종료 시각을 적는다
 7. **회수와 정리**: `colab_job.py fetch -s <세션> <저장소 기준 산출물 경로>`로 내려받아 로컬 같은 경로에 푼다. 이어서 `colab_job.py finish -s <세션>`으로 세션 기록을 `outputs/notebooks/`에 남기고 VM을 멈춘 뒤 남은 세션이 없는지 확인한다. 멈추지 않은 VM은 24시간까지 크레딧을 쓴다. 실제 세션 시간과 compute unit(사용자 확인값)을 SLICE·EXP 문서 "실행 기록"에 적는다
 
 산출물 취급:
@@ -116,6 +116,7 @@ A2(S4 등 전체 인덱스)와 B3(재임베딩 실험)에서 GPU 임베딩이 �
 - 오류: E5에서 A100 할당이 400으로 실패 → `--gpu T4`로 재할당, 바뀐 GPU와 다시 잡은 예상 시간을 사용자에게 알리고 진행 → T4도 실패하면 멈추고 보고
 - 오류: E6 실행 중 VM이 회수돼 `poll`이 404로 실패 → `colab sessions`로 확인 → 새 VM을 만들지 않고 진행 위치와 재할당 예상 비용을 사용자에게 보고 → 사용자가 정하면 중간 산출물부터 재개
 - 정상: S5 dev-full 채점 후 → `notebooks/05_01_*.ipynb`를 쓰고 사용자에게 보임 → 사용자가 수치 목표를 정함 → DECISIONS 기록 → 검증·감사 → PR (노트북 전에 결정을 기록하거나, 결정 전에 PR을 올리지 않는다)
+- 오류: E6에서 `upload`가 "dev가 아닌 질의 N건"으로 멈춤 → dev로 거른 파일을 다시 만들어 올린다. 차단을 우회하지 않는다
 - 오류: E4 `preflight`가 "HEAD가 원격에 없다"로 멈춤 → push 후 다시 `preflight` → VM 할당은 그 뒤에 한다
 - 오류: B4에서 후보 순위 파일이 dev-small로 만들어져 있음 → judge가 판정하지 않고 보고 → 메인이 dev-full 실행 여부를 사용자에게 묻는다
 - 오류: A4에서 auditor가 P4(하드코딩 top-k) 위반 보고 → 메인이 `file:line`을 확인하고 config로 옮김 → auditor를 직전 지적 목록과 함께 다시 부른다
