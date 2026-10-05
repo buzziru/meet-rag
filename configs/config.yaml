@@ -72,7 +72,7 @@ chunk_sweep:
   recall_ks: [1, 5, 10]
   mrr_ks: [1, 5, 10]
 
-# multi-doc 묶음 구성 (docs/slices/07-bundles.md). 제안값, 노트북 확인 후 확정
+# multi-doc 묶음 구성 (docs/slices/07-bundles.md). 값은 D-13에서 확정
 multidoc:
   types: [conf, law, questioner]
   pool_max_docs: 20  # 완전성 검사가 후보 집합 전체를 읽으므로 크기 상한
