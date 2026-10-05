@@ -15,6 +15,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - dev-small 검색·청크 크기 비교: `uv run python -m rag.search [chunking.…]`, `uv run python -m rag.chunk_sweep` (결과 DECISIONS D-04)
 - dev-full 검색: `uv run python -m rag.search index.scope=full` (→ `data/runs/{인덱스}-dev-full.csv`, 로컬 약 20초). 질의 임베딩 캐시가 없으면 `search.mode=export-queries`로 dev 질의를 내보내 Colab에서 `search.mode=embed-queries embedding.device=cuda`로 만든다(D-07, slices/05-retrieve.md)
 - 생성: `uv run python -m rag.generate ask.qid=<dev qid>` 또는 `"ask.query='질문'"` (`[prompt=vN generator.stream=true]`, → `data/runs/generate/`와 LangSmith. 한도 RPM 30·TPM 16K, 호출당 약 3K 토큰. 5xx는 서버 상태부터 확인)
+- multi-doc 묶음: `uv run python -m rag.multidoc.pools` (→ `data/multidoc/pools.jsonl`, 약 20초. 유형·값은 D-13)
 - 파이프라인 명령(데이터 적재, 분할, 인덱스, 검색, 평가, 생성)은 해당 SLICE가 끝날 때 여기에 추가한다. 빠른 확인은 dev-small로 한다
 
 한글 출력이 깨지면 `PYTHONUTF8=1`로 실행한다. 파일은 `encoding="utf-8"`로 연다.
