@@ -32,11 +32,11 @@
 
 ## PR
 
-Claude가 브랜치를 push하고 `gh pr create`로 PR을 만든다. diff 확인과 병합은 사용자가 한다.
+Claude가 브랜치를 원격에 올리고 `gh pr create`로 PR을 만든다. diff 확인과 병합은 사용자가 한다.
 
 1. `uv run pytest -q`, `uv run ruff check .` 통과를 확인한다. PR 내용이 사용자 결정에 따라 바뀌는 작업이면 결정을 받아 반영한 뒤 올린다(사소한 결정은 PR 코멘트로 받는다). 결정 전에 올리면 PR을 다시 고치게 된다
 2. 사용자 요청에 따라 self-review를 한다. 작성 맥락과 분리하려고 `/code-review`나 subagent로 실행한다
-3. `pr-briefer`를 불러 받은 리뷰 가이드(`## 리뷰 가이드`)를 본문 맨 위에 둔다. meet-rag 흐름 밖에서 올리는 PR도 같다. 이어서 대응 문서(SLICE·EXP), 변경, 검증 결과, self-review 지적과 반영 여부, 범위 밖 항목을 적는다
+3. `pr-briefer`를 불러 받은 리뷰 가이드(`## 리뷰 가이드`)를 본문 맨 위에 둔다. meet-rag 흐름 밖에서 올리는 PR도 같다. 바뀐 파일이 모두 `docs/` 아래면 부르지 않고, `docs/SPEC.md`나 `docs/DECISIONS.md`가 바뀌었을 때만 본문 맨 위에 `위험도: 단방향(SPEC·DECISIONS 변경)` 한 줄을 적는다. 이어서 대응 문서(SLICE·EXP), 변경, 검증 결과, self-review 지적과 반영 여부, 범위 밖 항목을 적는다
 
 병합은 merge commit으로 한다. squash나 rebase를 쓰면 EXP 문서에 적은 커밋 해시가 `main`에서 사라진다.
 
@@ -48,6 +48,6 @@ STATUS는 세션마다 덮어쓰는 스냅샷이고 코드가 아니므로 PR을
   1. `git switch main`, `git pull --ff-only`로 원격과 맞춘다
   2. `docs/STATUS.md`를 덮어쓴다
   3. `git add docs/STATUS.md` 후 `git diff --cached --name-only`가 이 파일 하나뿐인지 확인한다
-  4. `docs: STATUS 갱신`으로 커밋하고 push한다
+  4. `docs: STATUS 갱신`으로 커밋하고 원격에 올린다
 - 작업 도중 세션이 끝나면 STATUS 커밋을 작업 브랜치에 태운다
 - 다른 파일을 고칠 거리가 생기면 이 경로를 쓰지 않고 브랜치를 만든다

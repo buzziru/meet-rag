@@ -12,9 +12,9 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 | `slice-verifier` | SLICE 완료 기준을 명령으로 실행해 판정 | SLICE 구현 후 |
 | `protocol-auditor` | diff를 평가 프로토콜·금지 조항에 대조 | 모든 PR 전 |
 | `exp-judge` | dev-full 결과를 SPEC 규칙으로 판정하고 기록 초안 작성 | EXP 실행 후 |
-| `pr-briefer` | diff로 PR 본문의 리뷰 가이드(위험도, 판단할 곳, 구조) 작성 | 모든 PR 전 |
+| `pr-briefer` | diff로 PR 본문의 리뷰 가이드(위험도, 판단할 곳, 구조) 작성 | `docs/`만 바꾼 PR이 아니면 PR 전 |
 
-`protocol-auditor`를 부르는 단계(A4·B5·D2·D5·F6)에서는 `pr-briefer`도 같은 메시지에서 병렬로 부른다. 프롬프트에 auditor와 같은 기준·브랜치·대응 문서·작업 종류와 검증 결과 요약을 넣는다. 감사 지적을 고쳐 커밋했으면 briefer도 직전 가이드와 함께 다시 부른다. 가이드가 수정 전 diff를 설명하면 사용자가 다른 코드를 판단하게 된다. 단방향 판정은 메인이 걸린 규칙의 `file:line`을 직접 확인한 뒤 본문에 넣는다.
+`protocol-auditor`를 부르는 단계(A4·B5·D2·D5·F6)에서는 `pr-briefer`도 같은 메시지에서 병렬로 부른다. 바뀐 파일이 모두 `docs/` 아래면(D5 등) 부르지 않고 `git.md` PR 절 3을 따른다. 프롬프트에 auditor와 같은 기준·브랜치·대응 문서·작업 종류와 검증 결과 요약을 넣는다. 감사 지적을 고쳐 커밋했으면 briefer도 직전 가이드와 함께 다시 부른다. 가이드가 수정 전 diff를 설명하면 사용자가 다른 코드를 판단하게 된다. 단방향 판정은 메인이 걸린 규칙의 `file:line`을 직접 확인한 뒤 본문에 넣는다.
 
 일반 코드 리뷰는 `/code-review`를 쓴다. 에이전트 결과는 반환 메시지로 받는다. 판정에 걸리는 근거(실패 출력, 위반 `file:line`, 판정 수치)는 메인이 직접 한 번 확인한 뒤 반영한다.
 
