@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[3]
 # 유형별 후보 집합 키 열. 키 값이 빈 행은 그 유형에서 뺀다
 KEYS = {"conf": ["conf"], "law": ["law"], "questioner": ["questioner", "committee"]}
 CROSS_CONF = {"law", "questioner"}  # 회의 2개 이상에 걸쳐야 하는 유형
+# S7이 시작 묶음을 고르는 유형. 나머지는 S8 생성 에이전트가 후보 집합에서 고른다(DECISIONS D-13)
+SEEDED = {"law"}
 
 
 def collect(records, test_confs: set[str]) -> pd.DataFrame:
@@ -30,7 +32,6 @@ def collect(records, test_confs: set[str]) -> pd.DataFrame:
         rows.append({
             "doc_id": make_doc_id(conf, r["context"]),
             "conf": conf,
-            "qn": r["question_number"],
             "law": r.get("law", "").strip(),
             "questioner": r.get("questioner_ID", "").strip(),
             "committee": r.get("committee_name", "").strip(),
@@ -39,7 +40,7 @@ def collect(records, test_confs: set[str]) -> pd.DataFrame:
 
 
 def find_pools(rows: pd.DataFrame, kind: str, max_docs: int) -> list[tuple[str, pd.DataFrame]]:
-    """(키, 문서 표[doc_id, conf, qn])를 키 오름차순으로 반환한다. qn은 문서의 첫 발언 번호다."""
+    """(키, 문서 표[doc_id, conf])를 키 오름차순으로 반환한다."""
     cols = KEYS[kind]
     rows = rows[(rows[cols] != "").all(axis=1)]
     # 조건을 먼저 한 번에 걸러 키마다 집계하는 수를 줄인다
@@ -47,22 +48,17 @@ def find_pools(rows: pd.DataFrame, kind: str, max_docs: int) -> list[tuple[str, 
     keep = size["doc_id"].between(2, max_docs)
     if kind in CROSS_CONF:
         keep &= size["conf"] >= 2
-    docs_all = rows[keep].groupby(cols + ["doc_id"], as_index=False).agg(
-        conf=("conf", "first"), qn=("qn", "min"))
+    docs_all = rows[keep].groupby(cols + ["doc_id"], as_index=False)["conf"].first()
     pools = []
     for key, g in docs_all.groupby(cols, sort=True):
-        docs = g[["doc_id", "conf", "qn"]].reset_index(drop=True)
+        docs = g[["doc_id", "conf"]].reset_index(drop=True)
         key = "|".join(key) if isinstance(key, tuple) else key
         pools.append((key, docs))
     return pools
 
 
-def pick_seed(kind: str, docs: pd.DataFrame, k: int, rng: random.Random) -> list[str]:
-    if kind == "conf":
-        ordered = docs.sort_values(["qn", "doc_id"])["doc_id"].tolist()
-        k = min(k, len(ordered))
-        start = rng.randrange(len(ordered) - k + 1)
-        return ordered[start:start + k]
+def pick_seed(docs: pd.DataFrame, k: int, rng: random.Random) -> list[str]:
+    """서로 다른 회의 k개에서 문서를 하나씩 고른다."""
     confs = sorted(docs["conf"].unique())
     picked = rng.sample(confs, min(k, len(confs)))
     return [rng.choice(sorted(docs.loc[docs["conf"] == c, "doc_id"])) for c in picked]
@@ -81,7 +77,7 @@ def build(rows: pd.DataFrame, types: list[str], max_docs: int, n_pools: int,
         available[kind] = len(pools)
         rng.shuffle(pools)
         for order, (key, docs) in enumerate(pools[:n_pools]):
-            seed_ids = pick_seed(kind, docs, rng.choice(seed_sizes), rng)
+            seed_ids = pick_seed(docs, rng.choice(seed_sizes), rng) if kind in SEEDED else []
             out.append({
                 "pool_id": f"{kind}-{order:04d}",
                 "type": kind,

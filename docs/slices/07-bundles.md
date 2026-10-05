@@ -5,16 +5,17 @@ SPEC "보조 관찰: multi-doc 질의" 절의 문서 묶음을 메타데이터�
 ## 용어
 
 - 후보 집합: 같은 메타데이터 키를 공유하는 문서 전체. S8의 완전성 검사가 이 안의 문서를 모두 정답·무관으로 판정하고, S9의 bootstrap 재표본 단위가 된다
-- 시작 묶음: 후보 집합에서 고른 문서 2\~3개. S8 생성 에이전트는 이 문서만 읽고 질의를 쓴다
+- 시작 묶음: 후보 집합에서 고른 문서 2\~3개. S8 생성 에이전트가 원문을 읽고 질의 하나를 쓰는 범위다. `law`는 S7이 고르고, `conf`·`questioner`는 S8 생성 에이전트가 후보 집합의 개요를 보고 고른다(D-13)
+- 후보 집합 하나에서 질의는 많아야 하나 나온다. `n_pools_per_type`은 유형별 생성 시도 상한이고, S8은 `order` 순서로 꺼내 목표 통과 수를 채우면 멈춘다
 
 ## 만드는 것
 
-- `data/multidoc/pools.jsonl`: 한 줄에 후보 집합 하나. `pool_id`, `type`, `key`, `order`(유형 안 처리 순서), `doc_ids`(후보 집합 전체, 오름차순), `seed_doc_ids`(시작 묶음)
+- `data/multidoc/pools.jsonl`: 한 줄에 후보 집합 하나. `pool_id`, `type`, `key`, `order`(유형 안 처리 순서), `doc_ids`(후보 집합 전체, 오름차순), `seed_doc_ids`(시작 묶음. `conf`·`questioner`는 빈 목록)
 - 실행하면 유형별 후보 집합 수, 크기 분포, 시작 묶음 크기 분포, 유형 사이 문서 겹침 수를 출력한다
 
 ## 입력
 
-- 라벨 zip(`paths.raw_dir`, `rag.ingest.iter_labels`): `conference_number`, `question_number`, `context`(`doc_id` 계산), `law`, `questioner_ID`, `committee_name`만 쓴다. 질의(`summary_q`)·답변·발언 원문은 쓰지 않는다
+- 라벨 zip(`paths.raw_dir`, `rag.ingest.iter_labels`): `conference_number`, `context`(`doc_id` 계산), `law`, `questioner_ID`, `committee_name`만 쓴다. 질의(`summary_q`)·답변·발언 원문은 쓰지 않는다
 - `paths.splits`: `test` 회의를 뺀다
 - `paths.corpus`: 모든 `doc_id`가 코퍼스에 있는지 확인한다
 
@@ -43,9 +44,8 @@ SPEC "보조 관찰: multi-doc 질의" 절의 문서 묶음을 메타데이터�
 1. `test` 분할 회의의 문서는 넣지 않는다
 2. 후보 집합 크기가 `pool_max_docs`(제안 20)를 넘으면 쓰지 않는다. 완전성 검사가 후보 집합 전체를 읽으므로 입력이 문서 수에 비례한다(문서당 약 1,600토큰으로 추정)
 3. 유형마다 후보 집합을 키 오름차순으로 정렬하고 `random.Random(seed)`로 섞은 뒤 앞에서 `n_pools_per_type`(제안 250)개를 고른다. `order`는 섞인 순서다. S8은 앞에서부터 쓴다. 난수 생성기는 하나를 `conf` → `law` → `questioner` 순으로 이어 쓴다
-4. 시작 묶음 크기 k는 `seed_sizes`(제안 [2, 3])에서 같은 난수 생성기로 고른다. 후보 집합에서 고를 수 있는 수가 k보다 작으면 그 수로 줄인다
-   - `conf`: 문서를 그 문서의 가장 작은 `question_number` 순(발언 순서)으로 정렬하고, 무작위 시작 위치에서 연속 k개를 고른다. 인접 구간이 같은 안건을 다룰 가능성이 커서다
-   - `law`·`questioner`: 회의를 무작위로 k개 고르고 회의마다 문서 하나를 무작위로 고른다. 시작 묶음이 서로 다른 회의에 걸치게 한다
+4. `law`만 시작 묶음을 고른다. 크기 k는 `seed_sizes`(제안 [2, 3])에서 같은 난수 생성기로 고르고, 회의를 무작위로 k개 고른 뒤 회의마다 문서 하나를 무작위로 고른다. 회의 수가 k보다 작으면 그 수로 줄인다
+   - `conf`·`questioner`는 `seed_doc_ids`를 비운다. 노트북에서 회의 내 연속 구간과 같은 의원의 구간이 서로 다른 법안·항목을 다루는 사례가 나왔고, 법안으로 좁히면 세트가 소위원회로 쏠려서다(노트북 6·7절). 문서를 고르는 규칙은 S8 지시서에서 정한다
 5. 한 문서가 여러 유형의 후보 집합에 들어가는 것은 허용하고 수를 출력한다
 
 ### 파라미터
@@ -66,7 +66,7 @@ SPEC "보조 관찰: multi-doc 질의" 절의 문서 묶음을 메타데이터�
 | 1 | `uv run python -m rag.multidoc.pools` | 종료 코드 0, `pools.jsonl` 생성, 분포 출력 |
 | 2 | `pools.jsonl`의 문서 회의를 `queries.csv`와 대조 | `test` 회의 문서 0건 |
 | 3 | 모든 `doc_id`가 `paths.corpus`에 있는지 | 예 |
-| 4 | 후보 집합 검사 | 크기 2 이상 `pool_max_docs` 이하, `seed_doc_ids` ⊂ `doc_ids`, 시작 묶음 크기가 `seed_sizes` 범위. `law`·`questioner`의 시작 묶음은 서로 다른 회의, `conf`의 시작 묶음은 발언 순서상 연속 |
+| 4 | 후보 집합 검사 | 크기 2 이상 `pool_max_docs` 이하. `law`의 `seed_doc_ids` ⊂ `doc_ids`, 크기가 `seed_sizes` 범위, 서로 다른 회의. `conf`·`questioner`의 `seed_doc_ids`는 빈 목록 |
 | 5 | 유형별 후보 집합 수 | min(`n_pools_per_type`, 조건을 만족하는 후보 집합 수) |
 | 6 | 1을 두 번 실행해 SHA-256 비교 | 일치 |
 | 7 | `pools.jsonl` 필드 | 위 "만드는 것"의 여섯 개뿐. 질의·발언 텍스트 없음 |

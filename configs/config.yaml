@@ -77,4 +77,4 @@ multidoc:
   types: [conf, law, questioner]
   pool_max_docs: 20  # 완전성 검사가 후보 집합 전체를 읽으므로 크기 상한
   n_pools_per_type: 250
-  seed_sizes: [2, 3]  # 시작 묶음 문서 수 후보
+  seed_sizes: [2, 3]  # law 시작 묶음의 문서 수 후보. conf·questioner는 S8이 고른다

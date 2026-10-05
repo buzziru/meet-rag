@@ -8,7 +8,7 @@ def rec(conf, qn, context, law="", questioner="", committee="c1"):
 
 
 RECORDS = [
-    # 회의 m1: 문서 4개, 발언 순서는 qn 기준(d3이 먼저)
+    # 회의 m1: 문서 4개
     rec("m1", "0003", "d1", law="법A", questioner="q1"),
     rec("m1", "0001", "d3", questioner="q1"),
     rec("m1", "0005", "d2"),
@@ -32,7 +32,7 @@ def rows():
 def test_collect_drops_test_conferences_and_strips_fields():
     r = rows()
     assert "t1" not in set(r["conf"])
-    assert set(r.columns) == {"doc_id", "conf", "qn", "law", "questioner", "committee"}
+    assert set(r.columns) == {"doc_id", "conf", "law", "questioner", "committee"}
     assert set(r.loc[r["conf"] == "m2", "law"]) == {"법A"}
     assert set(r.loc[r["conf"] == "m2", "questioner"]) == {"q1"}
 
@@ -47,7 +47,7 @@ def test_find_pools_applies_type_conditions_and_size_cap():
     assert [k for k, _ in find_pools(r, "questioner", 20)] == ["q1|c1"]
 
 
-def test_build_seeds_are_subsets_with_type_rules_and_deterministic():
+def test_build_seeds_only_law_pools_from_distinct_conferences_and_is_deterministic():
     r = rows()
     args = dict(types=["conf", "law", "questioner"], max_docs=20, n_pools=10,
                 seed_sizes=[2, 3], seed=0)
@@ -55,15 +55,15 @@ def test_build_seeds_are_subsets_with_type_rules_and_deterministic():
     assert build(r, **args) == (pools, available)
     assert available == {"conf": 2, "law": 1, "questioner": 1}
     conf_of = dict(zip(r["doc_id"], r["conf"], strict=True))
-    m1_order = [make_doc_id("m1", c) for c in ["d3", "d1", "d2", "d4"]]
     for p in pools:
+        if p["type"] != "law":
+            assert p["seed_doc_ids"] == []  # S8 생성 에이전트가 고른다
+            continue
         assert set(p["seed_doc_ids"]) <= set(p["doc_ids"])
         assert 2 <= len(p["seed_doc_ids"]) <= 3
-        if p["type"] in {"law", "questioner"}:
-            assert len({conf_of[d] for d in p["seed_doc_ids"]}) == len(p["seed_doc_ids"])
-        if p["key"] == "m1":
-            i = m1_order.index(p["seed_doc_ids"][0])
-            assert p["seed_doc_ids"] == m1_order[i:i + len(p["seed_doc_ids"])]
+        assert len({conf_of[d] for d in p["seed_doc_ids"]}) == len(p["seed_doc_ids"])
+    m1 = next(p for p in pools if p["key"] == "m1")
+    assert m1["doc_ids"] == sorted(make_doc_id("m1", c) for c in ["d1", "d2", "d3", "d4"])
     assert set(pools[0]) == {"pool_id", "type", "key", "order", "doc_ids", "seed_doc_ids"}
 
 
