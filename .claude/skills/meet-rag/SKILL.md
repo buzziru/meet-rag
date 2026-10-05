@@ -12,6 +12,9 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 | `slice-verifier` | SLICE 완료 기준을 명령으로 실행해 판정 | SLICE 구현 후 |
 | `protocol-auditor` | diff를 평가 프로토콜·금지 조항에 대조 | 모든 PR 전 |
 | `exp-judge` | dev-full 결과를 SPEC 규칙으로 판정하고 기록 초안 작성 | EXP 실행 후 |
+| `pr-briefer` | diff로 PR 본문의 리뷰 가이드(위험도, 판단할 곳, 구조) 작성 | `docs/`만 바꾼 PR이 아니면 PR 전 |
+
+`protocol-auditor`를 부르는 단계(A4·B5·D2·D5·F6)에서는 `pr-briefer`도 같은 메시지에서 병렬로 부른다. 바뀐 파일이 모두 `docs/` 아래면(D5 등) 부르지 않고 `git.md` PR 절 3을 따른다. 프롬프트에 auditor와 같은 기준·브랜치·대응 문서·작업 종류와 검증 결과 요약을 넣는다. 감사 지적을 고쳐 커밋했으면 briefer도 직전 가이드와 함께 다시 부른다. 가이드가 수정 전 diff를 설명하면 사용자가 다른 코드를 판단하게 된다. 단방향 판정은 메인이 걸린 규칙의 `file:line`을 직접 확인한 뒤 본문에 넣는다.
 
 일반 코드 리뷰는 `/code-review`를 쓴다. 에이전트 결과는 반환 메시지로 받는다. 판정에 걸리는 근거(실패 출력, 위반 `file:line`, 판정 수치)는 메인이 직접 한 번 확인한 뒤 반영한다.
 
@@ -105,9 +108,10 @@ A2(S4 등 전체 인덱스)와 B3(재임베딩 실험)에서 GPU 임베딩이 �
 
 1. **evolve 불러오기**: `harness:evolve`를 Skill 도구로 불러온 뒤 시작한다. 절차를 기억으로 대신하지 않는다. 기억으로 진행하면 단계별 검증과 트리거 검증이 빠진다(S4의 `colab-operator`, PR #19·이번 하네스 브랜치의 `harness:evolve` 미호출, ADR-0015)
 2. **브랜치**: 작업 PR과 섞지 않고 `chore/` 브랜치에서 한다. `_workspace/00_main_harness-pending.md`의 대기 항목을 근거로 쓴다
-3. **변경마다 검증**: 변경을 하나씩 적용하고, 그때마다 frontmatter·참조 경로를 확인한다. description을 바꾸면 should-trigger·near-miss 요청 각 3개 이상으로 트리거를 검증한다. 검증은 작성 맥락과 분리하려고 서브에이전트에 맡긴다
-4. **기록**: evolve Phase 4의 CLAUDE.md 변경 이력 표 대신 `docs/harness/adr/`에 ADR을 추가하고 목록을 갱신한다(ADR-0014). 앞 ADR을 바꾸면 그 상태를 고친다
-5. **감사·PR**: `protocol-auditor`를 작업 종류 하네스로 부르고, 수정안을 사용자에게 보인 뒤 PR을 올린다("결정과 PR의 순서")
+3. **PR 코멘트 수집**: 마지막 하네스 PR 이후 병합된 PR의 사용자 리뷰 코멘트를 읽는다(`gh pr view N --comments`, `gh api repos/{owner}/{repo}/pulls/N/comments`). 같은 유형의 지적이 다시 나오지 않게 고칠 수 있는 것(작업 순서, 빠진 확인, 문서 형식)은 근거 PR 번호와 함께 대기 목록에 더한다. 그 PR 하나의 내용 수정 요청은 더하지 않는다. 사용자 지적이 대기 목록에 들어오는 경로가 메인이 기억해 옮기는 것뿐이면 빠지는 지적이 생긴다(PR #15 노트북 순서 지적은 사람이 옮김)
+4. **변경마다 검증**: 변경을 하나씩 적용하고, 그때마다 frontmatter·참조 경로를 확인한다. description을 바꾸면 should-trigger·near-miss 요청 각 3개 이상으로 트리거를 검증한다. 검증은 작성 맥락과 분리하려고 서브에이전트에 맡긴다
+5. **기록**: evolve Phase 4의 CLAUDE.md 변경 이력 표 대신 `docs/harness/adr/`에 ADR을 추가하고 목록을 갱신한다(ADR-0014). 앞 ADR을 바꾸면 그 상태를 고친다
+6. **감사·PR**: `protocol-auditor`를 작업 종류 하네스로 부르고, 수정안을 사용자에게 보인 뒤 PR을 올린다("결정과 PR의 순서")
 
 ## 오류 처리
 
