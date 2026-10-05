@@ -29,6 +29,8 @@ paths:
   runs_dir: data/runs
   # 생성 호출 기록. 호출마다 JSON 하나
   generate_dir: data/runs/generate
+  # multi-doc 후보 집합과 시작 묶음 (docs/slices/07-bundles.md)
+  multidoc_pools: data/multidoc/pools.jsonl
 
 embedding:
   model_name: nlpai-lab/KURE-v1
@@ -69,3 +71,10 @@ chunk_sweep:
   candidates: [[256, 32], [512, 64], [1024, 128], [8192, 1024]]
   recall_ks: [1, 5, 10]
   mrr_ks: [1, 5, 10]
+
+# multi-doc 묶음 구성 (docs/slices/07-bundles.md). 제안값, 노트북 확인 후 확정
+multidoc:
+  types: [conf, law, questioner]
+  pool_max_docs: 20  # 완전성 검사가 후보 집합 전체를 읽으므로 크기 상한
+  n_pools_per_type: 250
+  seed_sizes: [2, 3]  # law 시작 묶음의 문서 수 후보. conf·questioner는 S8이 고른다
