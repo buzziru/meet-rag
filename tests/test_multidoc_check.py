@@ -5,7 +5,7 @@ from rag.multidoc.check import build_messages, judge, locate, quoted, resolve, t
 POOL = ["a", "b", "c"]
 CONTEXTS = {"a": "가 위원은  예산 증액을 요구했다. 끝.", "b": "나 장관은 검토하겠다고 답했다.",
             "c": "다 위원도 예산 증액을 요구했다."}
-RATIO = 0.6
+MATCH = OmegaConf.create({"min_ratio": 0.8, "min_chars": 15})
 
 
 def gen(seed=("a", "b"), status="ok"):
@@ -19,7 +19,7 @@ def el(*support):
 
 
 def run(g, elements, answerable=True):
-    return judge(g, elements, answerable, POOL, CONTEXTS, max_gold=2, min_ratio=RATIO)
+    return judge(g, elements, answerable, POOL, CONTEXTS, max_gold=2, match=MATCH)
 
 
 def test_quoted_collapses_whitespace():
@@ -35,11 +35,18 @@ def test_pass_when_each_gold_doc_has_unique_element():
 
 
 def test_locate_accepts_rephrased_quote_and_returns_source_span():
-    assert locate("가 위원은 예산", CONTEXTS["a"], RATIO) == "가 위원은 예산"
-    # 접속어를 붙여 옮긴 인용은 원문 대목으로 바뀐다
-    span = locate("그런데 가 위원은 예산 증액을 요구했다.", CONTEXTS["a"], RATIO)
-    assert span is not None and span in "가 위원은 예산 증액을 요구했다. 끝."
-    assert locate("없는 문장", CONTEXTS["c"], RATIO) is None
+    assert locate("가 위원은 예산", CONTEXTS["a"], MATCH) == "가 위원은 예산"
+    # 접속어를 붙여 옮긴 인용은 어절 경계에 맞춘 원문 대목으로 바뀐다
+    span = locate("그런데 가 위원은 예산 증액을 요구했다.", CONTEXTS["a"], MATCH)
+    assert span == "가 위원은 예산 증액을 요구했다. 끝."
+    assert locate("없는 문장인데 꽤 길게 써서 열다섯 자를 넘긴다", CONTEXTS["c"], MATCH) is None
+
+
+def test_locate_matches_short_quote_only_exactly():
+    # 15자 미만은 비슷해도 인정하지 않는다(격식어가 우연히 겹치는 경우)
+    quote = "나 장관은 검토하겠다고 답했다"
+    assert locate(quote, CONTEXTS["b"], MATCH) == quote
+    assert locate("나 장관은 검토했다고", CONTEXTS["b"], MATCH) is None
 
 
 def test_quote_missing_in_gen():
@@ -72,7 +79,7 @@ def test_quote_dependent_when_unmatched_quote_changes_verdict():
 
 def test_resolve_replaces_quotes_with_source_span():
     els = [el(("a", "예산 증액"), ("c", "없는 문장")), el((None, "예산"))]
-    matched, kept, fixed = resolve(els, CONTEXTS, RATIO)
+    matched, kept, fixed = resolve(els, CONTEXTS, MATCH)
     assert matched == [el(("a", "예산 증액"))]
     assert kept == [el(("a", "예산 증액"), ("c", "없는 문장"))] and fixed == 0
 
@@ -109,9 +116,9 @@ def test_gen_invalid_over_max_gold_or_missing_pool_seed():
     g["evidence"].append({"doc_id": "c", "quote": "다 위원도"})
     els = [el(("a", "가 위원")), el(("b", "검토")), el(("c", "다 위원"))]
     assert "gen_invalid" in run(g, els)["reasons"]
-    assert judge(g, els, True, POOL, CONTEXTS, max_gold=3, min_ratio=RATIO)["passed"]
+    assert judge(g, els, True, POOL, CONTEXTS, max_gold=3, match=MATCH)["passed"]
     v = judge(gen(), [el(("a", "예산")), el(("b", "검토"))], True, POOL, CONTEXTS, 3, ["c"],
-              min_ratio=RATIO)
+              match=MATCH)
     assert "gen_invalid" in v["reasons"]
 
 

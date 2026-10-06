@@ -55,31 +55,50 @@ def quoted(quote: str, context: str) -> bool:
     return bool(q) and q in norm(context)
 
 
-def locate(quote: str, context: str, min_ratio: float) -> str | None:
+def best_window(q: str, c: str) -> tuple[float, int]:
+    """공백을 줄인 인용 q와 원문 c에서 가장 비슷한 q 길이 대목의 (문자 유사도, 시작 위치).
+
+    가장 긴 공통 부분으로 위치를 잡고 그 앞뒤로 q 길이의 4분의 1 안에서 찾는다.
+    """
+    n = len(q)
+    m = SequenceMatcher(None, c, q, autojunk=False).find_longest_match(0, len(c), 0, n)
+    best, at = 0.0, 0
+    for s in range(max(0, m.a - m.b - n // 4), max(0, min(len(c) - 1, m.a - m.b + n // 4)) + 1):
+        ratio = SequenceMatcher(None, q, c[s:s + n], autojunk=False).ratio()
+        if ratio > best:
+            best, at = ratio, s
+    return best, at
+
+
+def locate(quote: str, context: str, match) -> str | None:
     """인용에 해당하는 원문 대목(공백을 한 칸으로 줄인 것)을 찾는다. 없으면 None.
 
-    부분 문자열이면 인용 그대로다. 아니면 원문과 인용의 가장 긴 공통 부분으로 위치를 잡고, 그 앞뒤로
-    인용 길이의 4분의 1 안에서 인용과 길이가 같은 대목의 문자 유사도(difflib 비율)를 잰다. 가장
-    비슷한 대목이 min_ratio 이상이면 그 대목이다. LLM이 접속어·존칭·낱말을 바꿔 옮긴 인용을
-    받아들인다.
+    부분 문자열이면 인용 그대로다. 인용이 match.min_chars자 이상이면 best_window로 인용과 길이가
+    같은 대목 중 문자 유사도(difflib 비율)가 가장 높은 것을 찾는다. 유사도가 match.min_ratio
+    이상이면 그 대목을 어절 경계까지 넓혀 돌려준다(맨 앞 어절이 앞 문장의 끝이면 뺀다). LLM이 접속어·존칭·낱말을 바꿔 옮긴 인용을
+    받아들이고, 짧은 인용은 격식어가 우연히 겹쳐 유사도가 높게 나오므로 정확 대조만 한다(D-14).
     """
     q, c = norm(quote), norm(context)
     if not q:
         return None
     if q in c:
         return q
-    m = SequenceMatcher(None, c, q, autojunk=False).find_longest_match(0, len(c), 0, len(q))
-    start, n = m.a - m.b, len(q)
-    best, span = 0.0, None
-    for s in range(max(0, start - n // 4), max(0, min(len(c) - 1, start + n // 4)) + 1):
-        ratio = SequenceMatcher(None, q, c[s:s + n], autojunk=False).ratio()
-        if ratio > best:
-            best, span = ratio, c[s:s + n]
-    return span if best >= min_ratio else None
+    n = len(q)
+    if n < match.min_chars:
+        return None
+    best, at = best_window(q, c)
+    if best < match.min_ratio:
+        return None
+    lo = c.rfind(" ", 0, at + 1) + 1
+    hi = c.find(" ", min(at + n, len(c)) - 1)
+    words = c[lo:hi if hi >= 0 else len(c)].split(" ")
+    if len(words) > 1 and words[0][-1] in ".?!…":  # 앞 문장의 끝 어절은 뺀다
+        words = words[1:]
+    return " ".join(words)
 
 
 def resolve(elements: list[dict], contexts: dict[str, str],
-            min_ratio: float) -> tuple[list[dict], list[dict], int]:
+            match) -> tuple[list[dict], list[dict], int]:
     """검사 쪽 support를 원문 대목과 맞춘다.
 
     (맞춘 것만 남긴 요소, 못 맞춘 것도 남긴 요소, 유사도로 맞춰 quote를 바꾼 수)를 반환한다. 맞춘
@@ -90,7 +109,7 @@ def resolve(elements: list[dict], contexts: dict[str, str],
     for el in elements:
         ok, rest = [], []
         for s in el["support"]:
-            span = (locate(s["quote"], contexts[s["doc_id"]], min_ratio)
+            span = (locate(s["quote"], contexts[s["doc_id"]], match)
                     if s["doc_id"] in contexts else None)
             if span is not None:
                 ok.append({**s, "quote": span})
@@ -117,12 +136,12 @@ def gold_reasons(elements: list[dict], seed: list[str]) -> tuple[list[str], list
 
 def judge(gen: dict, elements: list[dict] | None, answerable: bool, pool_doc_ids: list[str],
           contexts: dict[str, str], max_gold: int, pool_seed: list[str] = (), *,
-          min_ratio: float) -> dict:
+          match) -> dict:
     """생성·검사 결과로 통과 여부를 정한다.
 
     생성 쪽 정답 문서는 2개 이상 max_gold개 이하이고, S7 시작 묶음(pool_seed)을 모두 포함해야 한다.
     elements의 support는 {"doc_id", "quote"} 목록이다(번호를 doc_id로 바꾼 뒤). 번호가 범위 밖이면
-    doc_id는 None이다. 인용은 locate로 원문과 맞춘다(min_ratio). 생성 쪽 인용을 맞추지 못하면
+    doc_id는 None이다. 인용은 locate로 원문과 맞춘다(match). 생성 쪽 인용을 맞추지 못하면
     quote_missing이다. 검사 쪽 인용을 맞추지 못한 support는 확인할 수 없는 근거라, 빼고 판정한
     결과와 두고 판정한 결과가 다르면 quote_dependent로 불통과한다(D-14). 사유를 모두 모으고,
     사유가 없으면 통과다. 정답 문서는 맞춘 support로 정한다.
@@ -138,12 +157,12 @@ def judge(gen: dict, elements: list[dict] | None, answerable: bool, pool_doc_ids
         reasons.append("gen_invalid")
 
     if not all(e["doc_id"] in contexts
-               and locate(e["quote"], contexts[e["doc_id"]], min_ratio) is not None
+               and locate(e["quote"], contexts[e["doc_id"]], match) is not None
                for e in gen["evidence"]):
         reasons.append("quote_missing")
     if not answerable:
         reasons.append("unanswerable")
-    matched, kept, fixed = resolve(elements, contexts, min_ratio)
+    matched, kept, fixed = resolve(elements, contexts, match)
     gold, rules = gold_reasons(matched, seed)
     reasons += rules
     if bool(rules) != bool(gold_reasons(kept, seed)[1]):
@@ -220,7 +239,7 @@ def main() -> None:
     selected = {p["pool_id"] for p in pools}
     docs = load_docs(cfg, [p for p in all_pools if p["pool_id"] in selected | checked])
     contexts = {d: r["context"] for d, r in docs.items()}
-    max_gold, min_ratio = cfg.multidoc.gen.max_gold, c.quote_min_ratio
+    max_gold, match = cfg.multidoc.gen.max_gold, c.quote_match
 
     todo = [p for p in pools if not (check_dir / f"{p['pool_id']}.json").exists()]
     ready = [p for p in todo if (gen_out / f"{p['pool_id']}.json").exists()]
@@ -259,10 +278,10 @@ def main() -> None:
             elements = to_doc_ids(out["elements"], p["doc_ids"])
             rec["elements"] = elements
             rec["verdict"] = judge(gen, elements, out["answerable"], p["doc_ids"], contexts,
-                                   max_gold, p["seed_doc_ids"], min_ratio=min_ratio)
+                                   max_gold, p["seed_doc_ids"], match=match)
         else:
             rec["verdict"] = judge(gen, None, False, p["doc_ids"], contexts, max_gold,
-                                   min_ratio=min_ratio)
+                                   match=match)
         (check_dir / f"{p['pool_id']}.json").write_text(
             json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
         print(p["pool_id"], "통과" if rec["verdict"]["passed"] else rec["verdict"]["reasons"])
@@ -275,7 +294,7 @@ def main() -> None:
         if r["gen"]["status"] == "ok":
             verdict = judge(r["gen"], r["elements"], json.loads(r["response"])["answerable"],
                             r["pool_doc_ids"], contexts, max_gold, seeds[r["pool_id"]],
-                            min_ratio=min_ratio)
+                            match=match)
             if verdict != r["verdict"]:
                 r["verdict"] = verdict
                 (check_dir / f"{r['pool_id']}.json").write_text(
@@ -289,7 +308,7 @@ def main() -> None:
                     "query": g["query"], "query_form": g.get("query_form", ""),
                     "gold_doc_ids": r["verdict"]["gold_doc_ids"],
                     "pool_doc_ids": r["pool_doc_ids"], "answer": g["answer"],
-                    "elements": resolve(r["elements"], contexts, min_ratio)[0]},
+                    "elements": resolve(r["elements"], contexts, match)[0]},
                     ensure_ascii=False) + "\n")
     print(f"생성 대기 {len(todo) - len(ready)}개")
     summarize(records)
