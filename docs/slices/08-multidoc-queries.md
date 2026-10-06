@@ -79,15 +79,23 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 2\~3개인 
 - v2: 질의자 메타데이터 추가, 위 2절의 유형별 규칙. 생성 입력 형식이 모든 유형에서 바뀌므로 파일럿 30건을 모두 v2로 다시 한다. 1차 결과는 `data/multidoc/pilot_v1/`로 옮겨 노트북에서 비교한다
 - 검색 단계에서 화자 메타데이터를 쓰는 실험은 PLAN 백로그 H12다
 
+### 파일럿 2차와 v3 (2026-10-06 사용자 결정)
+
+- 2차(`gen_v2`·`check_v2`): 30건 → 생성 `ok` 16 → 통과 8(`conf` 3, `law` 5, `questioner` 0). 검사 16호출 $0.0473
+- 원인: 생성 `ok` 불통과 8건 중 7건은 검사가 시작 묶음과 같은 회의의 다른 문서를 더했다. 한 회의에서 한 쟁점의 논의가 여러 문서(발언 구간)로 이어지는데 생성 쪽 정답이 2\~3개로 제한돼 있었다. `questioner`는 열거형을 쓰지 않았다(공통 규칙 "무관한 사안 이어 붙이기 금지"와 충돌로 읽힘)
+- v3(`gen_v3`, 검사는 `check_v2` 그대로): 정답 문서 2개 이상 `multidoc.gen.max_gold`(5)개 이하. 쟁점을 정한 뒤 같은 회의의 같은 쟁점 문서를 모두 정답에 넣는다. `law`는 시작 묶음을 모두 포함하고 같은 회의 문서만 더할 수 있다. 열거형(공통 축 안의 항목을 모두 묻는 질의)과 이어 붙이기(공통 축 없는 사안 둘)를 구분한다. 판정의 `gen_invalid`는 정답 수 2\~`max_gold`와 S7 시작 묶음 포함을 본다. 판정 규칙 1\~5는 그대로다
+- 상한 5는 Complete@5가 가능한 최대값이다. 지표는 SPEC대로 유형별로 보고하고, k 값은 S9 전에 사용자가 다시 정한다
+- 결론을 낼 때까지 검사(OpenRouter)는 하지 않고 생성만 다시 한다. 2차 결과는 `data/multidoc/pilot_v2/`로 옮긴다
+
 ## 파라미터
 
 `configs/config.yaml`의 `multidoc` 절에 더한다.
 
-- `gen`: `n_per_type` 10, `overview_chars` 300, `prompt_version` gen_v2
+- `gen`: `n_per_type` 10, `overview_chars` 300, `max_gold` 5, `prompt_version` gen_v3
 - `check`: `model` `openai/gpt-6-luna`, `provider` `openai`(고정, `allow_fallbacks: false`), `seed`(기존 20260929), `reasoning_effort` medium, `max_tokens`, `prompt_version` check_v2, `api_key_env` `OPENROUTER_API`. 이 모델은 OpenRouter에서 `temperature`를 받지 않아(지원 파라미터, 2026-10-06) 넣지 않는다
 - `paths`: `multidoc_gen_in`, `multidoc_docs`, `multidoc_gen_out`, `multidoc_check`, `multidoc_queries`
 
-지시 본문은 `configs/multidoc/prompt/gen_vN.yaml`, `check_vN.yaml`(지금 v2). 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
+지시 본문은 `configs/multidoc/prompt/gen_vN.yaml`, `check_vN.yaml`(지금 생성 v3, 검사 v2). 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
 
 ## 비용과 승인
 
