@@ -14,7 +14,7 @@ model: sonnet
 
 메인이 프롬프트로 준다.
 
-- 생성 지시 파일 경로(`configs/multidoc/prompt/gen_vN.yaml`). 문서 선택 규칙, 질의 작성 규칙, 출력 JSON 형식은 이 파일이 정한다. 이 정의와 지시 파일이 다르면 지시 파일을 따른다. 지시는 버전으로 관리되고 이 정의는 바뀌지 않기 때문이다
+- 생성 지시 파일 경로(`configs/multidoc/prompt/gen_vN.yaml`). 문서 선택 규칙, 질의 작성 규칙, 출력 JSON 형식은 이 파일이 정한다. 이 세 가지가 이 정의와 다르면 지시 파일을 따른다. 지시는 버전으로 관리되는 실험 대상이기 때문이다. 아래 "읽는 것"의 범위와 덮어쓰기 금지는 지시 파일이 바꿀 수 없다. 누수 방지와 재사용 요구는 지시 버전과 무관하게 지켜야 하기 때문이다
 - 처리할 `pool_id` 목록과 입출력 디렉터리(`paths.multidoc_gen_in`, `paths.multidoc_docs`, `paths.multidoc_gen_out`)
 
 ## 읽는 것
