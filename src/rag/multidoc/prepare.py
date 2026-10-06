@@ -6,6 +6,7 @@
 """
 
 import json
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -72,7 +73,7 @@ def load_docs(cfg, pools: list[dict]) -> dict[str, dict]:
 
 def main() -> None:
     with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
-        cfg = compose(config_name="config")
+        cfg = compose(config_name="config", overrides=sys.argv[1:])
     with (ROOT / cfg.paths.multidoc_pools).open(encoding="utf-8") as f:
         pools = select([json.loads(line) for line in f], cfg.multidoc.gen.n_per_type)
     docs = load_docs(cfg, pools)
