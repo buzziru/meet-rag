@@ -54,6 +54,14 @@ def quoted(quote: str, context: str) -> bool:
     return bool(q) and q in norm(context)
 
 
+def quoted_support(elements: list[dict], contexts: dict[str, str]) -> list[dict]:
+    """원문에 없는 인용의 support 항목을 빼고, support가 모두 빠진 요소도 뺀다."""
+    elements = [{**el, "support": [s for s in el["support"] if s["doc_id"] in contexts
+                                   and quoted(s["quote"], contexts[s["doc_id"]])]}
+                for el in elements]
+    return [el for el in elements if el["support"]]
+
+
 def judge(gen: dict, elements: list[dict] | None, answerable: bool, pool_doc_ids: list[str],
           contexts: dict[str, str], max_gold: int, pool_seed: list[str] = ()) -> dict:
     """생성·검사 결과로 통과 여부를 정한다.
@@ -77,11 +85,8 @@ def judge(gen: dict, elements: list[dict] | None, answerable: bool, pool_doc_ids
                for e in gen["evidence"]):
         reasons.append("quote_missing")
     n_support = sum(len(el["support"]) for el in elements)
-    elements = [{**el, "support": [s for s in el["support"] if s["doc_id"] in contexts
-                                   and quoted(s["quote"], contexts[s["doc_id"]])]}
-                for el in elements]
+    elements = quoted_support(elements, contexts)
     dropped = n_support - sum(len(el["support"]) for el in elements)
-    elements = [el for el in elements if el["support"]]
     if not answerable:
         reasons.append("unanswerable")
 
@@ -206,11 +211,11 @@ def main() -> None:
             json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
         print(p["pool_id"], "통과" if rec["verdict"]["passed"] else rec["verdict"]["reasons"])
 
-    # 판정 규칙이 바뀌면 저장된 검사 응답으로 다시 판정한다(호출 없음)
-    records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
+    # 판정 규칙이 바뀌면 저장된 검사 응답으로 다시 판정한다(호출 없음). 지금 선택한 후보 집합만 쓴다
     seeds = {p["pool_id"]: p["seed_doc_ids"] for p in pools}
+    records = [read_json(f) for f in sorted(check_dir.glob("*.json")) if f.stem in seeds]
     for r in records:
-        if r["gen"]["status"] == "ok" and r["pool_id"] in seeds:
+        if r["gen"]["status"] == "ok":
             verdict = judge(r["gen"], r["elements"], json.loads(r["response"])["answerable"],
                             r["pool_doc_ids"], contexts, max_gold, seeds[r["pool_id"]])
             if verdict != r["verdict"]:
@@ -226,7 +231,8 @@ def main() -> None:
                     "query": g["query"], "query_form": g.get("query_form", ""),
                     "gold_doc_ids": r["verdict"]["gold_doc_ids"],
                     "pool_doc_ids": r["pool_doc_ids"], "answer": g["answer"],
-                    "elements": r["elements"]}, ensure_ascii=False) + "\n")
+                    "elements": quoted_support(r["elements"], contexts)},
+                    ensure_ascii=False) + "\n")
     print(f"생성 대기 {len(todo) - len(ready)}개")
     summarize(records)
 

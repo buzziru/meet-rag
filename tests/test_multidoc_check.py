@@ -1,6 +1,6 @@
 from omegaconf import OmegaConf
 
-from rag.multidoc.check import build_messages, judge, quoted, to_doc_ids
+from rag.multidoc.check import build_messages, judge, quoted, quoted_support, to_doc_ids
 
 POOL = ["a", "b", "c"]
 CONTEXTS = {"a": "가 위원은  예산 증액을 요구했다. 끝.", "b": "나 장관은 검토하겠다고 답했다.",
@@ -45,6 +45,11 @@ def test_check_quote_not_in_context_is_dropped():
     # 요소의 근거가 모두 빠지면 요소도 빠져 b만 남는다
     v = run(gen(), [el(("a", "없는 문장")), el(("b", "검토")), el((None, "예산"))])
     assert v["reasons"] == ["single_doc", "seed_mismatch"] and v["dropped_quotes"] == 2
+
+
+def test_quoted_support_keeps_only_quotes_in_context():
+    els = [el(("a", "예산 증액"), ("c", "없는 문장")), el((None, "예산"))]
+    assert quoted_support(els, CONTEXTS) == [el(("a", "예산 증액"))]
 
 
 def test_unanswerable():
