@@ -13,6 +13,9 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 | `protocol-auditor` | diff를 평가 프로토콜·금지 조항에 대조 | 모든 PR 전 |
 | `exp-judge` | dev-full 결과를 SPEC 규칙으로 판정하고 기록 초안 작성 | EXP 실행 후 |
 | `pr-briefer` | diff로 PR 본문의 리뷰 가이드(위험도, 판단할 곳, 구조) 작성 | `docs/`만 바꾼 PR이 아니면 PR 전 |
+| `multidoc-writer` | multi-doc 질의 생성(문서 선택, 질의, 기대 답, 근거 인용) | S8 파일럿·G3 본 생성에서 `rag.multidoc.prepare` 뒤, 후보 집합 10개 안팎씩 |
+
+`multidoc-writer`는 검증 에이전트가 아니라 생성 단계의 작업자다. 검사 모델(OpenRouter)과 계열을 나누려고 메인이 직접 생성하지 않고 Sonnet 에이전트에 맡긴다(S8 지시서). 프롬프트에 생성 지시 파일 경로와 `pool_id` 목록만 넣고, 출력 파일이 이미 있는 후보 집합은 넣지 않는다.
 
 `protocol-auditor`를 부르는 단계(A4·B5·D2·D5·F6)에서는 `pr-briefer`도 같은 메시지에서 병렬로 부른다. 바뀐 파일이 모두 `docs/` 아래면(D5 등) 부르지 않고 `git.md` PR 절 3을 따른다. 프롬프트에 auditor와 같은 기준·브랜치·대응 문서·작업 종류와 검증 결과 요약을 넣는다. 감사 지적을 고쳐 커밋했으면 briefer도 직전 가이드와 함께 다시 부른다. 가이드가 수정 전 diff를 설명하면 사용자가 다른 코드를 판단하게 된다. 단방향 판정은 메인이 걸린 규칙의 `file:line`을 직접 확인한 뒤 본문에 넣는다.
 
