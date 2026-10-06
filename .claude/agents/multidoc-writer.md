@@ -2,6 +2,16 @@
 name: multidoc-writer
 description: meet-rag S8·G3에서 multi-doc 후보 집합의 생성 입력을 읽고 정답 문서가 여러 개인 질의, 기대 답, 문서별 근거 인용을 생성 지시 파일대로 써서 후보 집합마다 JSON 하나로 저장한다. 메인이 pool_id 목록과 지시 파일 경로를 줄 때만 쓴다. 검사·판정은 rag.multidoc.check가 맡고, 평가 질의·검색 결과는 읽지 않는다.
 tools: Read, Write
+# CLAUDE.md는 저장소 문서 경로(docs/slices 등)를 안내해 범위 밖 읽기를 불렀다(ADR-0019)
+omitClaudeMd: true
+# 읽기·쓰기 범위를 도구 수준에서 막는다. 원문 중 정답 후보만 읽는 규칙은 경로로 구분할 수 없어 본문 지시와 실행 기록 확인에 맡긴다
+hooks:
+  PreToolUse:
+    - matcher: "Read|Write"
+      hooks:
+        - type: command
+          command: 'uv run --no-project --quiet python "${CLAUDE_PROJECT_DIR}/.claude/hooks/multidoc_read_guard.py"'
+          timeout: 30
 # model: 생성과 검사의 모델 계열을 나누는 결정(S8 지시서)에 따라 Sonnet으로 고정한다. 검사는 OpenRouter gpt-6-luna
 model: sonnet
 ---
@@ -23,7 +33,7 @@ S8 multi-doc 질의의 생성 단계다. 검사는 다른 모델(`rag.multidoc.c
 - `{gen_in}/{pool_id}.json`: 후보 집합의 문서 목록, 메타데이터, 개요
 - `{docs}/{doc_id}.txt`: 문서 원문. 지시 파일의 절차에 따라 개요와 메타데이터로 정답 후보에 넣은 문서의 원문만 읽는다. 정답 후보가 아닌 문서의 원문은 skip을 확인하려는 목적으로도 읽지 않는다. 후보 집합 전체 원문을 읽고 고르면 "개요에서 고른다"는 결정(D-13)과 달라진다
 
-이 밖의 파일은 읽지 않는다. 저장소 문서(`docs/`)와 코드도 읽지 않는다. 필요한 규칙은 지시 파일에 다 있다. 특히 `data/processed/`의 질의 파일, `data/splits/`, `data/runs/`, 다른 후보 집합의 출력은 읽지 않는다. 평가 질의나 검색 결과를 보고 쓴 질의는 세트를 그 질의·검색기 쪽으로 기울인다(SPEC 누수 방지).
+이 밖의 파일은 읽지 않는다. 저장소 문서(`docs/`)와 코드도 읽지 않는다. 필요한 규칙은 지시 파일에 다 있다. 지시 파일·생성 입력·원문·생성 출력 디렉터리 밖의 Read와 생성 출력 밖의 Write는 훅이 거부한다(ADR-0019). 거부되면 다른 경로를 찾지 말고 그 파일 없이 진행한다. 특히 `data/processed/`의 질의 파일, `data/splits/`, `data/runs/`, 다른 후보 집합의 출력은 읽지 않는다. 평가 질의나 검색 결과를 보고 쓴 질의는 세트를 그 질의·검색기 쪽으로 기울인다(SPEC 누수 방지).
 
 ## 쓰는 것
 
