@@ -87,6 +87,13 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 2\~3개인 
 - 상한 5는 Complete@5가 가능한 최대값이다. 지표는 SPEC대로 유형별로 보고하고, k 값은 S9 전에 사용자가 다시 정한다
 - 결론을 낼 때까지 검사(OpenRouter)는 하지 않고 생성만 다시 한다. 2차 결과는 `data/multidoc/pilot_v2/`로 옮긴다
 
+### 파일럿 3차와 v4 (2026-10-06 사용자 결정)
+
+- 3차(`gen_v3`, 검사 안 함): 생성 `ok` 20(`conf` 6, `law` 10, `questioner` 4). 생성 쪽 조건(정답 수, 시작 묶음 포함, 인용 대조) 위반 0
+- `questioner`는 v2·v3 모두 열거형을 쓰지 않았다. 진단: 에이전트 정의에 남은 v1 선택 규칙("이어지는 문서를 고를 수 없으면 skip")이 지시와 경쟁했고, `gen_v3` 열거형 예시가 주제로 좁힌 형태와 여러 회의 범위였다. 정의는 하네스 PR #28(ADR-0018)에서 고친다
+- 열거형 범위는 한 회의 안으로 한정한다(여러 회의에 걸친 열거형은 답이 메타데이터 목록에 가까워진다). `gen_v4`는 `questioner`를 절차(회의별 열거형 → 입장 변화형 → skip)로 바꾸고 `conf`·`law` 규칙은 v3와 같다
+- 다시 생성하는 범위: `questioner` order 0\~9는 v3 결과를 `data/multidoc/pilot_v3/`로 옮기고 `gen_v4`로 다시 생성한다. `law`는 다시 하지 않는다. `conf`는 order 0\~9의 v3 결과를 두고 order 10\~19를 `gen_v3`로 새로 생성한다(order 0\~9가 모두 소위원회 회의라 국정감사 회의의 수율을 보려고). 유형별 지시 버전은 `multidoc.gen.prompt_version`에 둔다
+
 ## 파라미터
 
 `configs/config.yaml`의 `multidoc` 절에 더한다.
@@ -95,7 +102,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 2\~3개인 
 - `check`: `model` `openai/gpt-6-luna`, `provider` `openai`(고정, `allow_fallbacks: false`), `seed`(기존 20260929), `reasoning_effort` medium, `max_tokens`, `prompt_version` check_v2, `api_key_env` `OPENROUTER_API`. 이 모델은 OpenRouter에서 `temperature`를 받지 않아(지원 파라미터, 2026-10-06) 넣지 않는다
 - `paths`: `multidoc_gen_in`, `multidoc_docs`, `multidoc_gen_out`, `multidoc_check`, `multidoc_queries`
 
-지시 본문은 `configs/multidoc/prompt/gen_vN.yaml`, `check_vN.yaml`(지금 생성 v3, 검사 v2). 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
+지시 본문은 `configs/multidoc/prompt/gen_vN.yaml`, `check_vN.yaml`(지금 생성 `conf`·`law` v3, `questioner` v4, 검사 v2). 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
 
 ## 비용과 승인
 
