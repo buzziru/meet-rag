@@ -160,11 +160,15 @@ def main() -> None:
         cfg = compose(config_name="config", overrides=[a for a in args if a != "--dry-run"])
     c, paths = cfg.multidoc.check, cfg.paths
     with (ROOT / paths.multidoc_pools).open(encoding="utf-8") as f:
-        pools = select([json.loads(line) for line in f], cfg.multidoc.gen.n_per_type)
-    docs = load_docs(cfg, pools)
-    contexts = {d: r["context"] for d, r in docs.items()}
+        all_pools = [json.loads(line) for line in f]
+    pools = select(all_pools, cfg.multidoc.gen.n_per_type)
     prompt, prompt_sha = load_prompt(c.prompt_version)
     gen_out, check_dir = ROOT / paths.multidoc_gen_out, ROOT / paths.multidoc_check
+    # 원문은 이번 선택과 검사 기록이 있는 후보 집합 모두에 필요하다(기록 전체를 다시 판정)
+    checked = {f.stem for f in check_dir.glob("*.json")}
+    selected = {p["pool_id"] for p in pools}
+    docs = load_docs(cfg, [p for p in all_pools if p["pool_id"] in selected | checked])
+    contexts = {d: r["context"] for d, r in docs.items()}
     max_gold = cfg.multidoc.gen.max_gold
 
     todo = [p for p in pools if not (check_dir / f"{p['pool_id']}.json").exists()]
@@ -211,9 +215,10 @@ def main() -> None:
             json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
         print(p["pool_id"], "통과" if rec["verdict"]["passed"] else rec["verdict"]["reasons"])
 
-    # 판정 규칙이 바뀌면 저장된 검사 응답으로 다시 판정한다(호출 없음). 지금 선택한 후보 집합만 쓴다
-    seeds = {p["pool_id"]: p["seed_doc_ids"] for p in pools}
-    records = [read_json(f) for f in sorted(check_dir.glob("*.json")) if f.stem in seeds]
+    # 판정 규칙이 바뀌면 검사 기록 전체를 저장된 응답으로 다시 판정한다(호출 없음).
+    # n_per_type은 새로 호출할 대상만 고르고, queries.jsonl은 기록만으로 정해진다
+    seeds = {p["pool_id"]: p["seed_doc_ids"] for p in all_pools}
+    records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
     for r in records:
         if r["gen"]["status"] == "ok":
             verdict = judge(r["gen"], r["elements"], json.loads(r["response"])["answerable"],
