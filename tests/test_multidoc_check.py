@@ -29,14 +29,22 @@ def test_quoted_collapses_whitespace():
 
 def test_pass_when_each_gold_doc_has_unique_element():
     v = run(gen(), [el(("a", "가 위원은 예산 증액")), el(("b", "검토하겠다고 답했다"))])
-    assert v == {"passed": True, "reasons": [], "gold_doc_ids": ["a", "b"]}
+    assert v == {"passed": True, "reasons": [], "gold_doc_ids": ["a", "b"], "dropped_quotes": 0}
 
 
-def test_quote_missing_in_check_or_gen():
-    assert run(gen(), [el(("a", "없는 문장")), el(("b", "검토"))])["reasons"] == ["quote_missing"]
+def test_quote_missing_in_gen():
     g = gen()
     g["evidence"][1]["quote"] = "검토할 것"
     assert run(g, [el(("a", "예산")), el(("b", "검토"))])["reasons"] == ["quote_missing"]
+
+
+def test_check_quote_not_in_context_is_dropped():
+    # c의 인용이 원문에 없으면 그 support만 빠져 a가 유일한 근거가 된다
+    v = run(gen(), [el(("a", "예산 증액"), ("c", "없는 문장")), el(("b", "검토"))])
+    assert v == {"passed": True, "reasons": [], "gold_doc_ids": ["a", "b"], "dropped_quotes": 1}
+    # 요소의 근거가 모두 빠지면 요소도 빠져 b만 남는다
+    v = run(gen(), [el(("a", "없는 문장")), el(("b", "검토")), el((None, "예산"))])
+    assert v["reasons"] == ["single_doc", "seed_mismatch"] and v["dropped_quotes"] == 2
 
 
 def test_unanswerable():
@@ -81,7 +89,7 @@ def test_to_doc_ids_maps_numbers_and_flags_out_of_range():
     out = to_doc_ids([{"fact": "f", "support": support}], POOL)
     assert [s["doc_id"] for s in out[0]["support"]] == ["b", None]
     v = run(gen(), [el(("a", "예산")), el(("b", "검토")), el((None, "x"))])
-    assert "quote_missing" in v["reasons"]
+    assert v["passed"] and v["dropped_quotes"] == 1
 
 
 def test_build_messages_sends_only_query_and_pool_docs():

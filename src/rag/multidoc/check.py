@@ -60,10 +60,12 @@ def judge(gen: dict, elements: list[dict] | None, answerable: bool, pool_doc_ids
 
     생성 쪽 정답 문서는 2개 이상 max_gold개 이하이고, S7 시작 묶음(pool_seed)을 모두 포함해야 한다.
     elements의 support는 {"doc_id", "quote"} 목록이다(번호를 doc_id로 바꾼 뒤). 번호가 범위 밖이면
-    doc_id는 None이다. 사유를 모두 모으고, 사유가 없으면 통과다.
+    doc_id는 None이다. 검사 쪽 인용이 원문에 없으면 그 support 항목을 빼고 판정한다(빠진 수는
+    dropped_quotes). 생성 쪽 인용이 원문에 없으면 quote_missing이다. 사유를 모두 모으고, 사유가
+    없으면 통과다.
     """
     if gen["status"] != "ok":
-        return {"passed": False, "reasons": ["gen_skip"], "gold_doc_ids": []}
+        return {"passed": False, "reasons": ["gen_skip"], "gold_doc_ids": [], "dropped_quotes": 0}
     reasons = []
     seed = gen["seed_doc_ids"]
     if not (2 <= len(seed) <= max_gold and len(set(seed)) == len(seed)
@@ -71,14 +73,19 @@ def judge(gen: dict, elements: list[dict] | None, answerable: bool, pool_doc_ids
             and {e["doc_id"] for e in gen["evidence"]} == set(seed)):
         reasons.append("gen_invalid")
 
-    quotes = [(e["doc_id"], e["quote"]) for e in gen["evidence"]]
-    quotes += [(s["doc_id"], s["quote"]) for el in elements for s in el["support"]]
-    if not all(d in contexts and quoted(q, contexts[d]) for d, q in quotes):
+    if not all(e["doc_id"] in contexts and quoted(e["quote"], contexts[e["doc_id"]])
+               for e in gen["evidence"]):
         reasons.append("quote_missing")
+    n_support = sum(len(el["support"]) for el in elements)
+    elements = [{**el, "support": [s for s in el["support"] if s["doc_id"] in contexts
+                                   and quoted(s["quote"], contexts[s["doc_id"]])]}
+                for el in elements]
+    dropped = n_support - sum(len(el["support"]) for el in elements)
+    elements = [el for el in elements if el["support"]]
     if not answerable:
         reasons.append("unanswerable")
 
-    supports = [{s["doc_id"] for s in el["support"] if s["doc_id"] is not None} for el in elements]
+    supports = [{s["doc_id"] for s in el["support"]} for el in elements]
     gold = sorted(set().union(*supports)) if supports else []
     if len(gold) < 2:
         reasons.append("single_doc")
@@ -87,7 +94,8 @@ def judge(gen: dict, elements: list[dict] | None, answerable: bool, pool_doc_ids
         reasons.append("substitutable")
     if set(gold) != set(seed):
         reasons.append("seed_mismatch")
-    return {"passed": not reasons, "reasons": reasons, "gold_doc_ids": gold}
+    return {"passed": not reasons, "reasons": reasons, "gold_doc_ids": gold,
+            "dropped_quotes": dropped}
 
 
 def build_messages(prompt, query: str, pool_doc_ids: list[str],
@@ -198,7 +206,17 @@ def main() -> None:
             json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
         print(p["pool_id"], "통과" if rec["verdict"]["passed"] else rec["verdict"]["reasons"])
 
+    # 판정 규칙이 바뀌면 저장된 검사 응답으로 다시 판정한다(호출 없음)
     records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
+    seeds = {p["pool_id"]: p["seed_doc_ids"] for p in pools}
+    for r in records:
+        if r["gen"]["status"] == "ok" and r["pool_id"] in seeds:
+            verdict = judge(r["gen"], r["elements"], json.loads(r["response"])["answerable"],
+                            r["pool_doc_ids"], contexts, max_gold, seeds[r["pool_id"]])
+            if verdict != r["verdict"]:
+                r["verdict"] = verdict
+                (check_dir / f"{r['pool_id']}.json").write_text(
+                    json.dumps(r, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
     with (ROOT / paths.multidoc_queries).open("w", encoding="utf-8", newline="\n") as f:
         for r in records:
             if r["verdict"]["passed"]:
