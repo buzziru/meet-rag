@@ -10,7 +10,8 @@ hooks:
     - matcher: "Read|Write"
       hooks:
         - type: command
-          command: 'uv run --no-project --quiet python "${CLAUDE_PROJECT_DIR}/.claude/hooks/multidoc_read_guard.py"'
+          # uv·셸 실패도 거부로 바꾼다(종료 코드 2만 도구를 막는다)
+          command: 'uv run --no-project --quiet python "${CLAUDE_PROJECT_DIR}/.claude/hooks/multidoc_read_guard.py" || exit 2'
           timeout: 30
 # model: 생성과 검사의 모델 계열을 나누는 결정(S8 지시서)에 따라 Sonnet으로 고정한다. 검사는 OpenRouter gpt-6-luna
 model: sonnet
@@ -33,7 +34,7 @@ S8 multi-doc 질의의 생성 단계다. 검사는 다른 모델(`rag.multidoc.c
 - `{gen_in}/{pool_id}.json`: 후보 집합의 문서 목록, 메타데이터, 개요
 - `{docs}/{doc_id}.txt`: 문서 원문. 지시 파일의 절차에 따라 개요와 메타데이터로 정답 후보에 넣은 문서의 원문만 읽는다. 정답 후보가 아닌 문서의 원문은 skip을 확인하려는 목적으로도 읽지 않는다. 후보 집합 전체 원문을 읽고 고르면 "개요에서 고른다"는 결정(D-13)과 달라진다
 
-이 밖의 파일은 읽지 않는다. 저장소 문서(`docs/`)와 코드도 읽지 않는다. 필요한 규칙은 지시 파일에 다 있다. 지시 파일·생성 입력·원문·생성 출력 디렉터리 밖의 Read와 생성 출력 밖의 Write는 훅이 거부한다(ADR-0019). 거부되면 다른 경로를 찾지 말고 그 파일 없이 진행한다. 특히 `data/processed/`의 질의 파일, `data/splits/`, `data/runs/`, 다른 후보 집합의 출력은 읽지 않는다. 평가 질의나 검색 결과를 보고 쓴 질의는 세트를 그 질의·검색기 쪽으로 기울인다(SPEC 누수 방지).
+이 밖의 파일은 읽지 않는다. 저장소 문서(`docs/`)와 코드도 읽지 않는다. 필요한 규칙은 지시 파일에 다 있다. 생성 지시 파일(`gen_v*.yaml`)·생성 입력·원문·생성 출력 디렉터리 밖의 Read와 생성 출력 밖의 Write는 훅이 거부한다(ADR-0019). 거부되면 다른 경로를 찾지 말고 그 파일 없이 진행한다. 특히 `data/processed/`의 질의 파일, `data/splits/`, `data/runs/`, 다른 후보 집합의 출력은 읽지 않는다. 평가 질의나 검색 결과를 보고 쓴 질의는 세트를 그 질의·검색기 쪽으로 기울인다(SPEC 누수 방지).
 
 ## 쓰는 것
 
