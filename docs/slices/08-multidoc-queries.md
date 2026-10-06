@@ -63,7 +63,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 ### 4. 출력
 
 - `data/multidoc/check/{pool_id}.json`: 검사 요청 레시피, 원 응답, 토큰 사용량, 비용(OpenRouter 응답 `usage.cost`), 판정과 사유
-- `data/multidoc/queries.jsonl`: 지금 `n_per_type` 선택 안에서 통과한 질의만. `qid`(`md-{pool_id}`), `pool_id`, `type`, `query`, `query_form`, `gold_doc_ids`, `pool_doc_ids`, `answer`, `elements`(원문에 없는 검사 쪽 인용은 뺀 것). S9의 입력이고 G3에서 동결한다
+- `data/multidoc/queries.jsonl`: 검사 기록(`data/multidoc/check/`) 전체에서 통과한 질의만. `n_per_type`은 새로 호출할 대상만 고르고 이 파일에는 영향을 주지 않는다(PR #30 코멘트 결정 (a)). `qid`(`md-{pool_id}`), `pool_id`, `type`, `query`, `query_form`, `gold_doc_ids`, `pool_doc_ids`, `answer`, `elements`(원문에 없는 검사 쪽 인용은 뺀 것). S9의 입력이고 G3에서 동결한다
 - 실행 끝에 유형별 생성 포기·통과·사유별 불통과 수, 입력·출력 토큰 합, 비용 합을 출력한다
 
 ### 재사용 (사용자 요구)
@@ -172,5 +172,5 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 
 - 검사 비용 합 $0.1890(OpenRouter `usage.cost`). 호출당 약 $0.0034(4차)
 - 생성 입력(order 0\~9) SHA-256 `0697a168…64fc`, 두 번 실행 일치. `pools.jsonl`(950개) SHA-256 `d1e0f04ae92c3c0bc8cc69d571d4f226b6aed4e5952b6f51bac5bc6b0d4c2bbc`, 두 번 실행 일치, 기존 750개 레코드 그대로
-- 판정 규칙 변경 뒤 `check multidoc.gen.n_per_type=20` 재실행: 새 호출 0건, 저장된 응답으로 다시 판정해 `queries.jsonl` 15건(`conf` order 10\~19가 들어 있어 20으로 실행한다. config 기본값 10이면 13건)
+- 판정 규칙 변경 뒤 `check` 재실행: 새 호출 0건, 검사 기록 전체를 저장된 응답으로 다시 판정해 `queries.jsonl` 15건. 덧붙이는 값 없이 실행한 결과와 `multidoc.gen.n_per_type=20`으로 실행한 결과의 SHA-256이 같다(`f733915a…`)
 - Sonnet 비교 검사: 서브에이전트 6개 동시(그룹당 2\~7건, 3\~17분)와 conf-0012 재검사 1개. 결과 `_workspace/s08_sonnet_check/`(로컬)
