@@ -205,7 +205,8 @@ def main() -> None:
                 g = r["gen"]
                 f.write(json.dumps({
                     "qid": f"md-{r['pool_id']}", "pool_id": r["pool_id"], "type": r["type"],
-                    "query": g["query"], "gold_doc_ids": r["verdict"]["gold_doc_ids"],
+                    "query": g["query"], "query_form": g.get("query_form", ""),
+                    "gold_doc_ids": r["verdict"]["gold_doc_ids"],
                     "pool_doc_ids": r["pool_doc_ids"], "answer": g["answer"],
                     "elements": r["elements"]}, ensure_ascii=False) + "\n")
     print(f"생성 대기 {len(todo) - len(ready)}개")
