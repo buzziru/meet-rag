@@ -63,12 +63,12 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 ### 4. 출력
 
 - `data/multidoc/check/{pool_id}.json`: 검사 요청 레시피, 원 응답, 토큰 사용량, 비용(OpenRouter 응답 `usage.cost`), 판정과 사유
-- `data/multidoc/queries.jsonl`: 통과한 질의만. `qid`(`md-{pool_id}`), `pool_id`, `type`, `query`, `gold_doc_ids`, `pool_doc_ids`, `answer`, `elements`. S9의 입력이고 G3에서 동결한다
+- `data/multidoc/queries.jsonl`: 지금 `n_per_type` 선택 안에서 통과한 질의만. `qid`(`md-{pool_id}`), `pool_id`, `type`, `query`, `query_form`, `gold_doc_ids`, `pool_doc_ids`, `answer`, `elements`(원문에 없는 검사 쪽 인용은 뺀 것). S9의 입력이고 G3에서 동결한다
 - 실행 끝에 유형별 생성 포기·통과·사유별 불통과 수, 입력·출력 토큰 합, 비용 합을 출력한다
 
 ### 재사용 (사용자 요구)
 
-- `prepare`·`check`는 출력 파일이 이미 있는 `pool_id`를 건너뛴다. 메인도 `gen_out`이 있는 후보 집합은 에이전트에 다시 맡기지 않는다. 본 생성에서 `n_per_type`을 늘려 다시 실행하면 파일럿 30건은 다시 호출하지 않는다
+- `prepare`·`check`는 출력 파일이 이미 있는 `pool_id`를 건너뛴다. 메인도 `gen_out`이 있는 후보 집합은 에이전트에 다시 맡기지 않는다. 본 생성에서 `n_per_type`을 늘려 다시 실행하면 파일럿 검사 기록(40개)은 다시 호출하지 않는다
 - 각 출력에 생성·검사 지시 버전과 지시 내용 SHA-256을 남긴다. 파일럿 뒤 지시가 바뀌면 파일럿 결과를 버릴지 재사용할지 사용자에게 보고하고 정한다(자동으로 다시 만들지 않는다)
 
 ### 파일럿 1차와 v2 (2026-10-06 사용자 결정)
@@ -172,5 +172,5 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 
 - 검사 비용 합 $0.1890(OpenRouter `usage.cost`). 호출당 약 $0.0034(4차)
 - 생성 입력(order 0\~9) SHA-256 `0697a168…64fc`, 두 번 실행 일치. `pools.jsonl`(950개) SHA-256 `d1e0f04ae92c3c0bc8cc69d571d4f226b6aed4e5952b6f51bac5bc6b0d4c2bbc`, 두 번 실행 일치, 기존 750개 레코드 그대로
-- 판정 규칙 변경 뒤 `check` 재실행: 새 호출 0건, 저장된 응답으로 다시 판정해 `queries.jsonl` 15건
+- 판정 규칙 변경 뒤 `check multidoc.gen.n_per_type=20` 재실행: 새 호출 0건, 저장된 응답으로 다시 판정해 `queries.jsonl` 15건(`conf` order 10\~19가 들어 있어 20으로 실행한다. config 기본값 10이면 13건)
 - Sonnet 비교 검사: 서브에이전트 6개 동시(그룹당 2\~7건, 3\~17분)와 conf-0012 재검사 1개. 결과 `_workspace/s08_sonnet_check/`(로컬)
