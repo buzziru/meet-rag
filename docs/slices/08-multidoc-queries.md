@@ -73,7 +73,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 2\~3개인 
 `configs/config.yaml`의 `multidoc` 절에 더한다.
 
 - `gen`: `n_per_type` 10, `overview_chars` 300, `prompt_version` gen_v1
-- `check`: `model` `openai/gpt-6-luna`, `provider`(고정할 제공자, `allow_fallbacks: false`), `seed`(기존 20260929), `temperature` 0, `max_tokens`, `prompt_version` check_v1, `api_key_env` `OPENROUTER_API`
+- `check`: `model` `openai/gpt-6-luna`, `provider` `openai`(고정, `allow_fallbacks: false`), `seed`(기존 20260929), `reasoning_effort` medium, `max_tokens`, `prompt_version` check_v1, `api_key_env` `OPENROUTER_API`. 이 모델은 OpenRouter에서 `temperature`를 받지 않아(지원 파라미터, 2026-10-06) 넣지 않는다
 - `paths`: `multidoc_gen_in`, `multidoc_docs`, `multidoc_gen_out`, `multidoc_check`, `multidoc_queries`
 
 지시 본문은 `configs/multidoc/prompt/gen_v1.yaml`, `check_v1.yaml`. 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
