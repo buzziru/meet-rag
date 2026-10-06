@@ -23,7 +23,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 2\~3개인 
 
 ## 입력 제한
 
-- 생성·검사 입력은 코퍼스의 `context`와 메타데이터(`date`, `committee_name`, `meeting_name`, `meeting_number`, `session_number`, `agenda`)와 후보 집합 키(`law` 값 등)만이다
+- 생성·검사 입력은 코퍼스의 `context`와 메타데이터(`date`, `committee_name`, `meeting_name`, `meeting_number`, `session_number`, `agenda`), 라벨의 질의자 이름·직위(`questioner_name`, `questioner_position`), 후보 집합 키(`law` 값 등)만이다. 질의자 정보는 코퍼스에 없어 라벨 zip에서 이 두 필드만 읽는다(v2, 아래 "파일럿 1차와 v2")
 - 평가 질의(`summary_q`), 답변 라벨, 검색 결과(순위·점수)는 넣지 않는다(SPEC 누수 방지, D-13 감사 지적). `rag.multidoc.prepare`는 질의 파일과 `data/runs/`를 읽지 않는다
 - `pools.jsonl`이 `test` 회의를 이미 뺐으므로(D-13) `test` 문서는 들어가지 않는다. `prepare`에서 한 번 더 확인한다
 
@@ -32,20 +32,23 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 2\~3개인 
 ### 1. 준비 `rag.multidoc.prepare`
 
 - `multidoc.gen.n_per_type`(파일럿 10)만큼 유형마다 `order` 순서로 후보 집합을 꺼낸다
-- 후보 집합마다 `data/multidoc/gen_in/{pool_id}.json`: `pool_id`, `type`, `key`, 문서 목록(`doc_id`, 메타데이터, 개요). `law`는 `seed_doc_ids`를 함께 넣는다
+- 후보 집합마다 `data/multidoc/gen_in/{pool_id}.json`: `pool_id`, `type`, `key`, 문서 목록(`doc_id`, 메타데이터, `speakers`(질의자 이름·직위 목록), 개요). `law`는 `seed_doc_ids`를 함께 넣는다
 - 개요는 `context` 앞 `multidoc.gen.overview_chars`(제안 300)자다. 전체 원문은 `data/multidoc/docs/{doc_id}.txt`로 따로 쓴다. 생성 에이전트는 개요로 문서를 고른 뒤 고른 문서의 원문만 읽는다(D-13 "후보 집합 개요에서 고른다")
 
 ### 2. 생성 (에이전트)
 
-메인이 `multidoc-writer`를 후보 집합 10개 안팎씩 묶어 부른다. 생성 지시(`gen_v1`)의 요지:
+메인이 `multidoc-writer`를 후보 집합 10개 안팎씩 묶어 부른다. 생성 지시(`gen_v2`)의 요지:
 
 - `conf`·`questioner`: 개요를 보고 주제가 이어지는 문서 2\~3개를 고른다. 이어지는 문서가 없으면 포기하고 이유를 적는다. `law`: 주어진 시작 묶음을 쓴다
+- `conf`: 쟁점을 고른 뒤 개요를 다시 훑어 같은 쟁점의 문서가 4개 이상이면 다른 쟁점을 고르고, 질의에 고른 문서에만 있는 사실(조항, 기관 입장 등)을 넣어 범위를 좁힌다. 무관한 법안·사안 둘을 이어 붙인 질의는 쓰지 않는다
+- `law`: 시작 묶음 문서가 같은 법안의 서로 다른 조항을 다루면 회의를 날짜·위원회로 특정한 열거형("2017년 ○○소위와 2019년 △△소위에서 각각 논의된 쟁점")을 쓸 수 있다. 회의를 특정하지 않으면 후보 집합의 다른 문서도 정답이 된다
+- `questioner`: 질의자 메타데이터(`speakers`)로 인물 중심 질의를 쓸 수 있다. 입장 변화형("a 위원이 ㄱ 사안에 대해 각 회의에서 밝힌 입장")과 열거형("a 위원이 ○○위원회에서 지적한 사업들")을 허용한다. 이름은 메타데이터에서 가져오고, 답의 내용은 원문에 있어야 한다
 - 질의는 고른 문서 모두가 있어야 완전히 답할 수 있게 쓴다. 국회 회의록을 찾는 사용자가 쓸 만한 문장으로 쓰고, `doc_id`나 "문서 1" 같은 표현은 쓰지 않는다. 날짜·위원회·법안 이름은 써도 된다
 - 출력 `data/multidoc/gen_out/{pool_id}.json`: `pool_id`, `status`(`ok`·`skip`), `seed_doc_ids`, `query`, `answer`(기대 답), `evidence`(문서마다 `doc_id`와 원문 그대로의 근거 인용 1개 이상), `skip_reason`
 
 ### 3. 검사·판정 `rag.multidoc.check`
 
-검사 호출은 생성 쪽의 `seed_doc_ids`·`answer`·`evidence`를 보지 않는다. 질의와 후보 집합 전체 문서(번호를 붙인 원문과 메타데이터)만 보낸다.
+검사 호출은 생성 쪽의 `seed_doc_ids`·`answer`·`evidence`를 보지 않는다. 질의와 후보 집합 전체 문서(번호를 붙인 원문과 메타데이터, 질의자 이름·직위)만 보낸다(`check_v2`). 질의자를 문서 머리에 넣어야 인물 중심 질의에서 어느 문서가 그 사람의 발언인지 판정할 수 있다.
 
 - 검사 출력(structured outputs JSON 스키마): `answerable`(후보 집합 문서로 답할 수 있는가), `elements`(요소마다 `fact`와 `support`. `support`는 그 요소를 담은 모든 문서의 `doc_id`와 원문 인용)
 - 코드 판정. 아래를 모두 만족하면 통과다
@@ -68,15 +71,23 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 2\~3개인 
 - `prepare`·`check`는 출력 파일이 이미 있는 `pool_id`를 건너뛴다. 메인도 `gen_out`이 있는 후보 집합은 에이전트에 다시 맡기지 않는다. 본 생성에서 `n_per_type`을 늘려 다시 실행하면 파일럿 30건은 다시 호출하지 않는다
 - 각 출력에 생성·검사 지시 버전과 지시 내용 SHA-256을 남긴다. 파일럿 뒤 지시가 바뀌면 파일럿 결과를 버릴지 재사용할지 사용자에게 보고하고 정한다(자동으로 다시 만들지 않는다)
 
+### 파일럿 1차와 v2 (2026-10-06 사용자 결정)
+
+- 1차(`gen_v1`·`check_v1`): 30건 → 생성 `ok` 14 → 통과 5(`conf` 1, `law` 4, `questioner` 0). 검사 14호출 $0.0373
+- 원인: `questioner` 후보 집합은 같은 의원의 서로 다른 사안 묶음이라 "같은 주제" 규칙과 맞지 않았고, 질의자 정보가 입력에 없었다. `law` `skip` 5건 중 3건은 같은 법안의 다른 조항, `conf` 불통과는 고른 쟁점을 다른 문서도 다룬 경우(`seed_mismatch`·`substitutable`)였다
+- 채택하지 않은 것: 판정 규칙 1·5 완화(질의 품질을 낮춘다), 개요 길이 확대(효과 불확실)
+- v2: 질의자 메타데이터 추가, 위 2절의 유형별 규칙. 생성 입력 형식이 모든 유형에서 바뀌므로 파일럿 30건을 모두 v2로 다시 한다. 1차 결과는 `data/multidoc/pilot_v1/`로 옮겨 노트북에서 비교한다
+- 검색 단계에서 화자 메타데이터를 쓰는 실험은 PLAN 백로그 H12다
+
 ## 파라미터
 
 `configs/config.yaml`의 `multidoc` 절에 더한다.
 
-- `gen`: `n_per_type` 10, `overview_chars` 300, `prompt_version` gen_v1
-- `check`: `model` `openai/gpt-6-luna`, `provider` `openai`(고정, `allow_fallbacks: false`), `seed`(기존 20260929), `reasoning_effort` medium, `max_tokens`, `prompt_version` check_v1, `api_key_env` `OPENROUTER_API`. 이 모델은 OpenRouter에서 `temperature`를 받지 않아(지원 파라미터, 2026-10-06) 넣지 않는다
+- `gen`: `n_per_type` 10, `overview_chars` 300, `prompt_version` gen_v2
+- `check`: `model` `openai/gpt-6-luna`, `provider` `openai`(고정, `allow_fallbacks: false`), `seed`(기존 20260929), `reasoning_effort` medium, `max_tokens`, `prompt_version` check_v2, `api_key_env` `OPENROUTER_API`. 이 모델은 OpenRouter에서 `temperature`를 받지 않아(지원 파라미터, 2026-10-06) 넣지 않는다
 - `paths`: `multidoc_gen_in`, `multidoc_docs`, `multidoc_gen_out`, `multidoc_check`, `multidoc_queries`
 
-지시 본문은 `configs/multidoc/prompt/gen_v1.yaml`, `check_v1.yaml`. 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
+지시 본문은 `configs/multidoc/prompt/gen_vN.yaml`, `check_vN.yaml`(지금 v2). 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
 
 ## 비용과 승인
 
@@ -88,7 +99,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 2\~3개인 
 
 1. 동작 확인: 후보 집합 1개(유형 하나)로 준비 → 생성 → 검사를 끝까지 돌린다(호출 1회. 승인 범위에 포함해 보고한다)
 2. 파일럿 30건 실행
-3. `notebooks/08_01_파일럿.ipynb`: 유형별 생성 포기·통과·사유별 불통과, `seed_mismatch` 사례의 차이 유형, 정답 문서 수 분포, 토큰·비용과 본 생성(유형별 100\~170) 비용 외삽, 통과·불통과 예시 몇 건(질의와 요소. 원문 인용은 짧게)
+3. `notebooks/08_01_파일럿.ipynb`: 1차(v1)와 v2의 유형별 수율 비교, 유형별 생성 포기·통과·사유별 불통과, `seed_mismatch` 사례의 차이 유형, 정답 문서 수 분포, 토큰·비용과 본 생성(유형별 100\~170) 비용 외삽, 통과·불통과 예시 몇 건(질의와 요소. 원문 인용은 짧게)
 4. 사용자가 노트북을 보고 판정 규칙(특히 5번)과 본 생성 진행 여부를 정한다
 5. DECISIONS에 생성·검사 모델과 경로, 검사 방식, 판정 규칙, 파일럿 비용을 기록한다. 그 뒤 PR. 파일럿 사람 검수는 G3
 
