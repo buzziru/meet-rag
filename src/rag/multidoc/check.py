@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
-from rag.multidoc.prepare import META, select
+from rag.multidoc.prepare import META, load_docs, select, speaker_text
 
 ROOT = Path(__file__).resolve().parents[3]
 PROMPT_DIR = ROOT / "configs" / "multidoc" / "prompt"
@@ -91,7 +91,9 @@ def judge(gen: dict, elements: list[dict] | None, answerable: bool,
 def build_messages(prompt, query: str, pool_doc_ids: list[str],
                    docs: dict[str, dict]) -> list[dict]:
     """후보 집합 문서에 1부터 번호를 붙인다. 번호 순서는 pool_doc_ids(오름차순)다."""
-    blocks = [prompt.document.format(n=i, text=docs[d]["context"], **{k: docs[d][k] for k in META})
+    blocks = [prompt.document.format(n=i, text=docs[d]["context"],
+                                     speakers=speaker_text(docs[d]["speakers"]),
+                                     **{k: docs[d][k] for k in META})
               for i, d in enumerate(pool_doc_ids, 1)]
     user = prompt.user.format(query=query, documents="\n\n".join(blocks))
     return [{"role": "system", "content": prompt.system}, {"role": "user", "content": user}]
@@ -144,9 +146,7 @@ def main() -> None:
     c, paths = cfg.multidoc.check, cfg.paths
     with (ROOT / paths.multidoc_pools).open(encoding="utf-8") as f:
         pools = select([json.loads(line) for line in f], cfg.multidoc.gen.n_per_type)
-    need = {d for p in pools for d in p["doc_ids"]}
-    with (ROOT / paths.corpus).open(encoding="utf-8") as f:
-        docs = {r["doc_id"]: r for r in map(json.loads, f) if r["doc_id"] in need}
+    docs = load_docs(cfg, pools)
     contexts = {d: r["context"] for d, r in docs.items()}
     prompt, prompt_sha = load_prompt(c.prompt_version)
     gen_out, check_dir = ROOT / paths.multidoc_gen_out, ROOT / paths.multidoc_check

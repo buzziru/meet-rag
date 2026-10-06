@@ -75,13 +75,15 @@ def test_to_doc_ids_maps_numbers_and_flags_out_of_range():
 
 
 def test_build_messages_sends_only_query_and_pool_docs():
-    prompt = OmegaConf.create({"system": "S", "document": "[{n}] {date} {agenda}\n{text}",
+    prompt = OmegaConf.create({"system": "S",
+                               "document": "[{n}] {date} {agenda} {speakers}\n{text}",
                                "user": "Q: {query}\n{documents}"})
     meta = {k: "m" for k in ["date", "committee_name", "meeting_name", "meeting_number",
                              "session_number", "agenda"]}
-    docs = {d: {"context": CONTEXTS[d], **meta} for d in POOL}
+    docs = {d: {"context": CONTEXTS[d], "speakers": [{"name": "김", "position": "위원"}], **meta}
+            for d in POOL}
     msgs = build_messages(prompt, "질의", POOL, docs)
     user = msgs[1]["content"]
     assert user.startswith("Q: 질의")
-    assert "[1] m m" in user and "[3] m m" in user and "[4]" not in user
+    assert "[1] m m 김 위원" in user and "[3] m m" in user and "[4]" not in user
     assert "답" not in user.replace("답했다", "")  # 기대 답을 보내지 않는다
