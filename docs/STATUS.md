@@ -1,9 +1,10 @@
 # STATUS (세션 종료 시 덮어씀)
 
 ## 현재 위치
-- naive RAG 베이스라인 완료(S1\~S6). dev-full Recall@5 0.8584, 목표 0.90(D-09). multi-doc 보조 관찰은 S7 완료(D-13), S8 진행 중
-- S8 브랜치 `feat/s08-multidoc-queries`(지시서 `docs/slices/08-multidoc-queries.md`, 진행 기록 `_workspace/s08_main_progress.md`). 준비(`rag.multidoc.prepare`), 검사·판정(`rag.multidoc.check`), 생성 지시 `gen_v1`\~`gen_v4`·검사 지시 `check_v1`·`check_v2` 구현, pytest 56 통과
-- 파일럿: v1 통과 5/30, v2 통과 8/30(검사 비용 합 $0.085). v3·v4는 생성만 하고 검사하지 않음(사용자 지시). 현재 생성 `ok` 31건: `conf` 0\~9 v3 6/10, `conf` 10\~19 v4 10/10, `law` 0\~9 v3 10/10, `questioner` 0\~9 v4 5/10(모두 회의별 열거형)
+- naive RAG 베이스라인 완료(S1\~S6). dev-full Recall@5 0.8584, 목표 0.90(D-09)
+- multi-doc 보조 관찰: S7·S8 완료(D-13, D-14, PR #30 병합). G3 본 생성 준비 중
+- PR #31(`fix/s08-quote-match`, 인용 유사도 대조와 `quote_dependent`) 사용자 검토 중. 이 STATUS 커밋도 이 브랜치에 있다
+- 진행 기록 `_workspace/s08_main_progress.md`
 
 ## 실행 중 작업
 - 없음
@@ -12,17 +13,21 @@
 - 없음
 
 ## 미완 상태
-- 하네스 PR #29(multidoc-writer 읽기·쓰기 범위 훅, `omitClaudeMd`, ADR-0019) 사용자 검토 중. 에이전트 정의는 세션 시작 때 불러오므로 병합 뒤 새 세션부터 적용된다
-- 로컬 `data/multidoc/`: `gen_in`(order 0\~19, 0\~9 SHA-256 `0697a168…64fc`), `docs`(원문), `gen_out`(위 31건 ok + skip), `pilot_v1`·`pilot_v2`(검사 결과 포함)·`pilot_v3`(`questioner` v3 생성). `check`·`queries.jsonl`은 아직 없음
-- S8 지시서에 반영했고 DECISIONS에는 아직 없는 결정: 생성 Sonnet 에이전트·검사 OpenRouter `openai/gpt-6-luna`(제공자 `openai` 고정), 판정 규칙 1\~5 유지(완화 불채택), 정답 상한 `max_gold` 5, 질의자 메타데이터 입력, `questioner` 열거형은 한 회의 안, `conf`는 쟁점형만, 개요 확대·2단계 호출 불채택. 지표는 유형별 보고, k는 S9 전에 다시 정함
+- 로컬 `data/multidoc/`: `pools.jsonl` 950개(conf·questioner 350, law 250, SHA-256 `d1e0f04a…2bbc`), 파일럿 `gen_out`·`check` 40개(conf 0\~19, law·questioner 0\~9), `queries.jsonl` 15건(`c56dba8e…`), `pilot_v1`\~`pilot_v3`
+- 파일럿은 본 생성 검사가 끝날 때까지 수율 개선 자료로 보관하고, 그 뒤 `pilot_v1`\~`v4`를 지운다(사용자 결정)
 
 ## 다음 행동
-1. [A] S8 이어서: PR #29 병합 확인 → `main`을 S8 브랜치에 병합 → 생성 `ok` 31건 검사 시점을 사용자에게 확인(약 $0.10) → 검사 → `notebooks/08_01_파일럿.ipynb`(v1\~v4 수율 비교, 사유별 불통과, 비용 외삽) → 사용자 결정(본 생성 진행) → DECISIONS → slice-verifier·protocol-auditor → PR. 생성 에이전트를 다시 부를 때는 실행 기록에서 읽은 경로를 확인한다
-2. [D] G3 multi-doc 질의 검수: S8 파일럿 검수 → 본 생성 300\~500건 → 50건 재검수 → 동결
-3. [B] EXP-001 = H1 hybrid(dense + BM25 Kiwi, RRF). S8과 병렬 가능
-4. [B] 다음 후보: H2 reranker → H7 문서 집계. H12(화자 메타데이터)는 백로그에 추가됨
+1. [D] G3 본 생성: PR #31 병합 여부 확인(미병합이면 사용자에게 묻고 멈춤) → `main`에서 `chore/g3-multidoc-generation` 브랜치 → 파일럿 `gen_out`·`check` 40개와 `queries.jsonl`을 `data/multidoc/pilot_v4/`로 이동 → `prepare multidoc.gen.n_per_type=350`(law는 250까지만 있음) → 후보 집합 950개 생성 예상 시간 보고·승인 → `multidoc-writer` 생성(동시 3개, 메인이 큐로 칸 채움, memory `agent-concurrency`) → `check --dry-run` 호출 수·비용 보고(약 740호출, 약 $2.5)·승인 → 검사 → 수율·인정 못 한 인용 수·`quote_dependent` 수 보고 → 300\~500건인지 확인
+   - 생성 시간 참고: 파일럿 에이전트 1개가 후보 집합 10개에 6.5\~19분
+   - 지시 버전 conf·questioner `gen_v4`, law `gen_v3`, 검사 `check_v2`, 인용 대조 `quote_match` 0.8·15자
+2. [D] G3 파일럿 검수: luna·Sonnet 판정이 갈린 5건(conf-0005·0011·0014·0018, questioner-0005)과 파일럿 통과 질의. 본 생성 뒤 무작위 50건 재검수 → 세트 SHA-256을 DECISIONS에 적어 동결
+3. [F] 하네스 대기 20: 에이전트 동시 실행 3개(최대 4), 교체 주기가 있는 작업자 풀(작업 k개 처리 후 교체, 섞임 검출용 식별 정보 반환)
+4. [B] EXP-001 = H1 hybrid(dense + BM25 Kiwi, RRF). S8·G3과 병렬 가능
+5. [B] 다음 후보: H2 reranker → H7 문서 집계. H12(화자 메타데이터)는 백로그
 
 ## 사용자 확인 필요
-- S8 생성 결과 검사 시점(위 1)
+- PR #31 병합 여부와 판단할 곳(탐색 폭 `n // 4`를 코드 상수로 둘지)
+- G3 파일럿 검수(위 2)를 본 생성 전·후 어느 때 할지
+- 작업자 풀의 작업 크기 k(생성 후보 집합 몇 개씩, 하네스 대기 20)
 - SPEC 미결 1(G1, D-03 해결)에 해결 표시를 할지(PR #18에서 물음)
 - SPEC 미결 3(배포 지연 상한)은 H2 reranker 판정 전에 정해야 함
