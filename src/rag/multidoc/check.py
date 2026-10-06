@@ -75,7 +75,7 @@ def locate(quote: str, context: str, match) -> str | None:
 
     부분 문자열이면 인용 그대로다. 인용이 match.min_chars자 이상이면 best_window로 인용과 길이가
     같은 대목 중 문자 유사도(difflib 비율)가 가장 높은 것을 찾는다. 유사도가 match.min_ratio
-    이상이면 그 대목을 어절 경계까지 넓혀 돌려준다(맨 앞 어절이 앞 문장의 끝이면 뺀다). LLM이
+    이상이면 그 대목을 어절 경계까지 넓혀 돌려준다(앞뒤 문장에 걸친 끝 어절은 뺀다). LLM이
     접속어·존칭·낱말을 바꿔 옮긴 인용을 받아들이고, 짧은 인용은 격식어가 우연히 겹쳐 유사도가
     높게 나오므로 정확 대조만 한다(D-14).
     """
@@ -92,9 +92,15 @@ def locate(quote: str, context: str, match) -> str | None:
         return None
     lo = c.rfind(" ", 0, at + 1) + 1
     hi = c.find(" ", min(at + n, len(c)) - 1)
-    words = c[lo:hi if hi >= 0 else len(c)].split(" ")
+    hi = len(c) if hi < 0 else hi
+    words = c[lo:hi].split(" ")
     if len(words) > 1 and words[0][-1] in ".?!…":  # 앞 문장의 끝 어절은 뺀다
         words = words[1:]
+    # 인용이 문장 끝에서 끝나면 대목도 인용의 문장 수만큼에서 끊는다(넘친 다음 문장 어절은 뺀다)
+    ends = [i for i, w in enumerate(words) if w[-1] in ".?!…"]
+    k = sum(w[-1] in ".?!…" for w in q.split(" "))
+    if q[-1] in ".?!…" and len(ends) > k:
+        words = words[:ends[k - 1] + 1]
     return " ".join(words)
 
 

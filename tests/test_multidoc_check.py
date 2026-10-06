@@ -36,9 +36,9 @@ def test_pass_when_each_gold_doc_has_unique_element():
 
 def test_locate_accepts_rephrased_quote_and_returns_source_span():
     assert locate("가 위원은 예산", CONTEXTS["a"], MATCH) == "가 위원은 예산"
-    # 접속어를 붙여 옮긴 인용은 어절 경계에 맞춘 원문 대목으로 바뀐다
+    # 접속어를 붙여 옮긴 인용은 어절 경계에 맞춘 원문 대목으로 바뀌고, 넘친 다음 문장 어절은 빠진다
     span = locate("그런데 가 위원은 예산 증액을 요구했다.", CONTEXTS["a"], MATCH)
-    assert span == "가 위원은 예산 증액을 요구했다. 끝."
+    assert span == "가 위원은 예산 증액을 요구했다."
     assert locate("없는 문장인데 꽤 길게 써서 열다섯 자를 넘긴다", CONTEXTS["c"], MATCH) is None
 
 
