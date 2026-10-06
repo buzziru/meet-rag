@@ -1,10 +1,10 @@
 # S8 multi-doc 질의 생성·검사
 
-S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 2\~3개인 질의를 하나 만들고, 생성과 다른 모델로 검사해 통과한 것만 남긴다. 이 조각은 파일럿 30건(유형별 10)까지 실행한다. 본 생성(300\~500건)과 사람 검수는 G3에서 한다.
+S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(2개 이상, v3부터 상한 `max_gold` 5)인 질의를 하나 만들고, 생성과 다른 모델로 검사해 통과한 것만 남긴다. 이 조각은 파일럿 30건(유형별 10)까지 실행한다. 본 생성(300\~500건)과 사람 검수는 G3에서 한다.
 
 ## 용어
 
-- 시작 묶음: 질의 하나의 근거가 되는 문서 2\~3개(D-13). `law`는 `pools.jsonl`의 `seed_doc_ids`, `conf`·`questioner`는 생성 에이전트가 고른다
+- 시작 묶음: 질의 하나의 근거가 되는 문서(D-13은 2\~3개, v3부터 2\~`max_gold`개). `law`는 `pools.jsonl`의 `seed_doc_ids`, `conf`·`questioner`는 생성 에이전트가 고른다
 - 요소: 답에 들어가야 하는 사실 하나. 검사 쪽은 요소마다 그 요소를 담은 문서와 근거 문장(원문 인용)을 낸다
 - 정답 문서: 검사 결과 요소를 하나 이상 담은 문서. 후보 집합의 나머지 문서는 무관이다
 
@@ -114,7 +114,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 2\~3개인 
 - `check`: `model` `openai/gpt-6-luna`, `provider` `openai`(고정, `allow_fallbacks: false`), `seed`(기존 20260929), `reasoning_effort` medium, `max_tokens`, `prompt_version` check_v2, `api_key_env` `OPENROUTER_API`. 이 모델은 OpenRouter에서 `temperature`를 받지 않아(지원 파라미터, 2026-10-06) 넣지 않는다
 - `paths`: `multidoc_gen_in`, `multidoc_docs`, `multidoc_gen_out`, `multidoc_check`, `multidoc_queries`
 
-지시 본문은 `configs/multidoc/prompt/gen_vN.yaml`, `check_vN.yaml`(지금 생성 `conf`·`law` v3, `questioner` v4, 검사 v2). 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
+지시 본문은 `configs/multidoc/prompt/gen_vN.yaml`, `check_vN.yaml`(지금 생성 `conf`·`questioner` v4, `law` v3, 검사 v2. `conf` order 0\~9는 v3로 만든 결과를 그대로 쓴다). 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
 
 ## 비용과 승인
 
