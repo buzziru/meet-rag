@@ -18,7 +18,7 @@ def el(*support):
 
 
 def run(g, elements, answerable=True):
-    return judge(g, elements, answerable, POOL, CONTEXTS)
+    return judge(g, elements, answerable, POOL, CONTEXTS, max_gold=2)
 
 
 def test_quoted_collapses_whitespace():
@@ -63,6 +63,16 @@ def test_seed_mismatch_when_checker_finds_other_docs():
 def test_gen_skip_and_invalid():
     assert run(gen(status="skip"), None, False)["reasons"] == ["gen_skip"]
     v = run(gen(seed=("a", "z")), [el(("a", "예산")), el(("b", "검토"))])
+    assert "gen_invalid" in v["reasons"]
+
+
+def test_gen_invalid_over_max_gold_or_missing_pool_seed():
+    g = gen(seed=("a", "b", "c"))
+    g["evidence"].append({"doc_id": "c", "quote": "다 위원도"})
+    els = [el(("a", "가 위원")), el(("b", "검토")), el(("c", "다 위원"))]
+    assert "gen_invalid" in run(g, els)["reasons"]
+    assert judge(g, els, True, POOL, CONTEXTS, max_gold=3)["passed"]
+    v = judge(gen(), [el(("a", "예산")), el(("b", "검토"))], True, POOL, CONTEXTS, 3, ["c"])
     assert "gen_invalid" in v["reasons"]
 
 

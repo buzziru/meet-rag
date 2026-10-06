@@ -54,10 +54,11 @@ def quoted(quote: str, context: str) -> bool:
     return bool(q) and q in norm(context)
 
 
-def judge(gen: dict, elements: list[dict] | None, answerable: bool,
-          pool_doc_ids: list[str], contexts: dict[str, str]) -> dict:
+def judge(gen: dict, elements: list[dict] | None, answerable: bool, pool_doc_ids: list[str],
+          contexts: dict[str, str], max_gold: int, pool_seed: list[str] = ()) -> dict:
     """생성·검사 결과로 통과 여부를 정한다.
 
+    생성 쪽 정답 문서는 2개 이상 max_gold개 이하이고, S7 시작 묶음(pool_seed)을 모두 포함해야 한다.
     elements의 support는 {"doc_id", "quote"} 목록이다(번호를 doc_id로 바꾼 뒤). 번호가 범위 밖이면
     doc_id는 None이다. 사유를 모두 모으고, 사유가 없으면 통과다.
     """
@@ -65,7 +66,8 @@ def judge(gen: dict, elements: list[dict] | None, answerable: bool,
         return {"passed": False, "reasons": ["gen_skip"], "gold_doc_ids": []}
     reasons = []
     seed = gen["seed_doc_ids"]
-    if not (2 <= len(seed) <= 3 and len(set(seed)) == len(seed) and set(seed) <= set(pool_doc_ids)
+    if not (2 <= len(seed) <= max_gold and len(set(seed)) == len(seed)
+            and set(pool_seed) <= set(seed) <= set(pool_doc_ids)
             and {e["doc_id"] for e in gen["evidence"]} == set(seed)):
         reasons.append("gen_invalid")
 
@@ -150,6 +152,7 @@ def main() -> None:
     contexts = {d: r["context"] for d, r in docs.items()}
     prompt, prompt_sha = load_prompt(c.prompt_version)
     gen_out, check_dir = ROOT / paths.multidoc_gen_out, ROOT / paths.multidoc_check
+    max_gold = cfg.multidoc.gen.max_gold
 
     todo = [p for p in pools if not (check_dir / f"{p['pool_id']}.json").exists()]
     ready = [p for p in todo if (gen_out / f"{p['pool_id']}.json").exists()]
@@ -187,9 +190,10 @@ def main() -> None:
             out = json.loads(content)
             elements = to_doc_ids(out["elements"], p["doc_ids"])
             rec["elements"] = elements
-            rec["verdict"] = judge(gen, elements, out["answerable"], p["doc_ids"], contexts)
+            rec["verdict"] = judge(gen, elements, out["answerable"], p["doc_ids"], contexts,
+                                   max_gold, p["seed_doc_ids"])
         else:
-            rec["verdict"] = judge(gen, None, False, p["doc_ids"], contexts)
+            rec["verdict"] = judge(gen, None, False, p["doc_ids"], contexts, max_gold)
         (check_dir / f"{p['pool_id']}.json").write_text(
             json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
         print(p["pool_id"], "통과" if rec["verdict"]["passed"] else rec["verdict"]["reasons"])

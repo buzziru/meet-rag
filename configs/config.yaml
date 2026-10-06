@@ -88,7 +88,8 @@ multidoc:
   gen:
     n_per_type: 10  # 유형마다 order 앞에서부터 꺼낼 후보 집합 수. 파일럿 10
     overview_chars: 300  # 문서 선택용 개요 길이(context 앞 글자 수)
-    prompt_version: gen_v2
+    max_gold: 5  # 생성 쪽 정답 문서 수 상한. Complete@5가 가능한 최대값(사용자 결정 2026-10-06)
+    prompt_version: gen_v3
   # S8 검사(OpenRouter). 제공자를 고정해 다른 제공자로 넘어가지 않게 한다
   check:
     base_url: https://openrouter.ai/api/v1
