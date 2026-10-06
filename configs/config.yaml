@@ -31,6 +31,12 @@ paths:
   generate_dir: data/runs/generate
   # multi-doc 후보 집합과 시작 묶음 (docs/slices/07-bundles.md)
   multidoc_pools: data/multidoc/pools.jsonl
+  # S8 생성 입력·문서 원문·생성 출력·검사 기록(후보 집합마다 파일 하나), 통과 질의 (docs/slices/08-multidoc-queries.md)
+  multidoc_gen_in: data/multidoc/gen_in
+  multidoc_docs: data/multidoc/docs
+  multidoc_gen_out: data/multidoc/gen_out
+  multidoc_check: data/multidoc/check
+  multidoc_queries: data/multidoc/queries.jsonl
 
 embedding:
   model_name: nlpai-lab/KURE-v1
@@ -76,5 +82,25 @@ chunk_sweep:
 multidoc:
   types: [conf, law, questioner]
   pool_max_docs: 20  # 완전성 검사가 후보 집합 전체를 읽으므로 크기 상한
-  n_pools_per_type: 250
+  # 유형별 준비 수. law를 바꾸면 rng 소비가 달라져 questioner 순서가 바뀐다(D-13, S8 결정 2026-10-06)
+  n_pools_per_type: {conf: 350, law: 250, questioner: 350}
   seed_sizes: [2, 3]  # law 시작 묶음의 문서 수 후보. conf·questioner는 S8이 고른다
+  # S8 생성(multidoc-writer 에이전트). 지시 본문은 configs/multidoc/prompt/
+  gen:
+    n_per_type: 10  # 유형마다 order 앞에서부터 꺼낼 후보 집합 수. 파일럿 10
+    overview_chars: 300  # 문서 선택용 개요 길이(context 앞 글자 수)
+    max_gold: 5  # 생성 쪽 정답 문서 수 상한. Complete@5가 가능한 최대값(사용자 결정 2026-10-06)
+    # 유형별 생성 지시 버전. 메인이 multidoc-writer에 넘길 지시 파일을 고른다(코드는 쓰지 않는다).
+    # 파일럿 conf order 0~9와 law는 gen_v3로 만들었다(docs/slices/08-multidoc-queries.md)
+    prompt_version: {conf: gen_v4, law: gen_v3, questioner: gen_v4}
+  # S8 검사(OpenRouter). 제공자를 고정해 다른 제공자로 넘어가지 않게 한다
+  check:
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API
+    model: openai/gpt-6-luna
+    provider: openai
+    seed: ${seed}
+    # 이 모델은 temperature를 받지 않는다(OpenRouter 지원 파라미터, 2026-10-06)
+    reasoning_effort: medium
+    max_tokens: 16000
+    prompt_version: check_v2

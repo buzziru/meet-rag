@@ -64,9 +64,9 @@ def pick_seed(docs: pd.DataFrame, k: int, rng: random.Random) -> list[str]:
     return [rng.choice(sorted(docs.loc[docs["conf"] == c, "doc_id"])) for c in picked]
 
 
-def build(rows: pd.DataFrame, types: list[str], max_docs: int, n_pools: int,
+def build(rows: pd.DataFrame, types: list[str], max_docs: int, n_pools: dict[str, int],
           seed_sizes: list[int], seed: int) -> tuple[list[dict], dict[str, int]]:
-    """유형별로 후보 집합을 섞어 n_pools개 고르고 시작 묶음을 붙인다.
+    """유형별로 후보 집합을 섞어 n_pools[유형]개 고르고 시작 묶음을 붙인다.
 
     (레코드, 유형별 가용 후보 집합 수)를 반환한다.
     """
@@ -76,7 +76,7 @@ def build(rows: pd.DataFrame, types: list[str], max_docs: int, n_pools: int,
         pools = find_pools(rows, kind, max_docs)
         available[kind] = len(pools)
         rng.shuffle(pools)
-        for order, (key, docs) in enumerate(pools[:n_pools]):
+        for order, (key, docs) in enumerate(pools[:n_pools[kind]]):
             seed_ids = pick_seed(docs, rng.choice(seed_sizes), rng) if kind in SEEDED else []
             out.append({
                 "pool_id": f"{kind}-{order:04d}",
