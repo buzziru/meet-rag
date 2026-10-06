@@ -49,8 +49,8 @@ def test_find_pools_applies_type_conditions_and_size_cap():
 
 def test_build_seeds_only_law_pools_from_distinct_conferences_and_is_deterministic():
     r = rows()
-    args = dict(types=["conf", "law", "questioner"], max_docs=20, n_pools=10,
-                seed_sizes=[2, 3], seed=0)
+    args = dict(types=["conf", "law", "questioner"], max_docs=20,
+                n_pools={"conf": 10, "law": 10, "questioner": 10}, seed_sizes=[2, 3], seed=0)
     pools, available = build(r, **args)
     assert build(r, **args) == (pools, available)
     assert available == {"conf": 2, "law": 1, "questioner": 1}
@@ -67,11 +67,21 @@ def test_build_seeds_only_law_pools_from_distinct_conferences_and_is_determinist
     assert set(pools[0]) == {"pool_id", "type", "key", "order", "doc_ids", "seed_doc_ids"}
 
 
+def test_build_keeps_order_when_unseeded_types_grow():
+    # law 수가 같으면 conf·questioner를 늘려도 기존 후보 집합과 시작 묶음이 그대로다
+    r = rows()
+    args = dict(types=["conf", "law", "questioner"], max_docs=20, seed_sizes=[2, 3], seed=0)
+    small, _ = build(r, n_pools={"conf": 1, "law": 1, "questioner": 1}, **args)
+    large, _ = build(r, n_pools={"conf": 2, "law": 1, "questioner": 2}, **args)
+    assert small == [p for p in large if p["order"] < 1]
+
+
 def test_build_limits_pools_per_type():
-    pools, _ = build(rows(), types=["conf"], max_docs=20, n_pools=1, seed_sizes=[2], seed=0)
+    pools, _ = build(rows(), types=["conf"], max_docs=20, n_pools={"conf": 1}, seed_sizes=[2],
+                     seed=0)
     assert len(pools) == 1 and pools[0]["pool_id"] == "conf-0000"
 
 
 def test_seed_size_shrinks_to_available():
-    pools, _ = build(rows(), types=["law"], max_docs=20, n_pools=1, seed_sizes=[5], seed=0)
+    pools, _ = build(rows(), types=["law"], max_docs=20, n_pools={"law": 1}, seed_sizes=[5], seed=0)
     assert len(pools[0]["seed_doc_ids"]) == 3  # 법A의 회의는 3개
