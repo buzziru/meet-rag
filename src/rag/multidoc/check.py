@@ -294,7 +294,7 @@ def main() -> None:
               f"완료 {counts['done']}, 생성 입력 없음 {counts['none']}")
         records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
         n_jev = sum(fill_quote_checks(r, contexts, s, lambda q, ps: {"p": None, "usage": None})
-                    for r in records if r["gen"]["status"] == "ok")
+                    for r in records if r["gen"]["status"] == "ok" and "response" in r)
         print(f"Jev 호출: 기존 검사 기록 {n_jev}건(판정 대기분은 검사 출력의 인용에 따라 정해진다)")
         return
 
