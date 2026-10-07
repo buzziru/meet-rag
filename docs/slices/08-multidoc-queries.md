@@ -14,10 +14,10 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 | --- | --- | --- | --- |
 | 준비 | `rag.multidoc.prepare` | `pools.jsonl`, 코퍼스 | 후보 집합별 생성 입력 |
 | 생성 | Claude Code Sonnet 에이전트(`multidoc-writer`) | 생성 입력, 생성 지시 | 시작 묶음, 질의, 기대 답, 문서별 근거 인용. 또는 포기와 이유 |
-| 검사 | `rag.multidoc.check`, OpenRouter `openai/gpt-6-luna` | 질의, 후보 집합 전체 원문 | 요소별 근거 문서·인용, 답할 수 있는지 |
+| 검사 | Claude Code Sonnet 에이전트(`multidoc-checker`, S8c에서 OpenRouter `openai/gpt-6-luna`를 대체) | 질의, 후보 집합 전체 원문(`rag.multidoc.check --prepare`가 만든 검사 입력) | 요소별 근거 문서·인용, 답할 수 있는지 |
 | 판정 | `rag.multidoc.check`(코드) | 생성·검사 결과 | 통과·불통과와 사유 |
 
-- 같은 모델로 생성·검사하면 같은 편향이 두 단계에 겹치므로 모델 계열을 나눴다
+- 같은 모델로 생성·검사하면 같은 편향이 두 단계에 겹치므로 모델 계열을 나눴다. S8c에서 사용자가 편향보다 검사 성능을 택해 검사도 Sonnet으로 바꿨다(`docs/slices/08c-checker-agent.md`, D-14)
 - 생성 에이전트 정의(`.claude/agents/multidoc-writer.md`)는 하네스 변경이라 이 조각과 분리해 F 흐름(`chore/` 브랜치, ADR)으로 만든다. 에이전트 정의에는 입출력 경로와 도구 제한만 두고, 생성 지시 본문은 이 조각의 `configs/multidoc/prompt/gen_v1.yaml`에 둔다. 지시를 고칠 때 하네스를 건드리지 않고 버전으로 남기기 위해서다
 - 에이전트 도구는 Read·Write로 제한하고, 읽기는 생성 입력·지시 파일, 쓰기는 생성 출력 경로로 한정한다
 
@@ -48,9 +48,9 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 
 ### 3. 검사·판정 `rag.multidoc.check`
 
-검사 호출은 생성 쪽의 `seed_doc_ids`·`answer`·`evidence`를 보지 않는다. 질의와 후보 집합 전체 문서(번호를 붙인 원문과 메타데이터, 질의자 이름·직위)만 보낸다(`check_v2`). 질의자를 문서 머리에 넣어야 인물 중심 질의에서 어느 문서가 그 사람의 발언인지 판정할 수 있다.
+검사 호출은 생성 쪽의 `seed_doc_ids`·`answer`·`evidence`를 보지 않는다. 질의와 후보 집합 전체 문서(번호를 붙인 원문과 메타데이터, 질의자 이름·직위)만 보낸다(`check_v2`, S8c부터 `check_v3` 검사 입력 파일). 질의자를 문서 머리에 넣어야 인물 중심 질의에서 어느 문서가 그 사람의 발언인지 판정할 수 있다.
 
-- 검사 출력(structured outputs JSON 스키마): `answerable`(후보 집합 문서로 답할 수 있는가), `elements`(요소마다 `fact`와 `support`. `support`는 그 요소를 담은 모든 문서의 `doc_id`와 원문 인용)
+- 검사 출력(JSON, S8c부터 `rag.multidoc.check`가 형식을 검사한다): `answerable`(후보 집합 문서로 답할 수 있는가), `elements`(요소마다 `fact`와 `support`. `support`는 그 요소를 담은 모든 문서의 `doc_id`와 원문 인용)
 - 코드 판정. 아래를 모두 만족하면 통과다
   1. 생성 쪽 `evidence`의 인용이 모두 해당 문서 `context`에 있다. 인용은 공백을 한 칸으로 줄여 원문에 그대로 있으면 인정하고, 그대로 없으면 Jev로 같은 의미가 있는지 판정해 확률이 `quote_semantic.min_prob` 이상일 때 인정한다(`docs/slices/08b-quote-semantic.md`). 인정한 인용은 고치지 않고 그대로 출력한다. 검사 쪽 `support`의 인용을 인정하지 못하면 그 근거를 빼고 판정한 결과와 두고 판정한 결과의 통과 여부를 비교해, 다르면 `quote_dependent`로 불통과하고 같으면 그 결과를 쓴다(인정하지 못한 수 `dropped_quotes`). 2026-10-06 변경, D-14
   2. `answerable`이 참
@@ -62,9 +62,9 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 
 ### 4. 출력
 
-- `data/multidoc/check/{pool_id}.json`: 검사 요청 레시피, 원 응답, 토큰 사용량, 비용(OpenRouter 응답 `usage.cost`), 판정과 사유
+- `data/multidoc/check/{pool_id}.json`: 검사 레시피(검사 지시 버전·SHA-256, 검사 주체), 검사 응답, Jev 인용 판정(`quote_checks`), 판정과 사유. 파일럿의 luna 기록은 토큰 사용량·비용(OpenRouter `usage.cost`)도 담았다(`data/multidoc/pilot_v4_luna/`)
 - `data/multidoc/queries.jsonl`: 검사 기록(`data/multidoc/check/`) 전체에서 통과한 질의만. `n_per_type`은 새로 호출할 대상만 고르고 이 파일에는 영향을 주지 않는다(PR #30 코멘트 결정 (a)). `qid`(`md-{pool_id}`), `pool_id`, `type`, `query`, `query_form`, `gold_doc_ids`, `pool_doc_ids`, `answer`, `elements`(원문에 없는 검사 쪽 인용은 뺀 것). S9의 입력이고 G3에서 동결한다
-- 실행 끝에 유형별 생성 포기·통과·사유별 불통과 수, 입력·출력 토큰 합, 비용 합을 출력한다
+- 실행 끝에 유형별 생성 포기·통과·사유별 불통과 수와 Jev 판정 수·입력 토큰·비용 합을 출력한다(luna 검사 때는 검사 호출의 토큰·비용 합도 출력했다)
 
 ### 재사용 (사용자 요구)
 
@@ -101,7 +101,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 
 - 4차 검사(`check_v2`, 생성은 위 v3·v4 결과): 후보 집합 40 → 생성 `ok` 31 → 통과 11(`conf` 4, `law` 4, `questioner` 3). 검사 31호출 $0.1044. 통과율 27.5%로 v2와 같아, 유형별 250개로는 본 생성이 약 225건이다(`notebooks/08_01_파일럿.ipynb` 6절)
 - 생성 쪽 인용 오류는 0건이고 `quote_missing` 11건은 모두 검사 쪽 인용 1\~2개(인용 10\~29개 중)가 원문과 달랐다. 판정 규칙 1을 바꿔 검사 쪽 인용 오류는 그 근거 항목만 뺀다(위 3절). 생성 쪽 인용 대조는 그대로다. 1차 뒤 규칙 1 완화를 채택하지 않았던 것과 달리, 생성 쪽 오류 0건이라는 근거가 새로 생겼다. 새 규칙으로 통과 15(37.5%)
-- 검사 모델 비교(사용자 요청): 같은 31건을 Sonnet 서브에이전트가 같은 입력으로 검사했다(진단용, 판정에 쓰지 않음). 새 규칙으로 luna 15, Sonnet 20, 갈린 5건은 모두 Sonnet만 통과다. `seed_mismatch`는 두 검사가 함께 냈고(luna 10, Sonnet 9) 차이는 주로 `substitutable`(luna 12, Sonnet 5)이다. luna가 요소마다 근거 문서를 더 많이 댄다(인용 413 대 238). 검사 모델은 luna로 두고, 갈린 5건은 G3 파일럿 검수에서 사람이 본다
+- 검사 모델 비교(사용자 요청): 같은 31건을 Sonnet 서브에이전트가 같은 입력으로 검사했다(진단용, 판정에 쓰지 않음). 새 규칙으로 luna 15, Sonnet 20, 갈린 5건은 모두 Sonnet만 통과다. `seed_mismatch`는 두 검사가 함께 냈고(luna 10, Sonnet 9) 차이는 주로 `substitutable`(luna 12, Sonnet 5)이다. luna가 요소마다 근거 문서를 더 많이 댄다(인용 413 대 238). 검사 모델은 luna로 두고, 갈린 5건은 G3 파일럿 검수에서 사람이 본다. 이후 사용자가 PR #31 코멘트로 검사 모델을 Sonnet 에이전트로 바꿨다(D-14, S8c)
 - conf 정답 상한 축소는 채택하지 않는다. 정답이 3개 이상인 conf·law 질의가 모두 불통과였지만 쟁점 범위가 넓은 것이 원인으로 보이고, 상한만 줄이면 v2의 `seed_mismatch`가 돌아온다. 후보 집합당 conf 통과는 v2·v3 모두 3/10이다
 - 후보 집합 수: `n_pools_per_type`을 유형별로 바꿔 `conf`·`questioner` 350, `law` 250(총 950)으로 늘린다. `law`를 250으로 두면 S7 난수 소비가 같아 기존 750개의 순서와 시작 묶음이 그대로다(확인함). 새 규칙 통과율로 기대 약 378건
 
@@ -111,10 +111,10 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 
 - `gen`: `n_per_type` 10, `overview_chars` 300, `max_gold` 5, `prompt_version` 유형별(`conf`·`questioner` gen_v4, `law` gen_v3)
 - S7 `n_pools_per_type`: 유형별 `{conf: 350, law: 250, questioner: 350}`(위 "파일럿 4차와 본 생성 준비")
-- `check`: `model` `openai/gpt-6-luna`, `provider` `openai`(고정, `allow_fallbacks: false`), `seed`(기존 20260929), `reasoning_effort` medium, `max_tokens`, `prompt_version` check_v2, `api_key_env` `OPENROUTER_API`. 이 모델은 OpenRouter에서 `temperature`를 받지 않아(지원 파라미터, 2026-10-06) 넣지 않는다
-- `paths`: `multidoc_gen_in`, `multidoc_docs`, `multidoc_gen_out`, `multidoc_check`, `multidoc_queries`
+- `check`: `prompt_version`(S8c부터 check_v3), `api_key_env` `OPENROUTER_API`(Jev 인용 판정), `quote_semantic`(S8b). 파일럿 검사(luna)는 `model` `openai/gpt-6-luna`, `provider` `openai`(고정), `seed` 20260929, `reasoning_effort` medium, `check_v2`로 했고 S8c에서 이 키들을 지웠다
+- `paths`: `multidoc_gen_in`, `multidoc_docs`, `multidoc_gen_out`, `multidoc_check_in`·`multidoc_check_out`(S8c), `multidoc_check`, `multidoc_queries`
 
-지시 본문은 `configs/multidoc/prompt/gen_vN.yaml`, `check_vN.yaml`(지금 생성 `conf`·`questioner` v4, `law` v3, 검사 v2. `conf` order 0\~9는 v3로 만든 결과를 그대로 쓴다). 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
+지시 본문은 `configs/multidoc/prompt/gen_vN.yaml`, `check_vN.yaml`(지금 생성 `conf`·`questioner` v4, `law` v3, 검사 v3(S8c). `conf` order 0\~9는 v3로 만든 결과를 그대로 쓴다). 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
 
 ## 비용과 승인
 
@@ -170,6 +170,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 | 2차 | 30, `gen_v2`, 에이전트 3개 병렬 8\~14분 | `check_v2` 16호출, 입력 202,972·출력 43,947 토큰, $0.0473 | 통과 8 |
 | 3차 | 30, `gen_v3`(questioner는 뒤에 v4로 대체) | 하지 않음 | 생성 `ok` 20 |
 | 4차 | `questioner` 0\~9 `gen_v4` 6.5분, `conf` 10\~19 `gen_v4` 19분 | `check_v2` 31호출, 입력 467,394·출력 91,967 토큰, $0.1044 | 통과 11, 새 규칙 15 |
+| 재검사(S8c) | 4차 결과 그대로 | `check_v3` `multidoc-checker` 16작업(동시 3개, 작업당 25\~75초, 약 6분), Jev 0건 | 통과 20 |
 
 - 검사 비용 합 $0.1890(OpenRouter `usage.cost`). 호출당 약 $0.0034(4차)
 - 생성 입력(order 0\~9) SHA-256 `0697a168…64fc`, 두 번 실행 일치. `pools.jsonl`(950개) SHA-256 `d1e0f04ae92c3c0bc8cc69d571d4f226b6aed4e5952b6f51bac5bc6b0d4c2bbc`, 두 번 실행 일치, 기존 750개 레코드 그대로
