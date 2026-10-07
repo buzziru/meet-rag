@@ -1,6 +1,6 @@
 from omegaconf import OmegaConf
 
-from rag.multidoc.check import build_messages, judge, locate, quoted, resolve, to_doc_ids
+from rag.multidoc.check import build_messages, found, judge, quoted, resolve, to_doc_ids
 
 POOL = ["a", "b", "c"]
 CONTEXTS = {"a": "가 위원은  예산 증액을 요구했다. 끝.", "b": "나 장관은 검토하겠다고 답했다.",
@@ -30,23 +30,28 @@ def test_quoted_collapses_whitespace():
 
 def test_pass_when_each_gold_doc_has_unique_element():
     v = run(gen(), [el(("a", "가 위원은 예산 증액")), el(("b", "검토하겠다고 답했다"))])
-    assert v == {"passed": True, "reasons": [], "gold_doc_ids": ["a", "b"], "dropped_quotes": 0,
-                 "fixed_quotes": 0}
+    assert v == {"passed": True, "reasons": [], "gold_doc_ids": ["a", "b"], "dropped_quotes": 0}
 
 
-def test_locate_accepts_rephrased_quote_and_returns_source_span():
-    assert locate("가 위원은 예산", CONTEXTS["a"], MATCH) == "가 위원은 예산"
-    # 접속어를 붙여 옮긴 인용은 어절 경계에 맞춘 원문 대목으로 바뀌고, 넘친 다음 문장 어절은 빠진다
-    span = locate("그런데 가 위원은 예산 증액을 요구했다.", CONTEXTS["a"], MATCH)
-    assert span == "가 위원은 예산 증액을 요구했다."
-    assert locate("없는 문장인데 꽤 길게 써서 열다섯 자를 넘긴다", CONTEXTS["c"], MATCH) is None
+def test_found_accepts_rephrased_quote():
+    assert found("가 위원은 예산", CONTEXTS["a"], MATCH)
+    # 접속어를 붙여 옮긴 인용은 유사도로 인정한다
+    assert found("그런데 가 위원은 예산 증액을 요구했다.", CONTEXTS["a"], MATCH)
+    assert not found("없는 문장인데 꽤 길게 써서 열다섯 자를 넘긴다", CONTEXTS["c"], MATCH)
 
 
-def test_locate_matches_short_quote_only_exactly():
+def test_found_searches_whole_context():
+    # 인용의 긴 꼬리가 문서 뒤쪽에 그대로 있어도 전체에서 가장 비슷한 대목으로 판단한다
+    quote = "예산 증액이 꼭 필요하다고 저희 부처는 판단하고 있다고 말씀드립니다."
+    context = ("예산 증액이 반드시 필요하다고 저희 부서는 판단하고 있다고 말씀을 드립니다. "
+               + "가나다라 " * 30 + "저희 부처는 판단하고 있다고 말씀드립니다만 다른 얘기입니다.")
+    assert found(quote, context, MATCH)
+
+
+def test_found_matches_short_quote_only_exactly():
     # 15자 미만은 비슷해도 인정하지 않는다(격식어가 우연히 겹치는 경우)
-    quote = "나 장관은 검토하겠다고 답했다"
-    assert locate(quote, CONTEXTS["b"], MATCH) == quote
-    assert locate("나 장관은 검토했다고", CONTEXTS["b"], MATCH) is None
+    assert found("나 장관은 검토하겠다고 답했다", CONTEXTS["b"], MATCH)
+    assert not found("나 장관은 검토했다고", CONTEXTS["b"], MATCH)
 
 
 def test_quote_missing_in_gen():
@@ -57,7 +62,7 @@ def test_quote_missing_in_gen():
 
 def test_rephrased_check_quote_counts_as_support():
     v = run(gen(), [el(("a", "그런데 가 위원은 예산 증액을 요구했다.")), el(("b", "검토"))])
-    assert v["passed"] and v["fixed_quotes"] == 1 and v["dropped_quotes"] == 0
+    assert v["passed"] and v["dropped_quotes"] == 0
 
 
 def test_unmatched_check_quote_that_does_not_change_verdict_is_dropped():
@@ -77,11 +82,11 @@ def test_quote_dependent_when_unmatched_quote_changes_verdict():
     assert v["dropped_quotes"] == 2
 
 
-def test_resolve_replaces_quotes_with_source_span():
-    els = [el(("a", "예산 증액"), ("c", "없는 문장")), el((None, "예산"))]
-    matched, kept, fixed = resolve(els, CONTEXTS, MATCH)
-    assert matched == [el(("a", "예산 증액"))]
-    assert kept == [el(("a", "예산 증액"), ("c", "없는 문장"))] and fixed == 0
+def test_resolve_keeps_quotes_as_given():
+    q = "그런데 가 위원은 예산 증액을 요구했다."
+    matched, kept = resolve([el(("a", q), ("c", "없는 문장")), el((None, "예산"))], CONTEXTS, MATCH)
+    assert matched == [el(("a", q))]
+    assert kept == [el(("a", q), ("c", "없는 문장"))]
 
 
 def test_unanswerable():
