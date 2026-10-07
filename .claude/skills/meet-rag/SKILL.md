@@ -31,7 +31,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 4. `uv run python -m rag.multidoc.check --prepare [N]`: 생성 `ok`인 후보 집합의 검사 입력 `check_in`
 5. `multidoc-checker` 작업자 풀(작업당 2개) → `check_out`
 6. `uv run python -m rag.multidoc.check --dry-run [N]`로 대기 수와 Jev 호출 수를 본다. Jev(원문에 그대로 없는 인용의 의미 판정)는 OpenRouter 유료(호출당 약 $0.00003)라 호출 수와 비용을 보고하고 승인받는다
-7. `uv run python -m rag.multidoc.check [N]`: 형식 검사·Jev·코드 판정 → 검사 기록 `check/`, 통과 질의 `queries.jsonl`(판정 규칙 D-14). 형식이 틀린 출력은 `check_out/rejected/`로 옮겨져 5로 돌아가고, 후보 집합당 거부가 3회(`multidoc.check.max_rejects`)에 닿으면 `check_invalid`로 불통과 기록된다
+7. `uv run python -m rag.multidoc.check [N]`: 형식 검사·Jev·코드 판정 → 검사 기록 `check/`, 통과 질의 `queries.jsonl`(판정 규칙 D-14). 형식이 틀린 출력은 `check_out/rejected/`로 옮겨져 5로 돌아가고, 후보 집합당 거부가 3회(`multidoc.check.max_rejects`)에 닿으면 보류(`--dry-run`의 보류 수)로 남는다. 보류는 판정에 넣지 않으므로, 메인이 그 후보 집합과 거부 파일을 사용자에게 보고하고 처리를 정한다(PR #38 코멘트)
 
 본 생성 한 번 동안 생성·검사 지시 버전(`prompt_version`)을 바꾸지 않는다(PR #37 코멘트). 검사 기록의 지시 버전은 판정 시점 config 값이라, 도중에 바꾸면 기록이 실제로 쓴 지시와 달라진다.
 
@@ -45,7 +45,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 
 **작업 큐 기록.** 메인은 작업을 띄우고 끝낼 때마다 `_workspace/{작업}_queue.jsonl`(예: `s08_queue.jsonl`)에 한 줄을 더한다: 작업 번호, 단계(`gen`·`check`), `pool_id` 목록, 상태(`running`·`done`·`rejected`), 시각. 사람이 진행을 보고, 세션이 끊겼을 때 끝나지 않은 작업을 찾는 기록이다. 남은 작업의 기준은 파일 상태(`rag.multidoc.check --dry-run`의 생성·검사·판정 대기 수)이고, 둘이 다르면 파일 상태를 따른다(사용자 결정 2026-10-07). 큐만 믿으면 출력을 쓴 뒤 큐 갱신 전에 끊긴 작업이 다시 돌거나 빠진다.
 
-**중단과 재개.** 사용자가 중단을 지시하면 새 작업을 띄우지 않고, 실행 중인 작업이 모두 끝날 때까지 기다린다. 에이전트를 강제로 멈추지 않는다(사용자 결정 2026-10-07). 끝난 작업을 큐에 기록하고, 진행 기록과 `docs/STATUS.md` "실행 중 작업"에 남은 수(`--dry-run` 출력)와 재개 절차를 적고 사용자에게 보고한다. 판정(`rag.multidoc.check`)은 Jev 유료 호출이 있어 중단 절차에서 돌리지 않고, 호출 수를 보고해 승인받은 실행에서 한다. 새 세션은 0단계에서 STATUS "실행 중 작업"을 보고 `--dry-run`으로 남은 수를 확인해 이어 간다. 세션이 비정상으로 끊겨 큐에 `running`이 남으면 출력 파일로 정리한다(출력이 있으면 `done`, 없으면 대기). 쓰다 만 검사 출력은 판정 단계의 형식 검사에서 `rejected/`로 옮겨져 다시 대기가 된다(거부 3회에 닿으면 `check_invalid`).
+**중단과 재개.** 사용자가 중단을 지시하면 새 작업을 띄우지 않고, 실행 중인 작업이 모두 끝날 때까지 기다린다. 에이전트를 강제로 멈추지 않는다(사용자 결정 2026-10-07). 끝난 작업을 큐에 기록하고, 진행 기록과 `docs/STATUS.md` "실행 중 작업"에 남은 수(`--dry-run` 출력)와 재개 절차를 적고 사용자에게 보고한다. 판정(`rag.multidoc.check`)은 Jev 유료 호출이 있어 중단 절차에서 돌리지 않고, 호출 수를 보고해 승인받은 실행에서 한다. 새 세션은 0단계에서 STATUS "실행 중 작업"을 보고 `--dry-run`으로 남은 수를 확인해 이어 간다. 세션이 비정상으로 끊겨 큐에 `running`이 남으면 출력 파일로 정리한다(출력이 있으면 `done`, 없으면 대기). 쓰다 만 검사 출력은 판정 단계의 형식 검사에서 `rejected/`로 옮겨져 다시 대기가 된다(거부 3회에 닿으면 보류).
 
 `protocol-auditor`를 부르는 단계(A4·B5·D2·D5·F6)에서는 `pr-briefer`도 같은 메시지에서 병렬로 부른다. 바뀐 파일이 모두 `docs/` 아래면(D5 등) 부르지 않고 `git.md` PR 절 3을 따른다. 프롬프트에 auditor와 같은 기준·브랜치·대응 문서·작업 종류와 검증 결과 요약을 넣는다. 감사 지적을 고쳐 커밋했으면 briefer도 직전 가이드와 함께 다시 부른다. 가이드가 수정 전 diff를 설명하면 사용자가 다른 코드를 판단하게 된다. 단방향 판정은 메인이 걸린 규칙의 `file:line`을 직접 확인한 뒤 본문에 넣는다.
 
