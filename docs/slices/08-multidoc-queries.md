@@ -50,7 +50,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 
 검사 호출은 생성 쪽의 `seed_doc_ids`·`answer`·`evidence`를 보지 않는다. 질의와 후보 집합 전체 문서(번호를 붙인 원문과 메타데이터, 질의자 이름·직위)만 보낸다(`check_v2`, S8c부터 `check_v3` 검사 입력 파일). 질의자를 문서 머리에 넣어야 인물 중심 질의에서 어느 문서가 그 사람의 발언인지 판정할 수 있다.
 
-- 검사 출력(structured outputs JSON 스키마): `answerable`(후보 집합 문서로 답할 수 있는가), `elements`(요소마다 `fact`와 `support`. `support`는 그 요소를 담은 모든 문서의 `doc_id`와 원문 인용)
+- 검사 출력(JSON, S8c부터 `rag.multidoc.check`가 형식을 검사한다): `answerable`(후보 집합 문서로 답할 수 있는가), `elements`(요소마다 `fact`와 `support`. `support`는 그 요소를 담은 모든 문서의 `doc_id`와 원문 인용)
 - 코드 판정. 아래를 모두 만족하면 통과다
   1. 생성 쪽 `evidence`의 인용이 모두 해당 문서 `context`에 있다. 인용은 공백을 한 칸으로 줄여 원문에 그대로 있으면 인정하고, 그대로 없으면 Jev로 같은 의미가 있는지 판정해 확률이 `quote_semantic.min_prob` 이상일 때 인정한다(`docs/slices/08b-quote-semantic.md`). 인정한 인용은 고치지 않고 그대로 출력한다. 검사 쪽 `support`의 인용을 인정하지 못하면 그 근거를 빼고 판정한 결과와 두고 판정한 결과의 통과 여부를 비교해, 다르면 `quote_dependent`로 불통과하고 같으면 그 결과를 쓴다(인정하지 못한 수 `dropped_quotes`). 2026-10-06 변경, D-14
   2. `answerable`이 참
@@ -64,7 +64,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 
 - `data/multidoc/check/{pool_id}.json`: 검사 레시피(검사 지시 버전·SHA-256, 검사 주체), 검사 응답, Jev 인용 판정(`quote_checks`), 판정과 사유. 파일럿의 luna 기록은 토큰 사용량·비용(OpenRouter `usage.cost`)도 담았다(`data/multidoc/pilot_v4_luna/`)
 - `data/multidoc/queries.jsonl`: 검사 기록(`data/multidoc/check/`) 전체에서 통과한 질의만. `n_per_type`은 새로 호출할 대상만 고르고 이 파일에는 영향을 주지 않는다(PR #30 코멘트 결정 (a)). `qid`(`md-{pool_id}`), `pool_id`, `type`, `query`, `query_form`, `gold_doc_ids`, `pool_doc_ids`, `answer`, `elements`(원문에 없는 검사 쪽 인용은 뺀 것). S9의 입력이고 G3에서 동결한다
-- 실행 끝에 유형별 생성 포기·통과·사유별 불통과 수, 입력·출력 토큰 합, 비용 합을 출력한다
+- 실행 끝에 유형별 생성 포기·통과·사유별 불통과 수와 Jev 판정 수·입력 토큰·비용 합을 출력한다(luna 검사 때는 검사 호출의 토큰·비용 합도 출력했다)
 
 ### 재사용 (사용자 요구)
 
