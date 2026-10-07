@@ -112,7 +112,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 - `gen`: `n_per_type` 10, `overview_chars` 300, `max_gold` 5, `prompt_version` 유형별(`conf`·`questioner` gen_v4, `law` gen_v3)
 - S7 `n_pools_per_type`: 유형별 `{conf: 350, law: 250, questioner: 350}`(위 "파일럿 4차와 본 생성 준비")
 - `check`: `prompt_version`(S8c부터 check_v3), `api_key_env` `OPENROUTER_API`(Jev 인용 판정), `quote_semantic`(S8b). 파일럿 검사(luna)는 `model` `openai/gpt-6-luna`, `provider` `openai`(고정), `seed` 20260929, `reasoning_effort` medium, `check_v2`로 했고 S8c에서 이 키들을 지웠다
-- `paths`: `multidoc_gen_in`, `multidoc_docs`, `multidoc_gen_out`, `multidoc_check`, `multidoc_queries`
+- `paths`: `multidoc_gen_in`, `multidoc_docs`, `multidoc_gen_out`, `multidoc_check_in`·`multidoc_check_out`(S8c), `multidoc_check`, `multidoc_queries`
 
 지시 본문은 `configs/multidoc/prompt/gen_vN.yaml`, `check_vN.yaml`(지금 생성 `conf`·`questioner` v4, `law` v3, 검사 v3(S8c). `conf` order 0\~9는 v3로 만든 결과를 그대로 쓴다). 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
 
