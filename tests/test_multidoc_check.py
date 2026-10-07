@@ -186,6 +186,8 @@ def test_check_input_has_only_instruction_query_and_pool_docs():
     assert text.startswith("# 지시\n\nS\n\n# 입력\n\nQ: 질의")
     assert "[1] m m 김 위원" in text and "[3] m m" in text and "[4]" not in text
     assert "답" not in text.replace("답했다", "")  # 기대 답을 넣지 않는다
+    docs["a"]["agenda"] = "1. 가법안. 2. 나법안."  # 안건 목록도 긴 줄이 된다(conf-0026)
+    assert "1. 가법안.\n2. 나법안." in check_input(prompt, "질의", POOL, docs, 8)
 
 
 def test_wrap_lines_splits_long_lines_at_sentence_ends_keeping_quotes():

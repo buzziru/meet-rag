@@ -193,7 +193,7 @@ def check_input(prompt, query: str, pool_doc_ids: list[str], docs: dict[str, dic
     """검사 입력 파일 본문. 후보 집합 문서에 1부터 번호를 붙인다(pool_doc_ids 순서, 오름차순)."""
     blocks = [prompt.document.format(n=i, text=wrap_lines(docs[d]["context"], width),
                                      speakers=speaker_text(docs[d]["speakers"]),
-                                     **{k: docs[d][k] for k in META})
+                                     **{k: wrap_lines(str(docs[d][k]), width) for k in META})
               for i, d in enumerate(pool_doc_ids, 1)]
     user = prompt.user.format(query=query, documents="\n\n".join(blocks))
     return f"# 지시\n\n{prompt.system}\n\n# 입력\n\n{user}"
