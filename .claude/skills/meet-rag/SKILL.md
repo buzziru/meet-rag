@@ -16,7 +16,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 | `multidoc-writer` | multi-doc 질의 생성(문서 선택, 질의, 기대 답, 근거 인용) | S8 파일럿·G3 본 생성에서 `rag.multidoc.prepare` 뒤, 작업 하나에 후보 집합 10개 |
 | `multidoc-checker` | multi-doc 질의 검사(필요한 사실, 사실마다 근거 문서·인용) | 생성 뒤 `rag.multidoc.check --prepare` 다음, 작업 하나에 후보 집합 2개 |
 
-`multidoc-writer`·`multidoc-checker`는 검증 에이전트가 아니라 S8·G3의 작업자다. 메인이 직접 생성·검사하지 않고 Sonnet 에이전트에 맡긴다(D-14). 프롬프트에 넣는 것은 다음과 같다. 디렉터리를 빼면 에이전트가 경로를 추측해 범위 밖을 읽거나 쓸 수 있다.
+`multidoc-writer`·`multidoc-checker`는 검증 에이전트가 아니라 S8·G3의 작업자다. 메인이 직접 생성·검사하지 않고 Sonnet 에이전트에 맡긴다(ADR-0020). 프롬프트에 넣는 것은 다음과 같다. 디렉터리를 빼면 에이전트가 경로를 추측해 범위 밖을 읽거나 쓸 수 있다.
 
 - 생성: 생성 지시 파일 경로, `pool_id` 목록, `paths.multidoc_gen_in`·`multidoc_docs`·`multidoc_gen_out`
 - 검사: `pool_id` 목록, `paths.multidoc_check_in`·`multidoc_check_out`. 검사 지시는 검사 입력 파일 안에 있다. 생성 출력 경로는 알려 주지 않는다
@@ -32,7 +32,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 
 **작업 큐 기록.** 메인은 작업을 띄우고 끝낼 때마다 `_workspace/{작업}_queue.jsonl`(예: `s08_queue.jsonl`)에 한 줄을 더한다: 작업 번호, 단계(`gen`·`check`), `pool_id` 목록, 상태(`running`·`done`·`rejected`·`stopped`), 시각. 사람이 진행을 보고 멈춘 작업을 찾는 기록이다. 남은 작업의 기준은 파일 상태(`rag.multidoc.check --dry-run`의 생성·검사·판정 대기 수)이고, 둘이 다르면 파일 상태를 따른다(사용자 결정 2026-10-07). 큐만 믿으면 출력을 쓴 뒤 큐 갱신 전에 멈춘 작업이 다시 돌거나 빠진다.
 
-**중단과 재개.** 사용자가 중단을 지시하면 새 작업을 띄우지 않고, 실행 중인 에이전트를 멈추고, 큐에 `stopped`를 적는다. 이어서 진행 기록과 `docs/STATUS.md` "실행 중 작업"에 남은 수(`--dry-run` 출력)와 재개 절차를 적는다. 멈춘 에이전트가 쓰지 못한 후보 집합은 출력 파일이 없어 대기로 남고, 쓰다 만 검사 출력은 판정 단계의 형식 검사에서 `rejected/`로 옮겨져 다시 대기가 된다. 새 세션은 0단계에서 STATUS "실행 중 작업"을 보고 `--dry-run`으로 남은 수를 확인한 뒤, 큐의 `running` 항목을 파일 상태로 정리하고(출력이 있으면 `done`, 없으면 대기) 이어 간다.
+**중단과 재개.** 사용자가 중단을 지시하면 새 작업을 띄우지 않고, 실행 중인 에이전트를 `TaskStop`으로 멈추고, 큐에 `stopped`를 적는다. 이어서 진행 기록과 `docs/STATUS.md` "실행 중 작업"에 남은 수(`--dry-run` 출력)와 재개 절차를 적는다. 멈춘 에이전트가 쓰지 못한 후보 집합은 출력 파일이 없어 대기로 남고, 쓰다 만 검사 출력은 판정 단계의 형식 검사에서 `rejected/`로 옮겨져 다시 대기가 된다. 새 세션은 0단계에서 STATUS "실행 중 작업"을 보고 `--dry-run`으로 남은 수를 확인한 뒤, 큐의 `running` 항목을 파일 상태로 정리하고(출력이 있으면 `done`, 없으면 대기) 이어 간다.
 
 `protocol-auditor`를 부르는 단계(A4·B5·D2·D5·F6)에서는 `pr-briefer`도 같은 메시지에서 병렬로 부른다. 바뀐 파일이 모두 `docs/` 아래면(D5 등) 부르지 않고 `git.md` PR 절 3을 따른다. 프롬프트에 auditor와 같은 기준·브랜치·대응 문서·작업 종류와 검증 결과 요약을 넣는다. 감사 지적을 고쳐 커밋했으면 briefer도 직전 가이드와 함께 다시 부른다. 가이드가 수정 전 diff를 설명하면 사용자가 다른 코드를 판단하게 된다. 단방향 판정은 메인이 걸린 규칙의 `file:line`을 직접 확인한 뒤 본문에 넣는다.
 
