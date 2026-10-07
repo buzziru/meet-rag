@@ -1,11 +1,25 @@
 from omegaconf import OmegaConf
 
-from rag.multidoc.check import build_messages, found, judge, quoted, resolve, to_doc_ids
+from rag.multidoc.check import (
+    build_messages,
+    candidates,
+    fill_quote_checks,
+    found,
+    judge,
+    quote_probs,
+    quoted,
+    resolve,
+    to_doc_ids,
+)
 
 POOL = ["a", "b", "c"]
 CONTEXTS = {"a": "가 위원은  예산 증액을 요구했다. 끝.", "b": "나 장관은 검토하겠다고 답했다.",
             "c": "다 위원도 예산 증액을 요구했다."}
-MATCH = OmegaConf.create({"min_ratio": 0.8, "min_chars": 15})
+REPHRASED = "그런데 가 위원은 예산 증액을 요구했다."
+# Jev가 같은 의미로 판정한 확률(원문에 그대로 없는 인용만 기록된다)
+PROBS = {("a", REPHRASED): 0.95, ("c", "예산 증액을 줄이자고 했다"): 0.4}
+MIN_PROB = 0.9
+SEM = OmegaConf.create({"top_k": 2, "window_sentences": 1, "model": "m", "prompt_version": "v"})
 
 
 def gen(seed=("a", "b"), status="ok"):
@@ -19,7 +33,8 @@ def el(*support):
 
 
 def run(g, elements, answerable=True):
-    return judge(g, elements, answerable, POOL, CONTEXTS, max_gold=2, match=MATCH)
+    return judge(g, elements, answerable, POOL, CONTEXTS, max_gold=2, probs=PROBS,
+                 min_prob=MIN_PROB)
 
 
 def test_quoted_collapses_whitespace():
@@ -33,25 +48,40 @@ def test_pass_when_each_gold_doc_has_unique_element():
     assert v == {"passed": True, "reasons": [], "gold_doc_ids": ["a", "b"], "dropped_quotes": 0}
 
 
-def test_found_accepts_rephrased_quote():
-    assert found("가 위원은 예산", CONTEXTS["a"], MATCH)
-    # 접속어를 붙여 옮긴 인용은 유사도로 인정한다
-    assert found("그런데 가 위원은 예산 증액을 요구했다.", CONTEXTS["a"], MATCH)
-    assert not found("없는 문장인데 꽤 길게 써서 열다섯 자를 넘긴다", CONTEXTS["c"], MATCH)
+def test_found_uses_exact_match_or_jev_probability():
+    assert found("가 위원은 예산", CONTEXTS["a"], None, MIN_PROB)
+    assert found(REPHRASED, CONTEXTS["a"], 0.95, MIN_PROB)
+    assert not found(REPHRASED, CONTEXTS["a"], 0.4, MIN_PROB)
+    # 판정 전(확률 없음)이면 원문에 그대로 있을 때만 인정한다
+    assert not found(REPHRASED, CONTEXTS["a"], None, MIN_PROB)
+    assert not found("  ", CONTEXTS["a"], 1.0, MIN_PROB)
 
 
-def test_found_searches_whole_context():
-    # 인용의 긴 꼬리가 문서 뒤쪽에 그대로 있어도 전체에서 가장 비슷한 대목으로 판단한다
-    quote = "예산 증액이 꼭 필요하다고 저희 부처는 판단하고 있다고 말씀드립니다."
-    context = ("예산 증액이 반드시 필요하다고 저희 부서는 판단하고 있다고 말씀을 드립니다. "
-               + "가나다라 " * 30 + "저희 부처는 판단하고 있다고 말씀드립니다만 다른 얘기입니다.")
-    assert found(quote, context, MATCH)
+def test_candidates_returns_most_similar_sentence_windows():
+    context = "첫 문장입니다. 예산 증액을 요구했다. 마지막 문장입니다."
+    assert candidates("예산 증액을 꼭 요구했다.", context, 1, 1) == ["예산 증액을 요구했다."]
+    assert candidates("예산 증액을 꼭 요구했다.", context, 2, 2)[0] in (
+        "첫 문장입니다. 예산 증액을 요구했다.", "예산 증액을 요구했다. 마지막 문장입니다.")
 
 
-def test_found_matches_short_quote_only_exactly():
-    # 15자 미만은 비슷해도 인정하지 않는다(격식어가 우연히 겹치는 경우)
-    assert found("나 장관은 검토하겠다고 답했다", CONTEXTS["b"], MATCH)
-    assert not found("나 장관은 검토했다고", CONTEXTS["b"], MATCH)
+def test_fill_quote_checks_asks_only_unmatched_quotes_once():
+    els = [el(("a", REPHRASED), ("a", "가 위원은 예산")), el((None, "x"))]
+    rec = {"gen": gen(), "elements": els}
+    asked = []
+
+    def ask(q, passages):
+        asked.append((q, passages))
+        return {"p": 0.95, "usage": {"input_tokens": 1, "cost": 0.0}}
+
+    assert fill_quote_checks(rec, CONTEXTS, SEM, ask) == 1
+    assert [q for q, _ in asked] == [REPHRASED] and len(asked[0][1]) == 2
+    assert quote_probs(rec, SEM) == {("a", REPHRASED): 0.95}
+    # 이미 판정한 인용은 다시 묻지 않는다
+    assert fill_quote_checks(rec, CONTEXTS, SEM, ask) == 0 and len(asked) == 1
+    # 질문 버전을 바꾸면 이전 판정을 쓰지 않고 다시 묻는다
+    sem2 = OmegaConf.merge(SEM, {"prompt_version": "v2"})
+    assert quote_probs(rec, sem2) == {}
+    assert fill_quote_checks(rec, CONTEXTS, sem2, ask) == 1 and len(asked) == 2
 
 
 def test_quote_missing_in_gen():
@@ -61,7 +91,7 @@ def test_quote_missing_in_gen():
 
 
 def test_rephrased_check_quote_counts_as_support():
-    v = run(gen(), [el(("a", "그런데 가 위원은 예산 증액을 요구했다.")), el(("b", "검토"))])
+    v = run(gen(), [el(("a", REPHRASED)), el(("b", "검토"))])
     assert v["passed"] and v["dropped_quotes"] == 0
 
 
@@ -83,10 +113,11 @@ def test_quote_dependent_when_unmatched_quote_changes_verdict():
 
 
 def test_resolve_keeps_quotes_as_given():
-    q = "그런데 가 위원은 예산 증액을 요구했다."
-    matched, kept = resolve([el(("a", q), ("c", "없는 문장")), el((None, "예산"))], CONTEXTS, MATCH)
+    q, low = REPHRASED, "예산 증액을 줄이자고 했다"
+    els = [el(("a", q), ("c", low)), el((None, "예산"))]
+    matched, kept = resolve(els, CONTEXTS, PROBS, MIN_PROB)
     assert matched == [el(("a", q))]
-    assert kept == [el(("a", q), ("c", "없는 문장"))]
+    assert kept == [el(("a", q), ("c", low))]
 
 
 def test_unanswerable():
@@ -121,9 +152,11 @@ def test_gen_invalid_over_max_gold_or_missing_pool_seed():
     g["evidence"].append({"doc_id": "c", "quote": "다 위원도"})
     els = [el(("a", "가 위원")), el(("b", "검토")), el(("c", "다 위원"))]
     assert "gen_invalid" in run(g, els)["reasons"]
-    assert judge(g, els, True, POOL, CONTEXTS, max_gold=3, match=MATCH)["passed"]
+    assert judge(g, els, True, POOL, CONTEXTS, max_gold=3, probs=PROBS, min_prob=MIN_PROB)[
+        "passed"
+    ]
     v = judge(gen(), [el(("a", "예산")), el(("b", "검토"))], True, POOL, CONTEXTS, 3, ["c"],
-              match=MATCH)
+              probs=PROBS, min_prob=MIN_PROB)
     assert "gen_invalid" in v["reasons"]
 
 

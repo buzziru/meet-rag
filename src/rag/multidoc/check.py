@@ -9,8 +9,10 @@
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
+import urllib.request
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +20,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
-from rapidfuzz import fuzz
+from rapidfuzz import fuzz, process
 
 from rag.multidoc.prepare import META, load_docs, select, speaker_text
 
@@ -55,24 +57,70 @@ def quoted(quote: str, context: str) -> bool:
     return bool(q) and q in norm(context)
 
 
-def found(quote: str, context: str, match) -> bool:
-    """인용이 원문에 있는가(지어낸 인용이 아닌가).
+def found(quote: str, context: str, p: float | None, min_prob: float) -> bool:
+    """인용과 같은 의미가 원문에 있는가(지어낸 인용이 아닌가).
 
-    공백을 한 칸으로 줄여 원문에 그대로 있으면 있다. 인용이 match.min_chars자 이상이면 원문에서
-    가장 잘 맞는 부분 문자열과의 문자 유사도(rapidfuzz partial_ratio)가 match.min_ratio 이상일
-    때도 있다고 본다. LLM이 접속어·존칭·낱말을 바꿔 옮긴 인용을 받아들이고, 짧은 인용은 격식어가
-    우연히 겹쳐 유사도가 높게 나오므로 정확 대조만 한다(D-14).
+    공백을 한 칸으로 줄여 원문에 그대로 있으면 있다. 그대로 없으면 Jev가 판정한 같은 의미일 확률 p가
+    min_prob 이상일 때 있다고 본다. p가 없으면(판정 전) 없다고 본다(D-14).
     """
-    q, c = norm(quote), norm(context)
-    if not q:
-        return False
-    return q in c or (len(q) >= match.min_chars
-                      and fuzz.partial_ratio(q, c) / 100 >= match.min_ratio)
+    q = norm(quote)
+    return bool(q) and (q in norm(context) or (p is not None and p >= min_prob))
 
 
-def resolve(elements: list[dict], contexts: dict[str, str],
-            match) -> tuple[list[dict], list[dict]]:
-    """검사 쪽 support의 인용이 원문에 있는지 본다.
+def candidates(quote: str, context: str, top_k: int, window_sentences: int) -> list[str]:
+    """원문을 문장 끝 부호로 나눠 window_sentences문장씩 묶은 대목(한 문장씩 민다) 중 인용과
+    partial_ratio가 높은 top_k개. 문자 유사도는 Jev에 보낼 후보를 고르는 데만 쓴다."""
+    sents = re.split(r"(?<=[.?!…])\s+", norm(context))
+    windows = [" ".join(sents[i:i + window_sentences])
+               for i in range(max(1, len(sents) - window_sentences + 1))]
+    return [w for w, _, _ in process.extract(norm(quote), windows, scorer=fuzz.partial_ratio,
+                                              limit=top_k)]
+
+
+def all_quotes(rec: dict) -> list[tuple[str, str]]:
+    """검사 기록의 생성 쪽 evidence와 검사 쪽 support 인용 (doc_id, 공백을 줄인 인용)."""
+    pairs = [(e["doc_id"], e["quote"]) for e in rec["gen"].get("evidence") or []]
+    pairs += [(s["doc_id"], s["quote"]) for el in rec.get("elements") or [] for s in el["support"]]
+    return [(d, norm(q)) for d, q in pairs if d and norm(q)]
+
+
+def quote_probs(rec: dict, s) -> dict[tuple[str, str], float]:
+    """저장된 Jev 판정 중 지금 설정(s.model, s.prompt_version)과 같은 것만. 모델이나 질문을 바꾸면
+    다시 묻는다."""
+    return {(x["doc_id"], x["quote"]): x["p"] for x in rec.get("quote_checks", [])
+            if x["model"] == s.model and x["prompt_version"] == s.prompt_version}
+
+
+def fill_quote_checks(rec: dict, contexts: dict[str, str], s, ask) -> int:
+    """원문에 그대로 없고 아직 판정하지 않은 인용을 ask(인용, 후보 대목)로 판정해
+    rec["quote_checks"]에 더한다. 더한 수를 반환한다. ask는 {"p", "usage"}를 돌려준다."""
+    probs = quote_probs(rec, s)
+    todo = {(d, q) for d, q in all_quotes(rec)
+            if d in contexts and q not in norm(contexts[d]) and (d, q) not in probs}
+    for d, q in sorted(todo):
+        passages = candidates(q, contexts[d], s.top_k, s.window_sentences)
+        out = ask(q, passages)
+        rec.setdefault("quote_checks", []).append({
+            "doc_id": d, "quote": q, "passages": passages, "p": out["p"], "usage": out["usage"],
+            "model": s.model, "prompt_version": s.prompt_version})
+    return len(todo)
+
+
+def ask_jev(s, prompt, api_key: str, quote: str, passages: list[str]) -> dict:
+    """Jev Decisions API에 noul 질문 하나를 보내 같은 의미일 확률을 받는다."""
+    body = {"model": s.model, "state": {"인용": quote, "후보 대목": passages},
+            "questions": {"q": {"type": "noul", "instructions": prompt.instructions,
+                                "criteria": OmegaConf.to_container(prompt.criteria)}}}
+    req = urllib.request.Request(s.url, data=json.dumps(body).encode(), headers={
+        "Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=s.timeout) as r:
+        resp = json.loads(r.read().decode())
+    return {"p": resp["answers"]["q"]["noul"], "usage": resp["usage"]}
+
+
+def resolve(elements: list[dict], contexts: dict[str, str], probs: dict[tuple[str, str], float],
+            min_prob: float) -> tuple[list[dict], list[dict]]:
+    """검사 쪽 support의 인용과 같은 의미가 원문에 있는지 본다.
 
     (원문에 있는 support만 남긴 요소, 없는 것도 남긴 요소)를 반환한다. 인용은 바꾸지 않는다. 앞쪽은
     support가 모두 빠진 요소를 뺀다. 문서 번호가 범위 밖인 support는 둘 다에서 뺀다.
@@ -80,7 +128,8 @@ def resolve(elements: list[dict], contexts: dict[str, str],
     matched, kept = [], []
     for el in elements:
         sup = [s for s in el["support"] if s["doc_id"] in contexts]
-        ok = [s for s in sup if found(s["quote"], contexts[s["doc_id"]], match)]
+        ok = [s for s in sup if found(s["quote"], contexts[s["doc_id"]],
+                                      probs.get((s["doc_id"], norm(s["quote"]))), min_prob)]
         if ok:
             matched.append({**el, "support": ok})
         if sup:
@@ -101,12 +150,12 @@ def gold_reasons(elements: list[dict], seed: list[str]) -> tuple[list[str], list
 
 def judge(gen: dict, elements: list[dict] | None, answerable: bool, pool_doc_ids: list[str],
           contexts: dict[str, str], max_gold: int, pool_seed: list[str] = (), *,
-          match) -> dict:
+          probs: dict[tuple[str, str], float], min_prob: float) -> dict:
     """생성·검사 결과로 통과 여부를 정한다.
 
     생성 쪽 정답 문서는 2개 이상 max_gold개 이하이고, S7 시작 묶음(pool_seed)을 모두 포함해야 한다.
     elements의 support는 {"doc_id", "quote"} 목록이다(번호를 doc_id로 바꾼 뒤). 번호가 범위 밖이면
-    doc_id는 None이다. 인용은 found로 원문에 있는지 본다(match). 생성 쪽 인용이 없으면
+    doc_id는 None이다. 인용은 found로 원문에 있는지 본다(probs, min_prob). 생성 쪽 인용이 없으면
     quote_missing이다. 검사 쪽 인용이 원문에 없는 support는 확인할 수 없는 근거라, 빼고 판정한
     결과와 두고 판정한 결과가 다르면 quote_dependent로 불통과한다(D-14). 사유를 모두 모으고,
     사유가 없으면 통과다. 정답 문서는 원문에 있는 support로 정한다.
@@ -122,12 +171,13 @@ def judge(gen: dict, elements: list[dict] | None, answerable: bool, pool_doc_ids
         reasons.append("gen_invalid")
 
     if not all(e["doc_id"] in contexts
-               and found(e["quote"], contexts[e["doc_id"]], match)
+               and found(e["quote"], contexts[e["doc_id"]],
+                         probs.get((e["doc_id"], norm(e["quote"]))), min_prob)
                for e in gen["evidence"]):
         reasons.append("quote_missing")
     if not answerable:
         reasons.append("unanswerable")
-    matched, kept = resolve(elements, contexts, match)
+    matched, kept = resolve(elements, contexts, probs, min_prob)
     gold, rules = gold_reasons(matched, seed)
     reasons += rules
     if bool(rules) != bool(gold_reasons(kept, seed)[1]):
@@ -186,6 +236,9 @@ def summarize(records: list[dict]) -> None:
     print(f"검사 호출 {len(usage)}건, 입력 토큰 {sum(u['prompt_tokens'] for u in usage):,}, "
           f"출력 토큰 {sum(u['completion_tokens'] for u in usage):,}, "
           f"비용 ${sum(u.get('cost') or 0 for u in usage):.4f}")
+    jev = [x["usage"] for r in records for x in r.get("quote_checks", [])]
+    print(f"Jev 판정 {len(jev)}건, 입력 토큰 {sum(u['input_tokens'] for u in jev):,}, "
+          f"비용 ${sum(u.get('cost') or 0 for u in jev):.5f}")
 
 
 def main() -> None:
@@ -204,7 +257,8 @@ def main() -> None:
     selected = {p["pool_id"] for p in pools}
     docs = load_docs(cfg, [p for p in all_pools if p["pool_id"] in selected | checked])
     contexts = {d: r["context"] for d, r in docs.items()}
-    max_gold, match = cfg.multidoc.gen.max_gold, c.quote_match
+    max_gold, s = cfg.multidoc.gen.max_gold, c.quote_semantic
+    seeds = {p["pool_id"]: p["seed_doc_ids"] for p in all_pools}
 
     todo = [p for p in pools if not (check_dir / f"{p['pool_id']}.json").exists()]
     ready = [p for p in todo if (gen_out / f"{p['pool_id']}.json").exists()]
@@ -216,14 +270,28 @@ def main() -> None:
               f"호출 수 상한 {len(todo)}(생성 skip은 호출하지 않음)")
         print(f"입력 문자 수(질의 제외): 생성 완료분 {sum(chars[i] for i in ready_ids):,}, "
               f"전체 {sum(chars.values()):,}")
+        records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
+        n_jev = sum(fill_quote_checks(r, contexts, s, lambda q, ps: {"p": None, "usage": None})
+                    for r in records if r["gen"]["status"] == "ok")
+        print(f"Jev 호출: 기존 검사 기록 {n_jev}건(새 검사분은 검사 응답의 인용에 따라 정해진다)")
         return
 
     load_dotenv(ROOT / ".env")
     from openai import OpenAI
     client = OpenAI(base_url=c.base_url, api_key=os.environ[c.api_key_env])
+    quote_prompt = load_prompt(s.prompt_version)[0]
+
+    def ask(quote, passages):
+        return ask_jev(s, quote_prompt, os.environ[c.api_key_env], quote, passages)
+
     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
                             text=True).stdout.strip()
     check_dir.mkdir(parents=True, exist_ok=True)
+
+    def save(r):
+        (check_dir / f"{r['pool_id']}.json").write_text(
+            json.dumps(r, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+
     for p in ready:
         gen = read_json(gen_out / f"{p['pool_id']}.json")
         rec = {"pool_id": p["pool_id"], "type": p["type"], "pool_doc_ids": p["doc_ids"],
@@ -242,28 +310,32 @@ def main() -> None:
             out = json.loads(content)
             elements = to_doc_ids(out["elements"], p["doc_ids"])
             rec["elements"] = elements
+            # 비용을 낸 검사 응답을 Jev 판정 전에 먼저 남긴다. Jev가 실패하면 다음 실행의
+            # 재판정에서 남은 인용만 묻는다
+            save(rec)
+            fill_quote_checks(rec, contexts, s, ask)
             rec["verdict"] = judge(gen, elements, out["answerable"], p["doc_ids"], contexts,
-                                   max_gold, p["seed_doc_ids"], match=match)
+                                   max_gold, p["seed_doc_ids"], probs=quote_probs(rec, s),
+                                   min_prob=s.min_prob)
         else:
             rec["verdict"] = judge(gen, None, False, p["doc_ids"], contexts, max_gold,
-                                   match=match)
-        (check_dir / f"{p['pool_id']}.json").write_text(
-            json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+                                   probs={}, min_prob=s.min_prob)
+        save(rec)
         print(p["pool_id"], "통과" if rec["verdict"]["passed"] else rec["verdict"]["reasons"])
 
-    # 판정 규칙이 바뀌면 검사 기록 전체를 저장된 응답으로 다시 판정한다(호출 없음).
-    # n_per_type은 새로 호출할 대상만 고르고, queries.jsonl은 기록만으로 정해진다
-    seeds = {p["pool_id"]: p["seed_doc_ids"] for p in all_pools}
+    # 판정 규칙이 바뀌면 검사 기록 전체를 저장된 응답으로 다시 판정한다(검사 호출 없음). Jev는
+    # 아직 판정하지 않은 인용만 부르고 확률을 기록에 남긴다. n_per_type은 새로 호출할 대상만 고르고,
+    # queries.jsonl은 기록만으로 정해진다
     records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
     for r in records:
         if r["gen"]["status"] == "ok":
+            added = fill_quote_checks(r, contexts, s, ask)
             verdict = judge(r["gen"], r["elements"], json.loads(r["response"])["answerable"],
                             r["pool_doc_ids"], contexts, max_gold, seeds[r["pool_id"]],
-                            match=match)
-            if verdict != r["verdict"]:
+                            probs=quote_probs(r, s), min_prob=s.min_prob)
+            if added or verdict != r.get("verdict"):
                 r["verdict"] = verdict
-                (check_dir / f"{r['pool_id']}.json").write_text(
-                    json.dumps(r, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+                save(r)
     with (ROOT / paths.multidoc_queries).open("w", encoding="utf-8", newline="\n") as f:
         for r in records:
             if r["verdict"]["passed"]:
@@ -273,7 +345,8 @@ def main() -> None:
                     "query": g["query"], "query_form": g.get("query_form", ""),
                     "gold_doc_ids": r["verdict"]["gold_doc_ids"],
                     "pool_doc_ids": r["pool_doc_ids"], "answer": g["answer"],
-                    "elements": resolve(r["elements"], contexts, match)[0]},
+                    "elements": resolve(r["elements"], contexts, quote_probs(r, s),
+                                        s.min_prob)[0]},
                     ensure_ascii=False) + "\n")
     print(f"생성 대기 {len(todo) - len(ready)}개")
     summarize(records)

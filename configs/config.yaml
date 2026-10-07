@@ -104,9 +104,14 @@ multidoc:
     reasoning_effort: medium
     max_tokens: 16000
     prompt_version: check_v2
-    # 인용 대조(D-14, 노트북 08_01 9절). min_chars자 이상인 인용은 원문에서 가장 비슷한 대목과의 문자
-    # 유사도(rapidfuzz partial_ratio)가 min_ratio 이상이면 인정한다. 짧은 인용은 격식어가 우연히 겹쳐 정확 대조만 한다.
-    # 파일럿에서 바꿔 옮긴 인용 20자 이상·0.86~0.99, 같은 후보 집합의 맞지 않는 대조는 4,285쌍 중 0.8 이상 1건
-    quote_match:
-      min_ratio: 0.8
-      min_chars: 15
+    # 인용 의미 판정(D-14, 노트북 08_02). 원문에 그대로 없는 인용만 문서를 window_sentences문장씩 묶은
+    # 대목 중 partial_ratio 상위 top_k개를 골라 Jev에 묻고, 같은 의미일 확률이 min_prob 이상이면 인정한다.
+    # 파일럿에서 바꿔 옮긴 인용·원문 그대로 24개 0.93~0.98, 뜻을 바꾼 변형 30개 중 0.9 이상 4개(모두 부정)
+    quote_semantic:
+      url: https://openrouter.ai/api/alpha/decisions
+      model: typesafe/jev-1.13
+      prompt_version: quote_v1
+      top_k: 3
+      window_sentences: 3
+      min_prob: 0.9
+      timeout: 60  # Jev 호출 하나의 대기 상한(초)
