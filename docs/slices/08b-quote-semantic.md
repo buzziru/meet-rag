@@ -49,7 +49,7 @@ S8 검사·판정의 규칙 1(인용 대조)을 문자 유사도 판정에서 �
 - `found`를 정확 일치 → 후보 대목 → Jev 판정으로 바꾼다. Jev 호출은 Decisions API(`POST https://openrouter.ai/api/alpha/decisions`)로 하고 키는 `OPENROUTER_API`
 - 판정 결과는 검사 기록(`data/multidoc/check/{pool_id}.json`)에 `quote_checks`로 저장한다(문서·인용·후보 대목·P(yes)). 같은 인용은 다시 호출하지 않는다. 재판정은 저장된 확률로 하고, 기준값이 바뀌어도 호출하지 않는다
 - `--dry-run`은 Jev 호출 수 추정도 출력한다
-- 파라미터는 `configs/config.yaml`의 `multidoc.check.quote_semantic`(`model`, `url`, `top_k`, `window_sentences`, `min_prob`)에 둔다. `quote_match`는 지운다
+- 파라미터는 `configs/config.yaml`의 `multidoc.check.quote_semantic`(`model`, `url`, `prompt_version`, `top_k`, `window_sentences`, `min_prob`, `timeout`)에 둔다. `quote_match`는 지운다
 
 ### 4. 파일럿 재판정
 
@@ -73,7 +73,7 @@ S8 검사·판정의 규칙 1(인용 대조)을 문자 유사도 판정에서 �
 ## 수정 허용 파일
 
 - `src/rag/multidoc/check.py`, `tests/test_multidoc_check.py`
-- `configs/config.yaml`(`multidoc.check`)
+- `configs/config.yaml`(`multidoc.check`), `configs/multidoc/prompt/quote_v1.yaml`(Jev 질문 문구, 기존 지시 파일 관례)
 - `notebooks/08_02_인용의미.ipynb`, `notebooks/08_01_파일럿.ipynb`(9절에 대체 안내 한 줄)
 - `docs/DECISIONS.md` D-14, `docs/slices/08-multidoc-queries.md` 규칙 1, 이 문서, `CLAUDE.md` "명령" 절
 

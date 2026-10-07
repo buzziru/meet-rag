@@ -110,7 +110,7 @@ def ask_jev(s, prompt, api_key: str, quote: str, passages: list[str]) -> dict:
                                 "criteria": OmegaConf.to_container(prompt.criteria)}}}
     req = urllib.request.Request(s.url, data=json.dumps(body).encode(), headers={
         "Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=60) as r:
+    with urllib.request.urlopen(req, timeout=s.timeout) as r:
         resp = json.loads(r.read().decode())
     return {"p": resp["answers"]["q"]["noul"], "usage": resp["usage"]}
 

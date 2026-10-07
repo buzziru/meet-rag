@@ -114,3 +114,4 @@ multidoc:
       top_k: 3
       window_sentences: 3
       min_prob: 0.9
+      timeout: 60  # Jev 호출 하나의 대기 상한(초)
