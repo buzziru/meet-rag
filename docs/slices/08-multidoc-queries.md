@@ -14,10 +14,10 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 | --- | --- | --- | --- |
 | 준비 | `rag.multidoc.prepare` | `pools.jsonl`, 코퍼스 | 후보 집합별 생성 입력 |
 | 생성 | Claude Code Sonnet 에이전트(`multidoc-writer`) | 생성 입력, 생성 지시 | 시작 묶음, 질의, 기대 답, 문서별 근거 인용. 또는 포기와 이유 |
-| 검사 | `rag.multidoc.check`, OpenRouter `openai/gpt-6-luna` | 질의, 후보 집합 전체 원문 | 요소별 근거 문서·인용, 답할 수 있는지 |
+| 검사 | Claude Code Sonnet 에이전트(`multidoc-checker`, S8c에서 OpenRouter `openai/gpt-6-luna`를 대체) | 질의, 후보 집합 전체 원문(`rag.multidoc.check --prepare`가 만든 검사 입력) | 요소별 근거 문서·인용, 답할 수 있는지 |
 | 판정 | `rag.multidoc.check`(코드) | 생성·검사 결과 | 통과·불통과와 사유 |
 
-- 같은 모델로 생성·검사하면 같은 편향이 두 단계에 겹치므로 모델 계열을 나눴다
+- 같은 모델로 생성·검사하면 같은 편향이 두 단계에 겹치므로 모델 계열을 나눴다. S8c에서 사용자가 편향보다 검사 성능을 택해 검사도 Sonnet으로 바꿨다(`docs/slices/08c-checker-agent.md`, D-14)
 - 생성 에이전트 정의(`.claude/agents/multidoc-writer.md`)는 하네스 변경이라 이 조각과 분리해 F 흐름(`chore/` 브랜치, ADR)으로 만든다. 에이전트 정의에는 입출력 경로와 도구 제한만 두고, 생성 지시 본문은 이 조각의 `configs/multidoc/prompt/gen_v1.yaml`에 둔다. 지시를 고칠 때 하네스를 건드리지 않고 버전으로 남기기 위해서다
 - 에이전트 도구는 Read·Write로 제한하고, 읽기는 생성 입력·지시 파일, 쓰기는 생성 출력 경로로 한정한다
 

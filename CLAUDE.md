@@ -17,7 +17,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 생성: `uv run python -m rag.generate ask.qid=<dev qid>` 또는 `"ask.query='질문'"` (`[prompt=vN generator.stream=true]`, → `data/runs/generate/`와 LangSmith. 한도 RPM 30·TPM 16K, 호출당 약 3K 토큰. 5xx는 서버 상태부터 확인)
 - multi-doc 묶음: `uv run python -m rag.multidoc.pools` (→ `data/multidoc/pools.jsonl`, 약 20초. 유형·값은 D-13)
 - multi-doc 생성 준비: `uv run python -m rag.multidoc.prepare [multidoc.gen.n_per_type=N]` (→ `data/multidoc/gen_in`·`docs`, 있는 후보 집합은 건너뜀). 생성은 `multidoc-writer` 에이전트(meet-rag 스킬)
-- multi-doc 검사: `uv run python -m rag.multidoc.check [--dry-run] [multidoc.gen.n_per_type=N]` (OpenRouter 유료, 검사 호출당 약 $0.0034, 원문에 그대로 없는 인용의 Jev 판정은 호출당 약 $0.00003. 실행 전 `--dry-run`으로 두 호출 수 보고·승인. 기록 있는 후보 집합은 검사 호출 없이 다시 판정하고, Jev는 판정 안 된 인용만 부른다 → `data/multidoc/queries.jsonl`. 판정 규칙은 D-14)
+- multi-doc 검사: `uv run python -m rag.multidoc.check --prepare [multidoc.gen.n_per_type=N]`(→ `data/multidoc/check_in/`) → `multidoc-checker` 에이전트(meet-rag 스킬, → `check_out/`) → `uv run python -m rag.multidoc.check [...]`(판정 → `data/multidoc/queries.jsonl`). `--dry-run`은 생성·검사 준비·검사·판정 대기 수와 Jev 호출 수를 출력하고 호출하지 않는다. 진행 상태는 파일 존재로 정해져 중단 뒤 같은 명령으로 이어 간다. 원문에 그대로 없는 인용의 Jev 판정은 OpenRouter 유료(호출당 약 $0.00003)라 실행 전 호출 수 보고·승인. 판정 규칙은 D-14
 - 파이프라인 명령(데이터 적재, 분할, 인덱스, 검색, 평가, 생성)은 해당 SLICE가 끝날 때 여기에 추가한다. 빠른 확인은 dev-small로 한다
 
 한글 출력이 깨지면 `PYTHONUTF8=1`로 실행한다. 파일은 `encoding="utf-8"`로 연다.
