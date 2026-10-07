@@ -52,7 +52,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 
 - 검사 출력(structured outputs JSON 스키마): `answerable`(후보 집합 문서로 답할 수 있는가), `elements`(요소마다 `fact`와 `support`. `support`는 그 요소를 담은 모든 문서의 `doc_id`와 원문 인용)
 - 코드 판정. 아래를 모두 만족하면 통과다
-  1. 생성 쪽 `evidence`의 인용이 모두 해당 문서 `context`에 있다. 인용은 공백을 한 칸으로 줄여 원문에 그대로 있으면 인정하고, `quote_match.min_chars`자 이상이면 원문에서 가장 잘 맞는 부분 문자열과의 문자 유사도(rapidfuzz `partial_ratio`)가 `quote_match.min_ratio` 이상일 때도 인정한다. 인정한 인용은 고치지 않고 그대로 출력한다. 검사 쪽 `support`의 인용을 인정하지 못하면 그 근거를 빼고 판정한 결과와 두고 판정한 결과의 통과 여부를 비교해, 다르면 `quote_dependent`로 불통과하고 같으면 그 결과를 쓴다(인정하지 못한 수 `dropped_quotes`). 2026-10-06 변경, D-14
+  1. 생성 쪽 `evidence`의 인용이 모두 해당 문서 `context`에 있다. 인용은 공백을 한 칸으로 줄여 원문에 그대로 있으면 인정하고, 그대로 없으면 Jev로 같은 의미가 있는지 판정해 확률이 `quote_semantic.min_prob` 이상일 때 인정한다(`docs/slices/08b-quote-semantic.md`). 인정한 인용은 고치지 않고 그대로 출력한다. 검사 쪽 `support`의 인용을 인정하지 못하면 그 근거를 빼고 판정한 결과와 두고 판정한 결과의 통과 여부를 비교해, 다르면 `quote_dependent`로 불통과하고 같으면 그 결과를 쓴다(인정하지 못한 수 `dropped_quotes`). 2026-10-06 변경, D-14
   2. `answerable`이 참
   3. 정답 문서(검사 쪽 `support`에 나온 문서의 합집합)가 2개 이상
   4. 필요성: 정답 문서마다 그 문서만 `support`에 있는 요소가 하나 이상 있다(다른 문서로 대신할 수 없다)
