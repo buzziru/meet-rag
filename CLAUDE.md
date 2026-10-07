@@ -14,7 +14,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 판정: `uv run python -m rag.eval.compare --base <기준.csv> --cand <후보.csv> [--out <결과.json>]` (dev-full 고정)
 - 인덱스: `uv run python -m rag.index index.scope=dev-small|full [embedding.device=cuda embedding.dtype=float16]` (full은 Colab L4 약 21분. 옵션: slices/04-index.md)
 - 검색: `uv run python -m rag.search [index.scope=full]` (질의 임베딩 캐시가 없을 때: slices/05-retrieve.md)
-- 생성: `uv run python -m rag.generate ask.qid=<dev qid>` (옵션·API 한도: slices/06-generate.md. 5xx는 서버 상태부터 확인)
+- 생성: `uv run python -m rag.generate ask.qid=<dev qid>` (옵션·API 한도: slices/06-generate.md, 호출당 토큰: D-11. 5xx는 서버 상태부터 확인)
 - multi-doc 묶음: `uv run python -m rag.multidoc.pools` (→ `data/multidoc/pools.jsonl`, 약 20초. 유형·값은 D-13)
 - multi-doc 생성 준비: `uv run python -m rag.multidoc.prepare [multidoc.gen.n_per_type=N]` (→ `data/multidoc/gen_in`·`docs`, 있는 후보 집합은 건너뜀). 생성은 `multidoc-writer` 에이전트(meet-rag 스킬)
 - multi-doc 검사: `uv run python -m rag.multidoc.check [--dry-run] [multidoc.gen.n_per_type=N]` (OpenRouter 유료, 검사 호출당 약 $0.0034, 원문에 그대로 없는 인용의 Jev 판정은 호출당 약 $0.00003. 실행 전 `--dry-run`으로 두 호출 수 보고·승인. 기록 있는 후보 집합은 검사 호출 없이 다시 판정하고, Jev는 판정 안 된 인용만 부른다 → `data/multidoc/queries.jsonl`. 판정 규칙은 D-14)
@@ -28,7 +28,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - `docs/SPEC.md`의 평가 프로토콜은 사용자 승인 없이 바꾸지 않는다
 - 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다
 - 평가 질의(`summary_q`)는 dev 분할만 Google AI Studio 무료 쿼터로 보낸다(`test`는 검색 단계 종료 시 사용자 지시 1회 실행에서만). 질의 전체처럼 많이 보내는 실행은 호출 수·소요 시간(RPD·TPM 한도)을 보고하고 사용자 승인 후에 한다. 노트북·로그에 질의 원문을 대량으로 남기지 않는다(D-10)
-- 외부 GPU(Colab) 실행과 유료 API(OpenRouter, Jev) 호출은 예상 시간·비용을 보고하고 사용자 승인 후에만 한다. dev-small은 Jupyter 노트북(`notebooks/`)에서 자유롭게 실행하되, GPU가 필요한 dev-small 임베딩도 Colab 승인 대상이다
+- 외부 GPU(Colab) 실행과 유료 API(OpenRouter) 호출은 예상 시간·비용을 보고하고 사용자 승인 후에만 한다. dev-small은 Jupyter 노트북(`notebooks/`)에서 자유롭게 실행하되, GPU가 필요한 dev-small 임베딩도 Colab 승인 대상이다
 - `data/`와 `.env`는 어떤 형태로도 커밋하지 않는다 (AI Hub 재배포 제한)
 - `owner/`는 사용자가 의도를 전달하는 메모다. 읽고 의도를 파악하되 어떤 문서·코드에서도 참조하지 않고, 사용자 요청 없이 수정하지 않는다
 
