@@ -48,7 +48,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 
 ### 3. 검사·판정 `rag.multidoc.check`
 
-검사 호출은 생성 쪽의 `seed_doc_ids`·`answer`·`evidence`를 보지 않는다. 질의와 후보 집합 전체 문서(번호를 붙인 원문과 메타데이터, 질의자 이름·직위)만 보낸다(`check_v2`). 질의자를 문서 머리에 넣어야 인물 중심 질의에서 어느 문서가 그 사람의 발언인지 판정할 수 있다.
+검사 호출은 생성 쪽의 `seed_doc_ids`·`answer`·`evidence`를 보지 않는다. 질의와 후보 집합 전체 문서(번호를 붙인 원문과 메타데이터, 질의자 이름·직위)만 보낸다(`check_v2`, S8c부터 `check_v3` 검사 입력 파일). 질의자를 문서 머리에 넣어야 인물 중심 질의에서 어느 문서가 그 사람의 발언인지 판정할 수 있다.
 
 - 검사 출력(structured outputs JSON 스키마): `answerable`(후보 집합 문서로 답할 수 있는가), `elements`(요소마다 `fact`와 `support`. `support`는 그 요소를 담은 모든 문서의 `doc_id`와 원문 인용)
 - 코드 판정. 아래를 모두 만족하면 통과다
@@ -114,7 +114,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 - `check`: `prompt_version`(S8c부터 check_v3), `api_key_env` `OPENROUTER_API`(Jev 인용 판정), `quote_semantic`(S8b). 파일럿 검사(luna)는 `model` `openai/gpt-6-luna`, `provider` `openai`(고정), `seed` 20260929, `reasoning_effort` medium, `check_v2`로 했고 S8c에서 이 키들을 지웠다
 - `paths`: `multidoc_gen_in`, `multidoc_docs`, `multidoc_gen_out`, `multidoc_check`, `multidoc_queries`
 
-지시 본문은 `configs/multidoc/prompt/gen_vN.yaml`, `check_vN.yaml`(지금 생성 `conf`·`questioner` v4, `law` v3, 검사 v2. `conf` order 0\~9는 v3로 만든 결과를 그대로 쓴다). 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
+지시 본문은 `configs/multidoc/prompt/gen_vN.yaml`, `check_vN.yaml`(지금 생성 `conf`·`questioner` v4, `law` v3, 검사 v3(S8c). `conf` order 0\~9는 v3로 만든 결과를 그대로 쓴다). 기록을 남긴 버전 파일은 고치지 않고 새 버전을 만든다(S6과 같다).
 
 ## 비용과 승인
 
@@ -170,6 +170,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 | 2차 | 30, `gen_v2`, 에이전트 3개 병렬 8\~14분 | `check_v2` 16호출, 입력 202,972·출력 43,947 토큰, $0.0473 | 통과 8 |
 | 3차 | 30, `gen_v3`(questioner는 뒤에 v4로 대체) | 하지 않음 | 생성 `ok` 20 |
 | 4차 | `questioner` 0\~9 `gen_v4` 6.5분, `conf` 10\~19 `gen_v4` 19분 | `check_v2` 31호출, 입력 467,394·출력 91,967 토큰, $0.1044 | 통과 11, 새 규칙 15 |
+| 재검사(S8c) | 4차 결과 그대로 | `check_v3` `multidoc-checker` 16작업(동시 3개, 작업당 25\~75초, 약 6분), Jev 0건 | 통과 20 |
 
 - 검사 비용 합 $0.1890(OpenRouter `usage.cost`). 호출당 약 $0.0034(4차)
 - 생성 입력(order 0\~9) SHA-256 `0697a168…64fc`, 두 번 실행 일치. `pools.jsonl`(950개) SHA-256 `d1e0f04ae92c3c0bc8cc69d571d4f226b6aed4e5952b6f51bac5bc6b0d4c2bbc`, 두 번 실행 일치, 기존 750개 레코드 그대로
