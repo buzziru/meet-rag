@@ -29,7 +29,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 2. `uv run python -m rag.multidoc.prepare [N]`: 생성 입력 `gen_in`·원문 `docs`. 있는 후보 집합은 건너뛴다
 3. `multidoc-writer` 작업자 풀(작업당 후보 집합 10개) → `gen_out`
 4. `uv run python -m rag.multidoc.check --prepare [N]`: 생성 `ok`인 후보 집합의 검사 입력 `check_in`
-5. `multidoc-checker` 작업자 풀(작업당 2개) → `check_out`
+5. `multidoc-checker` 작업자 풀(작업당 2개) → `check_out`. 큐는 `check_in`이 있고 `check_out`이 없는 후보 집합에서 `--dry-run`이 출력한 보류 `pool_id`를 뺀 것이다
 6. `uv run python -m rag.multidoc.check --dry-run [N]`로 대기 수와 Jev 호출 수를 본다. Jev(원문에 그대로 없는 인용의 의미 판정)는 OpenRouter 유료(호출당 약 $0.00003)라 호출 수와 비용을 보고하고 승인받는다
 7. `uv run python -m rag.multidoc.check [N]`: 형식 검사·Jev·코드 판정 → 검사 기록 `check/`, 통과 질의 `queries.jsonl`(판정 규칙 D-14). 형식이 틀린 출력은 `check_out/rejected/`로 옮겨져 5로 돌아가고, 후보 집합당 거부가 3회(`multidoc.check.max_rejects`)에 닿으면 보류(`--dry-run`의 보류 수)로 남는다. 보류는 판정에 넣지 않으므로, 메인이 그 후보 집합과 거부 파일을 사용자에게 보고하고 처리를 정한다(PR #38 코멘트)
 
