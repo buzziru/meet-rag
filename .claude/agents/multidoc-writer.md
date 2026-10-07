@@ -11,7 +11,7 @@ hooks:
       hooks:
         - type: command
           # uv·셸 실패도 거부로 바꾼다(종료 코드 2만 도구를 막는다)
-          command: 'uv run --no-project --quiet python "${CLAUDE_PROJECT_DIR}/.claude/hooks/multidoc_read_guard.py" || exit 2'
+          command: 'uv run --no-project --quiet python "${CLAUDE_PROJECT_DIR}/.claude/hooks/multidoc_read_guard.py" multidoc-writer || exit 2'
           timeout: 30
 # model: 생성과 검사의 모델 계열을 나누는 결정(S8 지시서)에 따라 Sonnet으로 고정한다. 검사는 OpenRouter gpt-6-luna
 model: sonnet
