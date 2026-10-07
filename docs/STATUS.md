@@ -13,7 +13,7 @@
 - 없음
 
 ## 미완 상태
-- 로컬 `data/multidoc/`: `pools.jsonl` 950개(conf·questioner 350, law 250, SHA-256 `d1e0f04a…2bbc`), 파일럿 `gen_out`·`check` 40개(conf 0\~19, law·questioner 0\~9), `queries.jsonl` 15건(`c56dba8e…`), `pilot_v1`\~`pilot_v3`
+- 로컬 `data/multidoc/`: `pools.jsonl` 950개(conf·questioner 350, law 250, SHA-256 `d1e0f04a…2bbc`), 파일럿 `gen_out`·`check` 40개(conf 0\~19, law·questioner 0\~9), `queries.jsonl` 15건(`fba96654…`), `pilot_v1`\~`pilot_v3`
 - 파일럿은 본 생성 검사가 끝날 때까지 수율 개선 자료로 보관하고, 그 뒤 `pilot_v1`\~`v4`를 지운다(사용자 결정)
 
 ## 다음 행동
@@ -26,7 +26,7 @@
 5. [B] 다음 후보: H2 reranker → H7 문서 집계. H12(화자 메타데이터)는 백로그
 
 ## 사용자 확인 필요
-- PR #31 병합 여부와 판단할 곳(탐색 폭 `n // 4`를 코드 상수로 둘지)
+- PR #31 병합 여부
 - G3 파일럿 검수(위 2)를 본 생성 전·후 어느 때 할지
 - 작업자 풀의 작업 크기 k(생성 후보 집합 몇 개씩, 하네스 대기 20)
 - SPEC 미결 1(G1, D-03 해결)에 해결 표시를 할지(PR #18에서 물음)
