@@ -15,9 +15,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 인덱스: `uv run python -m rag.index index.scope=dev-small|full [embedding.device=cuda embedding.dtype=float16]` (full은 Colab L4 약 21분. 옵션: slices/04-index.md)
 - 검색: `uv run python -m rag.search [index.scope=full]` (질의 임베딩 캐시가 없을 때: slices/05-retrieve.md)
 - 생성: `uv run python -m rag.generate ask.qid=<dev qid>` (옵션·API 한도: slices/06-generate.md, 호출당 토큰: D-11. 5xx는 서버 상태부터 확인)
-- multi-doc 묶음: `uv run python -m rag.multidoc.pools` (→ `data/multidoc/pools.jsonl`, 약 20초. 유형·값은 D-13)
-- multi-doc 생성 준비: `uv run python -m rag.multidoc.prepare [multidoc.gen.n_per_type=N]` (→ `data/multidoc/gen_in`·`docs`, 있는 후보 집합은 건너뜀). 생성은 `multidoc-writer` 에이전트(meet-rag 스킬)
-- multi-doc 검사: `uv run python -m rag.multidoc.check --prepare [multidoc.gen.n_per_type=N]`(→ `data/multidoc/check_in/`) → `multidoc-checker` 에이전트(meet-rag 스킬, → `check_out/`) → `uv run python -m rag.multidoc.check [...]`(판정 → `data/multidoc/queries.jsonl`). `--dry-run`은 생성·검사 준비·검사·판정 대기 수와 Jev 호출 수를 출력하고 호출하지 않는다. 진행 상태는 파일 존재로 정해져 중단 뒤 같은 명령으로 이어 간다. 원문에 그대로 없는 인용의 Jev 판정은 OpenRouter 유료(호출당 약 $0.00003)라 실행 전 호출 수 보고·승인. 판정 규칙은 D-14
+- multi-doc 질의(S8·G3): `uv run python -m rag.multidoc.pools` → `rag.multidoc.prepare` → `rag.multidoc.check --prepare` → `rag.multidoc.check [--dry-run]` (순서·작업자·승인: meet-rag 스킬, 유형·값 D-13, 판정 규칙 D-14)
 
 한글 출력이 깨지면 `PYTHONUTF8=1`로 실행한다. 파일은 `encoding="utf-8"`로 연다.
 
