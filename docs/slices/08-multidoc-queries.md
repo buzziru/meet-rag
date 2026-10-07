@@ -52,13 +52,13 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 
 - 검사 출력(structured outputs JSON 스키마): `answerable`(후보 집합 문서로 답할 수 있는가), `elements`(요소마다 `fact`와 `support`. `support`는 그 요소를 담은 모든 문서의 `doc_id`와 원문 인용)
 - 코드 판정. 아래를 모두 만족하면 통과다
-  1. 생성 쪽 `evidence`의 인용이 모두 해당 문서 `context`에 있다(공백을 한 칸으로 줄인 뒤 부분 문자열 대조). 검사 쪽 `support`의 인용이 원문에 없으면 그 근거 항목을 빼고(근거가 모두 빠진 요소도 뺀다) 2\~5를 판정하며, 뺀 수를 `dropped_quotes`로 남긴다(2026-10-06 변경, 아래 "파일럿 4차와 본 생성 준비")
+  1. 생성 쪽 `evidence`의 인용이 모두 해당 문서 `context`에 있다. 인용은 공백을 한 칸으로 줄여 원문에 그대로 있으면 인정하고, `quote_match.min_chars`자 이상이면 원문에서 가장 잘 맞는 부분 문자열과의 문자 유사도(rapidfuzz `partial_ratio`)가 `quote_match.min_ratio` 이상일 때도 인정한다. 인정한 인용은 고치지 않고 그대로 출력한다. 검사 쪽 `support`의 인용을 인정하지 못하면 그 근거를 빼고 판정한 결과와 두고 판정한 결과의 통과 여부를 비교해, 다르면 `quote_dependent`로 불통과하고 같으면 그 결과를 쓴다(인정하지 못한 수 `dropped_quotes`). 2026-10-06 변경, D-14
   2. `answerable`이 참
   3. 정답 문서(검사 쪽 `support`에 나온 문서의 합집합)가 2개 이상
   4. 필요성: 정답 문서마다 그 문서만 `support`에 있는 요소가 하나 이상 있다(다른 문서로 대신할 수 없다)
   5. 정답 문서 집합이 생성 쪽 `seed_doc_ids`와 같다
 - 5는 제안이다. 검사 쪽이 시작 묶음 밖 문서를 더 찾거나 시작 묶음 문서를 빼면 생성 쪽 기대 답과 정답이 어긋나므로 파일럿에서는 불통과로 두고, 어긋난 건수를 따로 센다. G3 검수 뒤 다시 정한다
-- 불통과는 사유 코드(`quote_missing`, `unanswerable`, `single_doc`, `substitutable`, `seed_mismatch`, `gen_skip`)를 모두 남긴다
+- 불통과는 사유 코드(`quote_missing`, `unanswerable`, `single_doc`, `substitutable`, `seed_mismatch`, `quote_dependent`, `gen_skip`)를 모두 남긴다
 
 ### 4. 출력
 
@@ -151,6 +151,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 - `src/rag/multidoc/pools.py`, `tests/test_multidoc_pools.py`: 유형별 후보 집합 수만(2026-10-06 사용자 결정)
 - `configs/config.yaml`(`multidoc.gen`·`multidoc.check`·`multidoc.n_pools_per_type`, `paths`), `configs/multidoc/prompt/`
 - `notebooks/08_01_파일럿.ipynb`
+- `pyproject.toml`, `uv.lock`: 인용 유사도 계산용 `rapidfuzz` 추가만(2026-10-07, PR #31)
 - `docs/DECISIONS.md`, `docs/PLAN.md` S8 체크, `CLAUDE.md` "명령" 절, 이 문서
 
 ## 범위 밖
@@ -173,4 +174,6 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 - 검사 비용 합 $0.1890(OpenRouter `usage.cost`). 호출당 약 $0.0034(4차)
 - 생성 입력(order 0\~9) SHA-256 `0697a168…64fc`, 두 번 실행 일치. `pools.jsonl`(950개) SHA-256 `d1e0f04ae92c3c0bc8cc69d571d4f226b6aed4e5952b6f51bac5bc6b0d4c2bbc`, 두 번 실행 일치, 기존 750개 레코드 그대로
 - 판정 규칙 변경 뒤 `check` 재실행: 새 호출 0건, 검사 기록 전체를 저장된 응답으로 다시 판정해 `queries.jsonl` 15건. 덧붙이는 값 없이 실행한 결과와 `multidoc.gen.n_per_type=20`으로 실행한 결과의 SHA-256이 같다(`f733915a…`)
+- 인용 유사도 대조 뒤(`quote_match` 0.8·15자) `check` 재실행: 새 호출 0건, 검사 쪽 인용 14개를 어절 경계에 맞춘 원문 대목으로 바꾸고 인정하지 못한 인용·`quote_dependent` 0건, 통과 15건 그대로. `queries.jsonl` SHA-256 `c56dba8e…`(인용이 원문 대목으로 바뀌어 달라짐)
+- 인용을 원문 대목으로 바꾸는 처리를 빼고 유사도 계산을 rapidfuzz `partial_ratio`로 바꾼 뒤(PR #31) `check` 재실행: 새 호출 0건, 인정하지 못한 인용·`quote_dependent` 0건, 통과 15건 그대로. `queries.jsonl` SHA-256 `fba96654…bf78`(인용이 검사 모델이 쓴 그대로 돌아가 달라짐)
 - Sonnet 비교 검사: 서브에이전트 6개 동시(그룹당 2\~7건, 3\~17분)와 conf-0012 재검사 1개. 결과 `_workspace/s08_sonnet_check/`(로컬)
