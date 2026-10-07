@@ -244,10 +244,11 @@ def summarize(records: list[dict]) -> None:
           f"비용 ${sum(u.get('cost') or 0 for u in jev):.5f}")
 
 
-def pool_state(pool_id: str, dirs: dict[str, Path]) -> str:
+def pool_state(pool_id: str, dirs: dict[str, Path], max_rejects: int) -> str:
     """후보 집합의 진행 단계를 파일 존재로 정한다.
 
-    gen_wait, prepare, check_wait, judge_wait, done 중 하나. 생성 입력도 없으면 none.
+    gen_wait, prepare, check_wait, judge_wait, held, done 중 하나. 생성 입력도 없으면 none.
+    held는 검사 출력이 max_rejects번 거부돼 자동으로 다시 검사하지 않는 보류 상태다.
     """
     def has(k):
         return (dirs[k] / f"{pool_id}.json").exists()
@@ -260,7 +261,9 @@ def pool_state(pool_id: str, dirs: dict[str, Path]) -> str:
     gen = read_json(dirs["gen_out"] / f"{pool_id}.json")
     if gen["status"] != "ok":
         return "judge_wait"  # 생성 skip은 검사 없이 기록한다
-    return "check_wait" if (dirs["check_in"] / f"{pool_id}.md").exists() else "prepare"
+    if not (dirs["check_in"] / f"{pool_id}.md").exists():
+        return "prepare"
+    return "held" if rejects(dirs["check_out"] / f"{pool_id}.json") >= max_rejects else "check_wait"
 
 
 def main() -> None:
@@ -278,7 +281,7 @@ def main() -> None:
             "check_in": ROOT / paths.multidoc_check_in,
             "check_out": ROOT / paths.multidoc_check_out, "check": ROOT / paths.multidoc_check}
     check_dir = dirs["check"]
-    state = {p["pool_id"]: pool_state(p["pool_id"], dirs) for p in pools}
+    state = {p["pool_id"]: pool_state(p["pool_id"], dirs, c.max_rejects) for p in pools}
     # 원문은 이번 선택과 검사 기록이 있는 후보 집합 모두에 필요하다(기록 전체를 다시 판정)
     checked = {f.stem for f in check_dir.glob("*.json")}
     docs = load_docs(cfg, [p for p in all_pools if p["pool_id"] in set(state) | checked])
@@ -291,10 +294,10 @@ def main() -> None:
         print(f"선택 {len(pools)}개: 생성 대기 {counts['gen_wait']}, "
               f"검사 준비 {counts['prepare']}, "
               f"검사 대기 {counts['check_wait']}, 판정 대기 {counts['judge_wait']}, "
-              f"완료 {counts['done']}, 생성 입력 없음 {counts['none']}")
+              f"보류 {counts['held']}, 완료 {counts['done']}, 생성 입력 없음 {counts['none']}")
         records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
         n_jev = sum(fill_quote_checks(r, contexts, s, lambda q, ps: {"p": None, "usage": None})
-                    for r in records if r["gen"]["status"] == "ok" and "response" in r)
+                    for r in records if r["gen"]["status"] == "ok")
         print(f"Jev 호출: 기존 검사 기록 {n_jev}건(판정 대기분은 검사 출력의 인용에 따라 정해진다)")
         return
 
@@ -341,13 +344,6 @@ def main() -> None:
             out = take_output(path)
             if out is None:
                 rejected += 1
-                if rejects(path) < c.max_rejects:
-                    continue
-                # 거부가 상한에 닿으면 다시 검사하지 않고 불통과로 기록한다(PR #37 코멘트)
-                rec["verdict"] = {"passed": False, "reasons": ["check_invalid"],
-                                  "gold_doc_ids": [], "dropped_quotes": 0}
-                save(rec)
-                print(p["pool_id"], rec["verdict"]["reasons"])
                 continue
             rec["response"] = json.dumps(out, ensure_ascii=False)
             rec["elements"] = to_doc_ids(out["elements"], p["doc_ids"])
@@ -363,14 +359,14 @@ def main() -> None:
         print(p["pool_id"], "통과" if rec["verdict"]["passed"] else rec["verdict"]["reasons"])
     if rejected:
         print(f"형식이 틀린 검사 출력 {rejected}개를 {dirs['check_out'] / 'rejected'}로 옮겼다"
-              f"(거부 {c.max_rejects}회 미만은 검사 대기, 닿으면 check_invalid)")
+              f"(거부 {c.max_rejects}회 미만은 검사 대기, 닿으면 보류)")
 
     # 판정 규칙이 바뀌면 검사 기록 전체를 저장된 응답으로 다시 판정한다. Jev는 아직 판정하지 않은
     # 인용만 부르고 확률을 기록에 남긴다. n_per_type은 새로 처리할 대상만 고르고, queries.jsonl은
     # 기록만으로 정해진다
     records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
     for r in records:
-        if r["gen"]["status"] == "ok" and "response" in r:  # check_invalid 기록은 응답이 없다
+        if r["gen"]["status"] == "ok":
             added = fill_quote_checks(r, contexts, s, ask)
             verdict = judge(r["gen"], r["elements"], json.loads(r["response"])["answerable"],
                             r["pool_doc_ids"], contexts, max_gold, seeds[r["pool_id"]],
@@ -390,9 +386,9 @@ def main() -> None:
                     "elements": resolve(r["elements"], contexts, quote_probs(r, s),
                                         s.min_prob)[0]},
                     ensure_ascii=False) + "\n")
-    left = Counter(pool_state(p["pool_id"], dirs) for p in pools)
+    left = Counter(pool_state(p["pool_id"], dirs, c.max_rejects) for p in pools)
     print(f"남은 작업: 생성 대기 {left['gen_wait']}, 검사 준비 {left['prepare']}, "
-          f"검사 대기 {left['check_wait']}")
+          f"검사 대기 {left['check_wait']}, 보류 {left['held']}")
     summarize(records)
 
 
