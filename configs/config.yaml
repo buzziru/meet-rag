@@ -95,7 +95,7 @@ multidoc:
     # 유형별 생성 지시 버전. 메인이 multidoc-writer에 넘길 지시 파일을 고른다(코드는 쓰지 않는다).
     # 파일럿 conf order 0~9와 law는 gen_v3로 만들었다(docs/slices/08-multidoc-queries.md)
     prompt_version: {conf: gen_v4, law: gen_v3, questioner: gen_v4}
-  # S8 검사(OpenRouter). 제공자를 고정해 다른 제공자로 넘어가지 않게 한다
+  # S8 검사 입력 지시와 판정(검사는 multidoc-checker 에이전트, D-14)
   check:
     # 검사는 multidoc-checker 에이전트(Sonnet)가 check_in 파일을 읽고 check_out에 쓴다(D-14, S8c).
     # api_key_env는 Jev 인용 의미 판정(OpenRouter)에 쓴다
