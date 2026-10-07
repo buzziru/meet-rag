@@ -151,6 +151,7 @@ S7 후보 집합(`data/multidoc/pools.jsonl`)마다 정답 문서가 여러 개(
 - `src/rag/multidoc/pools.py`, `tests/test_multidoc_pools.py`: 유형별 후보 집합 수만(2026-10-06 사용자 결정)
 - `configs/config.yaml`(`multidoc.gen`·`multidoc.check`·`multidoc.n_pools_per_type`, `paths`), `configs/multidoc/prompt/`
 - `notebooks/08_01_파일럿.ipynb`
+- `pyproject.toml`, `uv.lock`: 인용 유사도 계산용 `rapidfuzz` 추가만(2026-10-07, PR #31)
 - `docs/DECISIONS.md`, `docs/PLAN.md` S8 체크, `CLAUDE.md` "명령" 절, 이 문서
 
 ## 범위 밖
