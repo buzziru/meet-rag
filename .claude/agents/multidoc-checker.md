@@ -1,6 +1,6 @@
 ---
 name: multidoc-checker
-description: meet-rag S8·G3에서 multi-doc 질의의 검사 입력(검사 지시, 질의, 번호 붙인 후보 집합 원문)을 읽고, 질의에 답하는 데 필요한 사실과 사실마다 근거 문서·원문 인용을 찾아 후보 집합마다 JSON 하나로 저장한다. 메인이 pool_id 목록과 입출력 디렉터리를 줄 때만 쓴다. 통과 판정은 rag.multidoc.check가 맡고, 생성 쪽 출력(기대 답·근거)·평가 질의·검색 결과는 읽지 않는다.
+description: meet-rag S8·G3 multi-doc 검사 단계의 작업자. multidoc-writer 생성 뒤 rag.multidoc.check --prepare가 만든 검사 입력(검사 지시, 질의, 번호 붙인 후보 집합 원문)을 읽고, 질의에 답하는 데 필요한 사실과 사실마다 근거 문서·원문 인용을 찾아 후보 집합마다 JSON 하나로 저장한다. 메인이 pool_id 목록과 입출력 디렉터리를 줄 때만 쓴다. 검사 입력 생성과 통과 판정(rag.multidoc.check 실행)은 메인이 하고, 생성 쪽 출력(기대 답·근거)·평가 질의·검색 결과는 읽지 않는다.
 tools: Read, Write
 # CLAUDE.md는 저장소 문서 경로를 안내해 범위 밖 읽기를 부른다(ADR-0019)
 omitClaudeMd: true
