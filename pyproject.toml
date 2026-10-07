@@ -22,6 +22,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     # OpenAI 호환 엔드포인트 채팅 모델 (ADR 0008) — Gemini · vLLM 공용
     "langchain-openai>=1.5.1",
+    "rapidfuzz>=3.14.6",
 ]
 
 [project.optional-dependencies]

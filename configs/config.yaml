@@ -105,7 +105,7 @@ multidoc:
     max_tokens: 16000
     prompt_version: check_v2
     # 인용 대조(D-14, 노트북 08_01 9절). min_chars자 이상인 인용은 원문에서 가장 비슷한 대목과의 문자
-    # 유사도(difflib 비율)가 min_ratio 이상이면 인정한다. 짧은 인용은 격식어가 우연히 겹쳐 정확 대조만 한다.
+    # 유사도(rapidfuzz partial_ratio)가 min_ratio 이상이면 인정한다. 짧은 인용은 격식어가 우연히 겹쳐 정확 대조만 한다.
     # 파일럿에서 바꿔 옮긴 인용 19자 이상·0.86~0.99, 같은 후보 집합의 맞지 않는 대조는 4,285쌍 중 0.8 이상 1건
     quote_match:
       min_ratio: 0.8

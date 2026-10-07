@@ -13,12 +13,12 @@ import subprocess
 import sys
 from collections import Counter
 from datetime import datetime
-from difflib import SequenceMatcher
 from pathlib import Path
 
 from dotenv import load_dotenv
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
+from rapidfuzz import fuzz
 
 from rag.multidoc.prepare import META, load_docs, select, speaker_text
 
@@ -55,42 +55,19 @@ def quoted(quote: str, context: str) -> bool:
     return bool(q) and q in norm(context)
 
 
-def best_window(q: str, c: str) -> tuple[float, int]:
-    """공백을 줄인 인용 q와 원문 c에서 가장 비슷한 q 길이 대목의 (문자 유사도, 시작 위치).
-
-    원문의 모든 시작 위치를 훑는다. 창을 한 글자씩 밀며 인용과 겹치는 글자 수를 갱신해 유사도
-    상한(quick_ratio와 같은 값)을 구하고, 상한이 지금까지의 최고보다 높은 창만 유사도를 계산한다.
-    """
-    n = len(q)
-    need, win = Counter(q), Counter(c[:n])
-    common = sum((need & win).values())
-    best, at = 0.0, 0
-    for s in range(max(1, len(c) - n + 1)):
-        if s:
-            out, new = c[s - 1], c[s + n - 1]
-            common -= win[out] <= need[out]
-            win[out] -= 1
-            win[new] += 1
-            common += win[new] <= need[new]
-        bound = 2 * common / (n + min(n, len(c)))
-        if bound > best and (r := SequenceMatcher(None, q, c[s:s + n],
-                                                   autojunk=False).ratio()) > best:
-            best, at = r, s
-    return best, at
-
-
 def found(quote: str, context: str, match) -> bool:
     """인용이 원문에 있는가(지어낸 인용이 아닌가).
 
     공백을 한 칸으로 줄여 원문에 그대로 있으면 있다. 인용이 match.min_chars자 이상이면 원문에서
-    가장 비슷한 같은 길이 대목과의 문자 유사도(difflib 비율)가 match.min_ratio 이상일 때도 있다고
-    본다. LLM이 접속어·존칭·낱말을 바꿔 옮긴 인용을 받아들이고, 짧은 인용은 격식어가 우연히 겹쳐
-    유사도가 높게 나오므로 정확 대조만 한다(D-14).
+    가장 잘 맞는 부분 문자열과의 문자 유사도(rapidfuzz partial_ratio)가 match.min_ratio 이상일
+    때도 있다고 본다. LLM이 접속어·존칭·낱말을 바꿔 옮긴 인용을 받아들이고, 짧은 인용은 격식어가
+    우연히 겹쳐 유사도가 높게 나오므로 정확 대조만 한다(D-14).
     """
     q, c = norm(quote), norm(context)
     if not q:
         return False
-    return q in c or (len(q) >= match.min_chars and best_window(q, c)[0] >= match.min_ratio)
+    return q in c or (len(q) >= match.min_chars
+                      and fuzz.partial_ratio(q, c) / 100 >= match.min_ratio)
 
 
 def resolve(elements: list[dict], contexts: dict[str, str],
