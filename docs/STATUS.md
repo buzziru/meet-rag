@@ -3,32 +3,30 @@
 ## 현재 위치
 - naive RAG 베이스라인 완료(S1\~S6). dev-full Recall@5 0.8584, 목표 0.90(D-09)
 - multi-doc: S7·S8·S8b·S8c 완료(D-13, D-14). PR #37\~#39 병합
-- G3 본 생성: 생성 95작업 950개 완료, 검사 완료(2026-10-08, 큐 488작업 모두 done). 판정은 Jev 승인 대기로 아직 안 돌림
-- 진행 기록 `_workspace/s08_main_progress.md`, 큐 `_workspace/g3_queue.jsonl`, 작업 목록 `_workspace/g3_gen_jobs.txt`·`g3_check_jobs.txt`(검사 362번까지, 363\~393은 생성 86\~95분)
+- G3 본 생성 판정 완료(2026-10-08): 통과 638(conf 233, law 190, questioner 215) → `data/multidoc/queries.jsonl`. Jev 누적 13건 $0.00050. 생성·검사·판정 대기 0, 보류 0
+- PR #40(`fix/s08-check-long-lines`) 리뷰 대기: 검사 입력의 긴 줄(본문·안건)을 `max_line_chars`(2000)에서 나눔. 감사 위반 없음. 이 STATUS 커밋도 이 브랜치에 있음
+- 진행 기록 `_workspace/s08_main_progress.md`, 큐 `_workspace/g3_queue.jsonl`(작업 404까지 done), 판정 로그 `_workspace/g3_judge_run1\~3.log`
 
 ## 실행 중 작업
-- 없음(큐에 running 없음)
-- `check --dry-run multidoc.gen.n_per_type=350`: 생성 대기 0, 검사 대기 12(긴 줄 보류분), 판정 대기 908(검사 출력 743 + 생성 skip 165), 완료 30, 보류 0
+- 없음
 
-## 판정 대기
-- 판정 시 Jev 호출 11건(conf 5, law 4, questioner 2. 판정 대기분의 원문에 그대로 없는 인용을 읽기 전용 스크립트로 셈). 파일럿 157건 $0.0045 기준 $0.001 미만. 승인 전 실행하지 않음
-
-## 미완 상태
-- 파일럿 결과 `data/multidoc/pilot_v4/`, `pilot_v4_luna/`. 본 생성 검사가 끝나면 `pilot_v1`\~`v4` 삭제(사용자 결정, 아직 안 함)
-- 작업자 지시 미준수·위험 사례(쟁점 일부만 요소화, 특수문자 회피로 요소 누락, 긴 원문·검사 입력 일부만 읽음, 질의·답변 한 요소에 묶음, questioner 메타데이터 화자 불일치)는 진행 기록 "관찰"에 적음. 판정·검수에서 확인
-- 하네스 대기 24(큐 기록·배정 보조 스크립트, 이번 세션 배정 실수 2회), 25(작업자 Read 상한 대응)를 `_workspace/00_main_harness-pending.md`에 추가
+## 이번 세션 결정
+- Jev 11건·2건 승인, 긴 줄 12개는 fix 뒤 재검사, questioner-0305 재검사, 이미 검사한 것 중 최대 줄 2만 자 초과 6개 재검사
+- 재검사 19개는 줄을 나눈 입력으로 검사(나머지 762개는 이전 형식). 대체된 출력·기록은 `check_out/superseded/`, `check/superseded/`
 
 ## 다음 행동
-1. [D] 사용자 결정 3건(아래 "사용자 확인 필요") 받기 → Jev 11건 승인이면 `uv run python -m rag.multidoc.check multidoc.gen.n_per_type=350`으로 판정 → 통과 수·사유 집계 보고(300\~500건 확인)
-2. [A] 긴 줄 처리를 진행하기로 하면 fix 브랜치: `check --prepare`가 긴 문단을 줄바꿈으로 나눔 → 12개 check_in 재생성 → 검사 → 판정
-3. [D] G3 검수: 파일럿 통과 질의, 본 생성 뒤 무작위 50건 → 세트 SHA-256 동결
-4. [F] 하네스 대기 24·25 반영(chore/, harness:evolve)
+1. [D] PR #40 리뷰·병합(판단할 곳 1: law-0031에 2000자 초과 줄 6개 남음, 판단할 곳 3: 이전 형식 762개 재검사 안 함)
+2. [D] G3 검수: 파일럿 통과 질의, 본 생성 통과 중 무작위 50건 → 세트 SHA-256 동결. DECISIONS 기록 때 재검사 19개 목록과 `08c-checker-agent.md` 검사 입력 설명 갱신
+3. [D] 검수 뒤 `pilot_v1`\~`v4` 삭제(사용자 결정, 아직 안 함)
+4. [F] 하네스 대기 24·25 반영(`_workspace/00_main_harness-pending.md`, chore/, harness:evolve)
 5. [B] EXP-001 = H1 hybrid(dense + BM25 Kiwi, RRF). G3와 병렬 가능
 6. [B] 다음 후보: H2 reranker → H7 문서 집계. H12(화자 메타데이터)는 백로그
 
+## 다음 추가 생성 때 개선 후보
+- 생성 입력(`rag.multidoc.prepare`의 `gen_in`·`docs`)에도 `wrap_lines` 적용. 생성 작업자도 긴 원문 일부만 읽음(gen 52 law-0166, gen 54 law-0180, gen 94 questioner-0332)
+- 안건 중복 제거(2026-10-07 사용자 결정)
+- 작업자 지시 미준수(쟁점 일부만 요소화, 특수문자 회피로 요소 누락, 질의·답변 한 요소에 묶음)는 진행 기록 "관찰". 검수에서 확인
+
 ## 사용자 확인 필요
-- Jev 판정 호출 11건 승인
-- 긴 줄 12개: law-0085·0112·0123·0135·0146·0156·0166·0180·0203, questioner-0202·0229·0332(문서 한 줄 2.4만\~7.4만 자라 작업자가 끝까지 못 읽음). fix 브랜치로 줄 나눈 뒤 검사할지, 이번 세트에서 뺄지
-- questioner-0305 재검사: 작업자가 "11월 4일 문서 없음"으로 answerable=false를 적었으나 check_in 32행에 있음(70KB 입력 일부만 읽음). 그대로 두면 판정 탈락. 실패 건만 골라 다시 돌리면 편향이 생겨 지우지 않음
 - 전역 훅 `ko-doc-check`의 test 분할 오탐은 관찰 중
 - SPEC 미결 3(배포 지연 상한)은 H2 reranker 실험에서 결정(사용자)
