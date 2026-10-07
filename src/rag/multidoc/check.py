@@ -295,6 +295,8 @@ def main() -> None:
               f"검사 준비 {counts['prepare']}, "
               f"검사 대기 {counts['check_wait']}, 판정 대기 {counts['judge_wait']}, "
               f"보류 {counts['held']}, 완료 {counts['done']}, 생성 입력 없음 {counts['none']}")
+        if counts["held"]:  # 검사 작업에 넣지 않고 사용자에게 보고한다
+            print("보류:", ", ".join(k for k, v in state.items() if v == "held"))
         records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
         n_jev = sum(fill_quote_checks(r, contexts, s, lambda q, ps: {"p": None, "usage": None})
                     for r in records if r["gen"]["status"] == "ok")

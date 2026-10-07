@@ -34,7 +34,7 @@ check ─► 스키마 검사 ─► 검사 기록 check/{pool_id}.json ─► J
 
 - `--prepare`: 선택한 후보 집합 중 생성 출력이 `ok`이고 검사 기록과 `check_in` 파일이 없는 것의 검사 입력을 `paths.multidoc_check_in`에 쓴다. 생성 `skip`은 판정 대기로 두고, 기본 실행이 검사 없이 기록(`gen_skip`)을 만든다
 - 기본 실행: `paths.multidoc_check_out`에 출력이 있고 검사 기록이 없는 후보 집합을 스키마로 검사해 검사 기록을 만들고(`recipe`에 검사 지시 버전·SHA-256, 검사 주체 `multidoc-checker`), Jev 판정과 코드 판정을 한다. 스키마에 맞지 않는 출력은 기록을 만들지 않고 `check_out/rejected/{pool_id}.{n}.json`으로 옮겨 다시 검사 대기에 둔다. 같은 후보 집합의 거부가 `multidoc.check.max_rejects`(3)회에 닿으면 자동으로 다시 검사하지 않고 보류(`held`)로 둔다. 보류는 판정 기록을 만들지 않으며 `--dry-run`과 판정 출력에 수로 나온다(PR #37·#38 코멘트). 그다음 기존처럼 검사 기록 전체를 다시 판정해 `queries.jsonl`을 쓴다
-- `--dry-run`: 준비할 수, 검사 대기 수(`check_in` 있고 `check_out` 없음), 판정 대기 수, Jev 호출 수(기존 기록분)를 출력한다
+- `--dry-run`: 준비할 수, 검사 대기 수(`check_in` 있고 `check_out` 없고 거부가 `max_rejects` 미만), 보류 수와 보류 `pool_id`, 판정 대기 수, Jev 호출 수(기존 기록분)를 출력한다
 - luna 호출 경로(OpenAI 클라이언트, `call`, `SCHEMA`의 structured outputs 용도)와 config의 `base_url`·`model`·`provider`·`seed`·`reasoning_effort`·`max_tokens`를 지운다. `api_key_env`는 Jev가 쓴다
 - 기존 검사 기록(luna)은 데이터로만 남는다
 
