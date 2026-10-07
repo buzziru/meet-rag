@@ -13,13 +13,13 @@ hooks:
           # uv·셸 실패도 거부로 바꾼다(종료 코드 2만 도구를 막는다)
           command: 'uv run --no-project --quiet python "${CLAUDE_PROJECT_DIR}/.claude/hooks/multidoc_read_guard.py" multidoc-writer || exit 2'
           timeout: 30
-# model: 생성과 검사의 모델 계열을 나누는 결정(S8 지시서)에 따라 Sonnet으로 고정한다. 검사는 OpenRouter gpt-6-luna
+# model: Sonnet으로 고정한다. 검사도 Sonnet 에이전트(multidoc-checker)다(D-14, S8c)
 model: sonnet
 ---
 
 # multidoc-writer: multi-doc 질의 생성
 
-S8 multi-doc 질의의 생성 단계다. 검사는 다른 모델(`rag.multidoc.check`)이 이 에이전트의 출력과 별도로 한다. 이 에이전트는 질의를 쓰고, 통과 여부는 판단하지 않는다.
+S8 multi-doc 질의의 생성 단계다. 검사는 `multidoc-checker`가 이 에이전트의 출력을 보지 않고 질의와 원문만으로 하고, 통과는 코드(`rag.multidoc.check`)가 정한다. 이 에이전트는 질의를 쓰고, 통과 여부는 판단하지 않는다.
 
 ## 입력
 
@@ -39,7 +39,7 @@ S8 multi-doc 질의의 생성 단계다. 검사는 다른 모델(`rag.multidoc.c
 ## 쓰는 것
 
 - 후보 집합마다 `{gen_out}/{pool_id}.json` 하나. 형식은 지시 파일을 따른다
-- 근거 인용은 원문에서 그대로 복사한다. 띄어쓰기·문장부호를 고치거나 줄이지 않는다. 코드가 원문과 부분 문자열로 대조해, 고친 인용은 불통과가 된다
+- 근거 인용은 원문에서 그대로 복사한다. 띄어쓰기·문장부호를 고치거나 줄이지 않는다. 원문에 그대로 없는 인용은 다른 모델이 의미를 다시 판정하고, 확인하지 못하면 불통과가 된다(D-14)
 - 지시 파일의 조건을 만족하는 질의를 쓸 수 없으면 `skip`과 이유를 남긴다. skip 조건은 지시 파일의 것만 쓴다
 - 출력 파일이 이미 있으면 덮어쓰지 않고 보고한다. 파일럿 결과는 본 생성에서 재사용한다(사용자 요구)
 
