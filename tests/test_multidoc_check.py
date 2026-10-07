@@ -15,6 +15,7 @@ from rag.multidoc.check import (
     resolve,
     take_output,
     to_doc_ids,
+    wrap_lines,
 )
 
 POOL = ["a", "b", "c"]
@@ -181,10 +182,18 @@ def test_check_input_has_only_instruction_query_and_pool_docs():
                              "session_number", "agenda"]}
     docs = {d: {"context": CONTEXTS[d], "speakers": [{"name": "김", "position": "위원"}], **meta}
             for d in POOL}
-    text = check_input(prompt, "질의", POOL, docs)
+    text = check_input(prompt, "질의", POOL, docs, 2000)
     assert text.startswith("# 지시\n\nS\n\n# 입력\n\nQ: 질의")
     assert "[1] m m 김 위원" in text and "[3] m m" in text and "[4]" not in text
     assert "답" not in text.replace("답했다", "")  # 기대 답을 넣지 않는다
+
+
+def test_wrap_lines_splits_long_lines_at_sentence_ends_keeping_quotes():
+    text = "짧은 줄.\n가나다라. 마바사아? 자차카타! 파하."
+    wrapped = wrap_lines(text, 12)
+    assert wrapped.split("\n") ==["짧은 줄.", "가나다라. 마바사아?", "자차카타! 파하."]
+    assert quoted("마바사아? 자차카타!", wrapped)
+    assert wrap_lines(text, 100) == text
 
 
 def test_take_output_moves_partial_or_malformed_output_to_rejected(tmp_path):
