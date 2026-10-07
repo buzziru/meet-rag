@@ -1,6 +1,6 @@
 ---
 name: multidoc-writer
-description: meet-rag S8·G3에서 multi-doc 후보 집합의 생성 입력을 읽고 정답 문서가 여러 개인 질의, 기대 답, 문서별 근거 인용을 생성 지시 파일대로 써서 후보 집합마다 JSON 하나로 저장한다. 메인이 pool_id 목록과 지시 파일 경로를 줄 때만 쓴다. 검사·판정은 rag.multidoc.check가 맡고, 평가 질의·검색 결과는 읽지 않는다.
+description: meet-rag S8·G3에서 multi-doc 후보 집합의 생성 입력을 읽고 정답 문서가 여러 개인 질의, 기대 답, 문서별 근거 인용을 생성 지시 파일대로 써서 후보 집합마다 JSON 하나로 저장한다. 메인이 pool_id 목록과 지시 파일 경로를 줄 때만 쓴다. 검사는 multidoc-checker, 판정은 rag.multidoc.check가 맡고, 평가 질의·검색 결과는 읽지 않는다.
 tools: Read, Write
 # CLAUDE.md는 저장소 문서 경로(docs/slices 등)를 안내해 범위 밖 읽기를 불렀다(ADR-0019)
 omitClaudeMd: true
