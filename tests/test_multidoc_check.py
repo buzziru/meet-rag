@@ -1,14 +1,18 @@
+import json
+
 from omegaconf import OmegaConf
 
 from rag.multidoc.check import (
-    build_messages,
     candidates,
+    check_input,
     fill_quote_checks,
     found,
     judge,
+    pool_state,
     quote_probs,
     quoted,
     resolve,
+    take_output,
     to_doc_ids,
 )
 
@@ -168,7 +172,7 @@ def test_to_doc_ids_maps_numbers_and_flags_out_of_range():
     assert v["passed"] and v["dropped_quotes"] == 1
 
 
-def test_build_messages_sends_only_query_and_pool_docs():
+def test_check_input_has_only_instruction_query_and_pool_docs():
     prompt = OmegaConf.create({"system": "S",
                                "document": "[{n}] {date} {agenda} {speakers}\n{text}",
                                "user": "Q: {query}\n{documents}"})
@@ -176,8 +180,44 @@ def test_build_messages_sends_only_query_and_pool_docs():
                              "session_number", "agenda"]}
     docs = {d: {"context": CONTEXTS[d], "speakers": [{"name": "김", "position": "위원"}], **meta}
             for d in POOL}
-    msgs = build_messages(prompt, "질의", POOL, docs)
-    user = msgs[1]["content"]
-    assert user.startswith("Q: 질의")
-    assert "[1] m m 김 위원" in user and "[3] m m" in user and "[4]" not in user
-    assert "답" not in user.replace("답했다", "")  # 기대 답을 보내지 않는다
+    text = check_input(prompt, "질의", POOL, docs)
+    assert text.startswith("# 지시\n\nS\n\n# 입력\n\nQ: 질의")
+    assert "[1] m m 김 위원" in text and "[3] m m" in text and "[4]" not in text
+    assert "답" not in text.replace("답했다", "")  # 기대 답을 넣지 않는다
+
+
+def test_take_output_moves_partial_or_malformed_output_to_rejected(tmp_path):
+    good = {"answerable": True, "elements": [{"fact": "f", "support": [{"doc": 1, "quote": "q"}]}]}
+    (tmp_path / "ok.json").write_text(json.dumps(good), encoding="utf-8")
+    (tmp_path / "cut.json").write_text('{"answerable": true, "elem', encoding="utf-8")
+    bad = {"answerable": True, "elements": [{"fact": "f", "support": [{"doc": "1", "quote": "q"}]}]}
+    (tmp_path / "bad.json").write_text(json.dumps(bad), encoding="utf-8")
+    assert take_output(tmp_path / "ok.json") == good
+    assert take_output(tmp_path / "cut.json") is None
+    assert take_output(tmp_path / "bad.json") is None
+    assert sorted(f.name for f in (tmp_path / "rejected").iterdir()) == ["bad.json", "cut.json"]
+    assert (tmp_path / "ok.json").exists() and not (tmp_path / "cut.json").exists()
+
+
+def test_pool_state_follows_files_so_work_resumes(tmp_path):
+    dirs = {k: tmp_path / k for k in ["gen_in", "gen_out", "check_in", "check_out", "check"]}
+    for d in dirs.values():
+        d.mkdir()
+
+    def put(k, name, data="{}"):
+        (dirs[k] / name).write_text(data, encoding="utf-8")
+
+    assert pool_state("p", dirs) == "none"
+    put("gen_in", "p.json")
+    assert pool_state("p", dirs) == "gen_wait"
+    put("gen_out", "p.json", json.dumps({"status": "ok"}))
+    assert pool_state("p", dirs) == "prepare"
+    put("check_in", "p.md", "")
+    assert pool_state("p", dirs) == "check_wait"
+    put("check_out", "p.json")
+    assert pool_state("p", dirs) == "judge_wait"
+    put("check", "p.json")
+    assert pool_state("p", dirs) == "done"
+    # 생성 skip은 검사 없이 판정 대기다
+    put("gen_out", "q.json", json.dumps({"status": "skip"}))
+    assert pool_state("q", dirs) == "judge_wait"

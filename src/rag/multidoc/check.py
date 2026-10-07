@@ -1,15 +1,18 @@
-"""multi-doc 생성 결과를 다른 모델(OpenRouter)로 검사하고 코드로 판정한다.
+"""multi-doc 생성 결과의 검사 입력을 만들고, 검사 에이전트 출력을 코드로 판정한다.
 
-명세는 docs/slices/08-multidoc-queries.md. 검사 호출에는 질의와 후보 집합 전체 원문만 보내고,
-생성 쪽 시작 묶음·기대 답·근거는 보내지 않는다. 검사 기록이 이미 있는 후보 집합은 건너뛴다(재사용).
+명세는 docs/slices/08-multidoc-queries.md, 08c-checker-agent.md. 검사 입력에는 질의와 후보 집합
+전체 원문만 넣고 생성 쪽 시작 묶음·기대 답·근거는 넣지 않는다. 검사는 multidoc-checker
+에이전트가 check_in 파일을 읽고 check_out에 쓴다. 진행 상태는 파일 존재로 정해져 중단 뒤
+같은 명령으로 이어 간다.
 
-    uv run python -m rag.multidoc.check [--dry-run] [hydra override...]
+    uv run python -m rag.multidoc.check [--prepare | --dry-run] [hydra override...]
 """
 
 import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.request
@@ -26,26 +29,6 @@ from rag.multidoc.prepare import META, load_docs, select, speaker_text
 
 ROOT = Path(__file__).resolve().parents[3]
 PROMPT_DIR = ROOT / "configs" / "multidoc" / "prompt"
-
-SCHEMA = {
-    "type": "object",
-    "properties": {
-        "answerable": {"type": "boolean"},
-        "elements": {"type": "array", "items": {
-            "type": "object",
-            "properties": {
-                "fact": {"type": "string"},
-                "support": {"type": "array", "items": {
-                    "type": "object",
-                    "properties": {"doc": {"type": "integer"}, "quote": {"type": "string"}},
-                    "required": ["doc", "quote"], "additionalProperties": False}},
-            },
-            "required": ["fact", "support"], "additionalProperties": False}},
-    },
-    "required": ["answerable", "elements"],
-    "additionalProperties": False,
-}
-
 
 def norm(text: str) -> str:
     return " ".join(text.split())
@@ -188,15 +171,44 @@ def judge(gen: dict, elements: list[dict] | None, answerable: bool, pool_doc_ids
             "dropped_quotes": n_support - n_matched}
 
 
-def build_messages(prompt, query: str, pool_doc_ids: list[str],
-                   docs: dict[str, dict]) -> list[dict]:
-    """후보 집합 문서에 1부터 번호를 붙인다. 번호 순서는 pool_doc_ids(오름차순)다."""
+def check_input(prompt, query: str, pool_doc_ids: list[str], docs: dict[str, dict]) -> str:
+    """검사 입력 파일 본문. 후보 집합 문서에 1부터 번호를 붙인다(pool_doc_ids 순서, 오름차순)."""
     blocks = [prompt.document.format(n=i, text=docs[d]["context"],
                                      speakers=speaker_text(docs[d]["speakers"]),
                                      **{k: docs[d][k] for k in META})
               for i, d in enumerate(pool_doc_ids, 1)]
     user = prompt.user.format(query=query, documents="\n\n".join(blocks))
-    return [{"role": "system", "content": prompt.system}, {"role": "user", "content": user}]
+    return f"# 지시\n\n{prompt.system}\n\n# 입력\n\n{user}"
+
+
+def valid_output(out) -> bool:
+    """검사 출력이 {answerable, elements[{fact, support[{doc, quote}]}]} 형식인가."""
+    return (isinstance(out, dict) and isinstance(out.get("answerable"), bool)
+            and isinstance(out.get("elements"), list)
+            and all(isinstance(el, dict) and isinstance(el.get("fact"), str)
+                    and isinstance(el.get("support"), list)
+                    and all(isinstance(x, dict) and type(x.get("doc")) is int
+                            and isinstance(x.get("quote"), str) for x in el["support"])
+                    for el in out["elements"]))
+
+
+def read_output(path: Path) -> dict | None:
+    """검사 출력 파일을 읽는다. 쓰다 만 파일이나 형식이 틀린 파일이면 None."""
+    try:
+        out = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    return out if valid_output(out) else None
+
+
+def take_output(path: Path) -> dict | None:
+    """검사 출력을 읽는다. 쓰다 만 출력이나 형식 오류면 같은 폴더의 rejected/로 옮겨 다시 검사
+    대기로 두고 None을 돌려준다."""
+    out = read_output(path)
+    if out is None:
+        (path.parent / "rejected").mkdir(exist_ok=True)
+        shutil.move(path, path.parent / "rejected" / path.name)
+    return out
 
 
 def to_doc_ids(elements: list[dict], pool_doc_ids: list[str]) -> list[dict]:
@@ -212,16 +224,6 @@ def load_prompt(version: str):
     return OmegaConf.load(path), hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def call(client, c, messages: list[dict]) -> tuple[str, dict]:
-    resp = client.chat.completions.create(
-        model=c.model, messages=messages, seed=c.seed, max_tokens=c.max_tokens,
-        response_format={"type": "json_schema",
-                         "json_schema": {"name": "check", "strict": True, "schema": SCHEMA}},
-        extra_body={"provider": {"order": [c.provider], "allow_fallbacks": False},
-                    "reasoning": {"effort": c.reasoning_effort}, "usage": {"include": True}})
-    return resp.choices[0].message.content, resp.usage.model_dump()
-
-
 def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -232,53 +234,78 @@ def summarize(records: list[dict]) -> None:
     for t in sorted({r["type"] for r in records}):
         rs = {x: n for (tt, x), n in reasons.items() if tt == t}
         print(f"{t}: 통과 {by_type[(t, 'pass')]}, 불통과 {by_type[(t, 'fail')]} {rs}")
-    usage = [r["usage"] for r in records if r.get("usage")]
-    print(f"검사 호출 {len(usage)}건, 입력 토큰 {sum(u['prompt_tokens'] for u in usage):,}, "
-          f"출력 토큰 {sum(u['completion_tokens'] for u in usage):,}, "
-          f"비용 ${sum(u.get('cost') or 0 for u in usage):.4f}")
     jev = [x["usage"] for r in records for x in r.get("quote_checks", [])]
     print(f"Jev 판정 {len(jev)}건, 입력 토큰 {sum(u['input_tokens'] for u in jev):,}, "
           f"비용 ${sum(u.get('cost') or 0 for u in jev):.5f}")
 
 
+def pool_state(pool_id: str, dirs: dict[str, Path]) -> str:
+    """후보 집합의 진행 단계를 파일 존재로 정한다.
+
+    gen_wait, prepare, check_wait, judge_wait, done 중 하나. 생성 입력도 없으면 none.
+    """
+    def has(k):
+        return (dirs[k] / f"{pool_id}.json").exists()
+    if has("check"):
+        return "done"
+    if not has("gen_out"):
+        return "gen_wait" if has("gen_in") else "none"
+    if (dirs["check_out"] / f"{pool_id}.json").exists():
+        return "judge_wait"
+    gen = read_json(dirs["gen_out"] / f"{pool_id}.json")
+    if gen["status"] != "ok":
+        return "judge_wait"  # 생성 skip은 검사 없이 기록한다
+    return "check_wait" if (dirs["check_in"] / f"{pool_id}.md").exists() else "prepare"
+
+
 def main() -> None:
     args = sys.argv[1:]
-    dry_run = "--dry-run" in args
+    dry_run, prepare = "--dry-run" in args, "--prepare" in args
     with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
-        cfg = compose(config_name="config", overrides=[a for a in args if a != "--dry-run"])
+        cfg = compose(config_name="config",
+                      overrides=[a for a in args if a not in ("--dry-run", "--prepare")])
     c, paths = cfg.multidoc.check, cfg.paths
     with (ROOT / paths.multidoc_pools).open(encoding="utf-8") as f:
         all_pools = [json.loads(line) for line in f]
     pools = select(all_pools, cfg.multidoc.gen.n_per_type)
     prompt, prompt_sha = load_prompt(c.prompt_version)
-    gen_out, check_dir = ROOT / paths.multidoc_gen_out, ROOT / paths.multidoc_check
+    dirs = {"gen_in": ROOT / paths.multidoc_gen_in, "gen_out": ROOT / paths.multidoc_gen_out,
+            "check_in": ROOT / paths.multidoc_check_in,
+            "check_out": ROOT / paths.multidoc_check_out, "check": ROOT / paths.multidoc_check}
+    check_dir = dirs["check"]
+    state = {p["pool_id"]: pool_state(p["pool_id"], dirs) for p in pools}
     # 원문은 이번 선택과 검사 기록이 있는 후보 집합 모두에 필요하다(기록 전체를 다시 판정)
     checked = {f.stem for f in check_dir.glob("*.json")}
-    selected = {p["pool_id"] for p in pools}
-    docs = load_docs(cfg, [p for p in all_pools if p["pool_id"] in selected | checked])
+    docs = load_docs(cfg, [p for p in all_pools if p["pool_id"] in set(state) | checked])
     contexts = {d: r["context"] for d, r in docs.items()}
     max_gold, s = cfg.multidoc.gen.max_gold, c.quote_semantic
     seeds = {p["pool_id"]: p["seed_doc_ids"] for p in all_pools}
+    counts = Counter(state.values())
 
-    todo = [p for p in pools if not (check_dir / f"{p['pool_id']}.json").exists()]
-    ready = [p for p in todo if (gen_out / f"{p['pool_id']}.json").exists()]
     if dry_run:
-        chars = {p["pool_id"]: sum(len(m["content"]) for m in
-                                   build_messages(prompt, "", p["doc_ids"], docs)) for p in todo}
-        ready_ids = {p["pool_id"] for p in ready}
-        print(f"검사 기록 없음 {len(todo)}개 중 생성 완료 {len(ready)}개. "
-              f"호출 수 상한 {len(todo)}(생성 skip은 호출하지 않음)")
-        print(f"입력 문자 수(질의 제외): 생성 완료분 {sum(chars[i] for i in ready_ids):,}, "
-              f"전체 {sum(chars.values()):,}")
+        print(f"선택 {len(pools)}개: 생성 대기 {counts['gen_wait']}, "
+              f"검사 준비 {counts['prepare']}, "
+              f"검사 대기 {counts['check_wait']}, 판정 대기 {counts['judge_wait']}, "
+              f"완료 {counts['done']}, 생성 입력 없음 {counts['none']}")
         records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
         n_jev = sum(fill_quote_checks(r, contexts, s, lambda q, ps: {"p": None, "usage": None})
                     for r in records if r["gen"]["status"] == "ok")
-        print(f"Jev 호출: 기존 검사 기록 {n_jev}건(새 검사분은 검사 응답의 인용에 따라 정해진다)")
+        print(f"Jev 호출: 기존 검사 기록 {n_jev}건(판정 대기분은 검사 출력의 인용에 따라 정해진다)")
+        return
+
+    if prepare:
+        dirs["check_in"].mkdir(parents=True, exist_ok=True)
+        todo = [p for p in pools if state[p["pool_id"]] == "prepare"]
+        for p in todo:
+            gen = read_json(dirs["gen_out"] / f"{p['pool_id']}.json")
+            (dirs["check_in"] / f"{p['pool_id']}.md").write_text(
+                check_input(prompt, gen["query"], p["doc_ids"], docs), encoding="utf-8",
+                newline="\n")
+        print(f"검사 입력 {len(todo)}개를 썼다 → {dirs['check_in']}. "
+              f"검사 대기 {counts['check_wait'] + len(todo)}개")
         return
 
     load_dotenv(ROOT / ".env")
-    from openai import OpenAI
-    client = OpenAI(base_url=c.base_url, api_key=os.environ[c.api_key_env])
     quote_prompt = load_prompt(s.prompt_version)[0]
 
     def ask(quote, passages):
@@ -292,40 +319,42 @@ def main() -> None:
         (check_dir / f"{r['pool_id']}.json").write_text(
             json.dumps(r, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
 
-    for p in ready:
-        gen = read_json(gen_out / f"{p['pool_id']}.json")
+    rejected = 0
+    for p in pools:
+        if state[p["pool_id"]] != "judge_wait":
+            continue
+        gen = read_json(dirs["gen_out"] / f"{p['pool_id']}.json")
         rec = {"pool_id": p["pool_id"], "type": p["type"], "pool_doc_ids": p["doc_ids"],
                "gen": gen, "recipe": {
                    "commit": commit, "gen_prompt_version": gen.get("prompt_version"),
                    "gen_prompt_sha256": load_prompt(gen["prompt_version"])[1]
-                   if gen.get("prompt_version") else None,
-                   "check_prompt_version": c.prompt_version, "check_prompt_sha256": prompt_sha,
-                   **OmegaConf.to_container(c, resolve=True)},
+                   if gen.get("prompt_version") else None, "checker": "multidoc-checker",
+                   "check_prompt_version": c.prompt_version, "check_prompt_sha256": prompt_sha},
                "time": datetime.now().isoformat(timespec="seconds")}
-        rec["recipe"].pop("api_key_env")
         if gen["status"] == "ok":
-            content, rec["usage"] = call(client, c, build_messages(prompt, gen["query"],
-                                                                   p["doc_ids"], docs))
-            rec["response"] = content
-            out = json.loads(content)
-            elements = to_doc_ids(out["elements"], p["doc_ids"])
-            rec["elements"] = elements
-            # 비용을 낸 검사 응답을 Jev 판정 전에 먼저 남긴다. Jev가 실패하면 다음 실행의
-            # 재판정에서 남은 인용만 묻는다
-            save(rec)
+            out = take_output(dirs["check_out"] / f"{p['pool_id']}.json")
+            if out is None:
+                rejected += 1
+                continue
+            rec["response"] = json.dumps(out, ensure_ascii=False)
+            rec["elements"] = to_doc_ids(out["elements"], p["doc_ids"])
+            save(rec)  # Jev 판정 전에 남겨, Jev가 실패해도 다음 실행 재판정에서 이어 간다
             fill_quote_checks(rec, contexts, s, ask)
-            rec["verdict"] = judge(gen, elements, out["answerable"], p["doc_ids"], contexts,
-                                   max_gold, p["seed_doc_ids"], probs=quote_probs(rec, s),
-                                   min_prob=s.min_prob)
+            rec["verdict"] = judge(gen, rec["elements"], out["answerable"], p["doc_ids"],
+                                   contexts, max_gold, p["seed_doc_ids"],
+                                   probs=quote_probs(rec, s), min_prob=s.min_prob)
         else:
             rec["verdict"] = judge(gen, None, False, p["doc_ids"], contexts, max_gold,
                                    probs={}, min_prob=s.min_prob)
         save(rec)
         print(p["pool_id"], "통과" if rec["verdict"]["passed"] else rec["verdict"]["reasons"])
+    if rejected:
+        print(f"형식이 틀린 검사 출력 {rejected}개를 "
+              f"{dirs['check_out'] / 'rejected'}로 옮겼다(검사 대기)")
 
-    # 판정 규칙이 바뀌면 검사 기록 전체를 저장된 응답으로 다시 판정한다(검사 호출 없음). Jev는
-    # 아직 판정하지 않은 인용만 부르고 확률을 기록에 남긴다. n_per_type은 새로 호출할 대상만 고르고,
-    # queries.jsonl은 기록만으로 정해진다
+    # 판정 규칙이 바뀌면 검사 기록 전체를 저장된 응답으로 다시 판정한다. Jev는 아직 판정하지 않은
+    # 인용만 부르고 확률을 기록에 남긴다. n_per_type은 새로 처리할 대상만 고르고, queries.jsonl은
+    # 기록만으로 정해진다
     records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
     for r in records:
         if r["gen"]["status"] == "ok":
@@ -348,7 +377,9 @@ def main() -> None:
                     "elements": resolve(r["elements"], contexts, quote_probs(r, s),
                                         s.min_prob)[0]},
                     ensure_ascii=False) + "\n")
-    print(f"생성 대기 {len(todo) - len(ready)}개")
+    left = Counter(pool_state(p["pool_id"], dirs) for p in pools)
+    print(f"남은 작업: 생성 대기 {left['gen_wait']}, 검사 준비 {left['prepare']}, "
+          f"검사 대기 {left['check_wait']}")
     summarize(records)
 
 

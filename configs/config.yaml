@@ -35,6 +35,8 @@ paths:
   multidoc_gen_in: data/multidoc/gen_in
   multidoc_docs: data/multidoc/docs
   multidoc_gen_out: data/multidoc/gen_out
+  multidoc_check_in: data/multidoc/check_in  # 검사 입력(S8c, multidoc-checker가 읽는다)
+  multidoc_check_out: data/multidoc/check_out  # 검사 출력(multidoc-checker가 쓴다)
   multidoc_check: data/multidoc/check
   multidoc_queries: data/multidoc/queries.jsonl
 
@@ -95,15 +97,10 @@ multidoc:
     prompt_version: {conf: gen_v4, law: gen_v3, questioner: gen_v4}
   # S8 검사(OpenRouter). 제공자를 고정해 다른 제공자로 넘어가지 않게 한다
   check:
-    base_url: https://openrouter.ai/api/v1
+    # 검사는 multidoc-checker 에이전트(Sonnet)가 check_in 파일을 읽고 check_out에 쓴다(D-14, S8c).
+    # api_key_env는 Jev 인용 의미 판정(OpenRouter)에 쓴다
     api_key_env: OPENROUTER_API
-    model: openai/gpt-6-luna
-    provider: openai
-    seed: ${seed}
-    # 이 모델은 temperature를 받지 않는다(OpenRouter 지원 파라미터, 2026-10-06)
-    reasoning_effort: medium
-    max_tokens: 16000
-    prompt_version: check_v2
+    prompt_version: check_v3
     # 인용 의미 판정(D-14, 노트북 08_02). 원문에 그대로 없는 인용만 문서를 window_sentences문장씩 묶은
     # 대목 중 partial_ratio 상위 top_k개를 골라 Jev에 묻고, 같은 의미일 확률이 min_prob 이상이면 인정한다.
     # 파일럿에서 바꿔 옮긴 인용·원문 그대로 24개 0.93~0.98, 뜻을 바꾼 변형 30개 중 0.9 이상 4개(모두 부정)
