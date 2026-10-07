@@ -201,13 +201,18 @@ def read_output(path: Path) -> dict | None:
     return out if valid_output(out) else None
 
 
+def rejects(path: Path) -> int:
+    """검사 출력 path가 형식 오류로 rejected/에 옮겨진 횟수."""
+    return len(list((path.parent / "rejected").glob(f"{path.stem}.*.json")))
+
+
 def take_output(path: Path) -> dict | None:
-    """검사 출력을 읽는다. 쓰다 만 출력이나 형식 오류면 같은 폴더의 rejected/로 옮겨 다시 검사
-    대기로 두고 None을 돌려준다."""
+    """검사 출력을 읽는다. 쓰다 만 출력이나 형식 오류면 같은 폴더의 rejected/{이름}.{n}.json으로
+    옮겨 다시 검사 대기로 두고 None을 돌려준다(n은 그 후보 집합의 거부 순번)."""
     out = read_output(path)
     if out is None:
         (path.parent / "rejected").mkdir(exist_ok=True)
-        shutil.move(path, path.parent / "rejected" / path.name)
+        shutil.move(path, path.parent / "rejected" / f"{path.stem}.{rejects(path) + 1}.json")
     return out
 
 
@@ -332,9 +337,17 @@ def main() -> None:
                    "check_prompt_version": c.prompt_version, "check_prompt_sha256": prompt_sha},
                "time": datetime.now().isoformat(timespec="seconds")}
         if gen["status"] == "ok":
-            out = take_output(dirs["check_out"] / f"{p['pool_id']}.json")
+            path = dirs["check_out"] / f"{p['pool_id']}.json"
+            out = take_output(path)
             if out is None:
                 rejected += 1
+                if rejects(path) < c.max_rejects:
+                    continue
+                # 거부가 상한에 닿으면 다시 검사하지 않고 불통과로 기록한다(PR #37 코멘트)
+                rec["verdict"] = {"passed": False, "reasons": ["check_invalid"],
+                                  "gold_doc_ids": [], "dropped_quotes": 0}
+                save(rec)
+                print(p["pool_id"], rec["verdict"]["reasons"])
                 continue
             rec["response"] = json.dumps(out, ensure_ascii=False)
             rec["elements"] = to_doc_ids(out["elements"], p["doc_ids"])
@@ -349,15 +362,15 @@ def main() -> None:
         save(rec)
         print(p["pool_id"], "통과" if rec["verdict"]["passed"] else rec["verdict"]["reasons"])
     if rejected:
-        print(f"형식이 틀린 검사 출력 {rejected}개를 "
-              f"{dirs['check_out'] / 'rejected'}로 옮겼다(검사 대기)")
+        print(f"형식이 틀린 검사 출력 {rejected}개를 {dirs['check_out'] / 'rejected'}로 옮겼다"
+              f"(거부 {c.max_rejects}회 미만은 검사 대기, 닿으면 check_invalid)")
 
     # 판정 규칙이 바뀌면 검사 기록 전체를 저장된 응답으로 다시 판정한다. Jev는 아직 판정하지 않은
     # 인용만 부르고 확률을 기록에 남긴다. n_per_type은 새로 처리할 대상만 고르고, queries.jsonl은
     # 기록만으로 정해진다
     records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
     for r in records:
-        if r["gen"]["status"] == "ok":
+        if r["gen"]["status"] == "ok" and "response" in r:  # check_invalid 기록은 응답이 없다
             added = fill_quote_checks(r, contexts, s, ask)
             verdict = judge(r["gen"], r["elements"], json.loads(r["response"])["answerable"],
                             r["pool_doc_ids"], contexts, max_gold, seeds[r["pool_id"]],

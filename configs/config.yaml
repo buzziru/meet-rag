@@ -101,6 +101,9 @@ multidoc:
     # api_key_env는 Jev 인용 의미 판정(OpenRouter)에 쓴다
     api_key_env: OPENROUTER_API
     prompt_version: check_v3
+    # 형식이 틀린 검사 출력은 rejected/로 옮겨 다시 검사한다. 거부가 이 횟수에 닿으면 check_invalid로
+    # 불통과 기록(PR #37 코멘트)
+    max_rejects: 3
     # 인용 의미 판정(D-14, 노트북 08_02). 원문에 그대로 없는 인용만 문서를 window_sentences문장씩 묶은
     # 대목 중 partial_ratio 상위 top_k개를 골라 Jev에 묻고, 같은 의미일 확률이 min_prob 이상이면 인정한다.
     # 파일럿에서 바꿔 옮긴 인용·원문 그대로 24개 0.93~0.98, 뜻을 바꾼 변형 30개 중 0.9 이상 4개(모두 부정)

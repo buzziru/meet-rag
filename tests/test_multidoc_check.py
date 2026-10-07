@@ -11,6 +11,7 @@ from rag.multidoc.check import (
     pool_state,
     quote_probs,
     quoted,
+    rejects,
     resolve,
     take_output,
     to_doc_ids,
@@ -195,7 +196,7 @@ def test_take_output_moves_partial_or_malformed_output_to_rejected(tmp_path):
     assert take_output(tmp_path / "ok.json") == good
     assert take_output(tmp_path / "cut.json") is None
     assert take_output(tmp_path / "bad.json") is None
-    assert sorted(f.name for f in (tmp_path / "rejected").iterdir()) == ["bad.json", "cut.json"]
+    assert sorted(f.name for f in (tmp_path / "rejected").iterdir()) == ["bad.1.json", "cut.1.json"]
     assert (tmp_path / "ok.json").exists() and not (tmp_path / "cut.json").exists()
 
 
@@ -221,3 +222,12 @@ def test_pool_state_follows_files_so_work_resumes(tmp_path):
     # 생성 skip은 검사 없이 판정 대기다
     put("gen_out", "q.json", json.dumps({"status": "skip"}))
     assert pool_state("q", dirs) == "judge_wait"
+
+
+def test_rejects_counts_each_rejection_of_same_pool(tmp_path):
+    for n in range(1, 4):
+        (tmp_path / "p.json").write_text('{"answerable": tr', encoding="utf-8")
+        assert take_output(tmp_path / "p.json") is None
+        assert rejects(tmp_path / "p.json") == n
+    assert (tmp_path / "rejected" / "p.3.json").exists()
+    assert rejects(tmp_path / "q.json") == 0
