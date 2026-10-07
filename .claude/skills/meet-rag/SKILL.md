@@ -16,7 +16,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 | `multidoc-writer` | multi-doc 질의 생성(문서 선택, 질의, 기대 답, 근거 인용) | S8 파일럿·G3 본 생성에서 `rag.multidoc.prepare` 뒤, 작업 하나에 후보 집합 10개 |
 | `multidoc-checker` | multi-doc 질의 검사(필요한 사실, 사실마다 근거 문서·인용) | 생성 뒤 `rag.multidoc.check --prepare` 다음, 작업 하나에 후보 집합 2개 |
 
-`multidoc-writer`·`multidoc-checker`는 검증 에이전트가 아니라 S8·G3의 작업자다. 메인이 직접 생성·검사하지 않고 Sonnet 에이전트에 맡긴다(ADR-0020). 프롬프트에 넣는 것은 다음과 같다. 디렉터리를 빼면 에이전트가 경로를 추측해 범위 밖을 읽거나 쓸 수 있다.
+`multidoc-writer`·`multidoc-checker`는 검증 에이전트가 아니라 S8·G3의 작업자다. 메인이 직접 생성·검사하지 않고 Sonnet 에이전트에 맡긴다(D-14, ADR-0020). 프롬프트에 넣는 것은 다음과 같다. 디렉터리를 빼면 에이전트가 경로를 추측해 범위 밖을 읽거나 쓸 수 있다.
 
 - 생성: 생성 지시 파일 경로, `pool_id` 목록, `paths.multidoc_gen_in`·`multidoc_docs`·`multidoc_gen_out`
 - 검사: `pool_id` 목록, `paths.multidoc_check_in`·`multidoc_check_out`. 검사 지시는 검사 입력 파일 안에 있다. 생성 출력 경로는 알려 주지 않는다

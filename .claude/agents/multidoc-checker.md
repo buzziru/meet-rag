@@ -13,7 +13,7 @@ hooks:
           # uv·셸 실패도 거부로 바꾼다(종료 코드 2만 도구를 막는다)
           command: 'uv run --no-project --quiet python "${CLAUDE_PROJECT_DIR}/.claude/hooks/multidoc_read_guard.py" multidoc-checker || exit 2'
           timeout: 30
-# model: 사용자가 생성·검사 같은 계열의 편향보다 검사 성능을 택했다(2026-10-07, ADR-0020)
+# model: 사용자가 생성·검사 같은 계열의 편향보다 검사 성능을 택했다(D-14, ADR-0020)
 model: sonnet
 ---
 
