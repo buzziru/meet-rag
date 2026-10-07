@@ -4,21 +4,20 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 
 ## 명령
 
+한 줄에 명령 하나와 호출법만 적는다. 옵션·절차·한도는 SLICE 문서나 DECISIONS에 두고 경로만 단다. SLICE가 끝나면 그 조각의 호출법만 여기에 추가한다. 매 세션 읽히는 파일이라 특정 작업에서만 쓰는 세부가 쌓이면 다른 지시가 묻힌다. 빠른 확인은 dev-small로 한다.
+
 - 환경: `uv sync --extra cpu` (GPU 환경은 `--extra cu126`)
-- 테스트: `uv run pytest -q`
-- 린트: `uv run ruff check .`
-- 데이터 적재: `uv run python -m rag.ingest` (라벨 zip → `data/processed/` 코퍼스·질의, 약 10초)
-- 평가 분할: `uv run python -m rag.splits` (→ `data/splits/queries.csv`, `dev_small_docs.txt`, 약 7초. 해시는 DECISIONS D-02)
+- 테스트·린트: `uv run pytest -q`, `uv run ruff check .`
+- 데이터 적재: `uv run python -m rag.ingest` (→ `data/processed/`)
+- 평가 분할: `uv run python -m rag.splits` (→ `data/splits/`)
 - 채점: `uv run python -m rag.eval.score --run <순위.csv> --layer dev-small|dev-full [--out <결과.json>]` (순위 파일 열 `qid`, `rank`, `doc_id`)
-- 판정: `uv run python -m rag.eval.compare --base <기준.csv> --cand <후보.csv> [--out <결과.json>]` (dev-full 고정, 회의 단위 paired bootstrap)
-- 인덱스: `uv run python -m rag.index index.scope=dev-small|full [chunking.chunk_tokens=N chunking.overlap_tokens=M] [embedding.device=cuda embedding.dtype=float16]` (→ `data/index/`, 조각 단위 재개. 전체는 Colab L4 약 21분)
-- dev-small 검색·청크 크기 비교: `uv run python -m rag.search [chunking.…]`, `uv run python -m rag.chunk_sweep` (결과 DECISIONS D-04)
-- dev-full 검색: `uv run python -m rag.search index.scope=full` (→ `data/runs/{인덱스}-dev-full.csv`, 로컬 약 20초). 질의 임베딩 캐시가 없으면 `search.mode=export-queries`로 dev 질의를 내보내 Colab에서 `search.mode=embed-queries embedding.device=cuda`로 만든다(D-07, slices/05-retrieve.md)
-- 생성: `uv run python -m rag.generate ask.qid=<dev qid>` 또는 `"ask.query='질문'"` (`[prompt=vN generator.stream=true]`, → `data/runs/generate/`와 LangSmith. 한도 RPM 30·TPM 16K, 호출당 약 3K 토큰. 5xx는 서버 상태부터 확인)
+- 판정: `uv run python -m rag.eval.compare --base <기준.csv> --cand <후보.csv> [--out <결과.json>]` (dev-full 고정)
+- 인덱스: `uv run python -m rag.index index.scope=dev-small|full [embedding.device=cuda embedding.dtype=float16]` (full은 Colab L4 약 21분. 옵션: slices/04-index.md)
+- 검색: `uv run python -m rag.search [index.scope=full]` (질의 임베딩 캐시가 없을 때: slices/05-retrieve.md)
+- 생성: `uv run python -m rag.generate ask.qid=<dev qid>` (옵션·API 한도: slices/06-generate.md. 5xx는 서버 상태부터 확인)
 - multi-doc 묶음: `uv run python -m rag.multidoc.pools` (→ `data/multidoc/pools.jsonl`, 약 20초. 유형·값은 D-13)
 - multi-doc 생성 준비: `uv run python -m rag.multidoc.prepare [multidoc.gen.n_per_type=N]` (→ `data/multidoc/gen_in`·`docs`, 있는 후보 집합은 건너뜀). 생성은 `multidoc-writer` 에이전트(meet-rag 스킬)
 - multi-doc 검사: `uv run python -m rag.multidoc.check [--dry-run] [multidoc.gen.n_per_type=N]` (OpenRouter 유료, 검사 호출당 약 $0.0034, 원문에 그대로 없는 인용의 Jev 판정은 호출당 약 $0.00003. 실행 전 `--dry-run`으로 두 호출 수 보고·승인. 기록 있는 후보 집합은 검사 호출 없이 다시 판정하고, Jev는 판정 안 된 인용만 부른다 → `data/multidoc/queries.jsonl`. 판정 규칙은 D-14)
-- 파이프라인 명령(데이터 적재, 분할, 인덱스, 검색, 평가, 생성)은 해당 SLICE가 끝날 때 여기에 추가한다. 빠른 확인은 dev-small로 한다
 
 한글 출력이 깨지면 `PYTHONUTF8=1`로 실행한다. 파일은 `encoding="utf-8"`로 연다.
 
@@ -29,7 +28,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - `docs/SPEC.md`의 평가 프로토콜은 사용자 승인 없이 바꾸지 않는다
 - 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다
 - 평가 질의(`summary_q`)는 dev 분할만 Google AI Studio 무료 쿼터로 보낸다(`test`는 검색 단계 종료 시 사용자 지시 1회 실행에서만). 질의 전체처럼 많이 보내는 실행은 호출 수·소요 시간(RPD·TPM 한도)을 보고하고 사용자 승인 후에 한다. 노트북·로그에 질의 원문을 대량으로 남기지 않는다(D-10)
-- 외부 GPU(Colab) 실행과 유료 API(OpenRouter) 호출은 예상 시간·비용을 보고하고 사용자 승인 후에만 한다. dev-small은 Jupyter 노트북(`notebooks/`)에서 자유롭게 실행하되, GPU가 필요한 dev-small 임베딩도 Colab 승인 대상이다
+- 외부 GPU(Colab) 실행과 유료 API(OpenRouter, Jev) 호출은 예상 시간·비용을 보고하고 사용자 승인 후에만 한다. dev-small은 Jupyter 노트북(`notebooks/`)에서 자유롭게 실행하되, GPU가 필요한 dev-small 임베딩도 Colab 승인 대상이다
 - `data/`와 `.env`는 어떤 형태로도 커밋하지 않는다 (AI Hub 재배포 제한)
 - `owner/`는 사용자가 의도를 전달하는 메모다. 읽고 의도를 파악하되 어떤 문서·코드에서도 참조하지 않고, 사용자 요청 없이 수정하지 않는다
 
