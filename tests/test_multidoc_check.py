@@ -11,6 +11,7 @@ from rag.multidoc.check import (
     pool_state,
     quote_probs,
     quoted,
+    rejects,
     resolve,
     take_output,
     to_doc_ids,
@@ -195,7 +196,7 @@ def test_take_output_moves_partial_or_malformed_output_to_rejected(tmp_path):
     assert take_output(tmp_path / "ok.json") == good
     assert take_output(tmp_path / "cut.json") is None
     assert take_output(tmp_path / "bad.json") is None
-    assert sorted(f.name for f in (tmp_path / "rejected").iterdir()) == ["bad.json", "cut.json"]
+    assert sorted(f.name for f in (tmp_path / "rejected").iterdir()) == ["bad.1.json", "cut.1.json"]
     assert (tmp_path / "ok.json").exists() and not (tmp_path / "cut.json").exists()
 
 
@@ -207,17 +208,33 @@ def test_pool_state_follows_files_so_work_resumes(tmp_path):
     def put(k, name, data="{}"):
         (dirs[k] / name).write_text(data, encoding="utf-8")
 
-    assert pool_state("p", dirs) == "none"
+    assert pool_state("p", dirs, 3) == "none"
     put("gen_in", "p.json")
-    assert pool_state("p", dirs) == "gen_wait"
+    assert pool_state("p", dirs, 3) == "gen_wait"
     put("gen_out", "p.json", json.dumps({"status": "ok"}))
-    assert pool_state("p", dirs) == "prepare"
+    assert pool_state("p", dirs, 3) == "prepare"
     put("check_in", "p.md", "")
-    assert pool_state("p", dirs) == "check_wait"
+    assert pool_state("p", dirs, 3) == "check_wait"
+    # 검사 출력이 max_rejects번 거부되면 자동으로 다시 검사하지 않고 보류한다
+    (dirs["check_out"] / "rejected").mkdir()
+    for n in (1, 2):
+        put("check_out", f"rejected/p.{n}.json")
+    assert pool_state("p", dirs, 3) == "check_wait"
+    put("check_out", "rejected/p.3.json")
+    assert pool_state("p", dirs, 3) == "held"
     put("check_out", "p.json")
-    assert pool_state("p", dirs) == "judge_wait"
+    assert pool_state("p", dirs, 3) == "judge_wait"
     put("check", "p.json")
-    assert pool_state("p", dirs) == "done"
+    assert pool_state("p", dirs, 3) == "done"
     # 생성 skip은 검사 없이 판정 대기다
     put("gen_out", "q.json", json.dumps({"status": "skip"}))
-    assert pool_state("q", dirs) == "judge_wait"
+    assert pool_state("q", dirs, 3) == "judge_wait"
+
+
+def test_rejects_counts_each_rejection_of_same_pool(tmp_path):
+    for n in range(1, 4):
+        (tmp_path / "p.json").write_text('{"answerable": tr', encoding="utf-8")
+        assert take_output(tmp_path / "p.json") is None
+        assert rejects(tmp_path / "p.json") == n
+    assert (tmp_path / "rejected" / "p.3.json").exists()
+    assert rejects(tmp_path / "q.json") == 0
