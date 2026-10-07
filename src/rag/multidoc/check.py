@@ -84,14 +84,17 @@ def all_quotes(rec: dict) -> list[tuple[str, str]]:
     return [(d, norm(q)) for d, q in pairs if d and norm(q)]
 
 
-def quote_probs(rec: dict) -> dict[tuple[str, str], float]:
-    return {(x["doc_id"], x["quote"]): x["p"] for x in rec.get("quote_checks", [])}
+def quote_probs(rec: dict, s) -> dict[tuple[str, str], float]:
+    """저장된 Jev 판정 중 지금 설정(s.model, s.prompt_version)과 같은 것만. 모델이나 질문을 바꾸면
+    다시 묻는다."""
+    return {(x["doc_id"], x["quote"]): x["p"] for x in rec.get("quote_checks", [])
+            if x["model"] == s.model and x["prompt_version"] == s.prompt_version}
 
 
 def fill_quote_checks(rec: dict, contexts: dict[str, str], s, ask) -> int:
     """원문에 그대로 없고 아직 판정하지 않은 인용을 ask(인용, 후보 대목)로 판정해
     rec["quote_checks"]에 더한다. 더한 수를 반환한다. ask는 {"p", "usage"}를 돌려준다."""
-    probs = quote_probs(rec)
+    probs = quote_probs(rec, s)
     todo = {(d, q) for d, q in all_quotes(rec)
             if d in contexts and q not in norm(contexts[d]) and (d, q) not in probs}
     for d, q in sorted(todo):
@@ -284,6 +287,11 @@ def main() -> None:
     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
                             text=True).stdout.strip()
     check_dir.mkdir(parents=True, exist_ok=True)
+
+    def save(r):
+        (check_dir / f"{r['pool_id']}.json").write_text(
+            json.dumps(r, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+
     for p in ready:
         gen = read_json(gen_out / f"{p['pool_id']}.json")
         rec = {"pool_id": p["pool_id"], "type": p["type"], "pool_doc_ids": p["doc_ids"],
@@ -302,15 +310,17 @@ def main() -> None:
             out = json.loads(content)
             elements = to_doc_ids(out["elements"], p["doc_ids"])
             rec["elements"] = elements
+            # 비용을 낸 검사 응답을 Jev 판정 전에 먼저 남긴다. Jev가 실패하면 다음 실행의
+            # 재판정에서 남은 인용만 묻는다
+            save(rec)
             fill_quote_checks(rec, contexts, s, ask)
             rec["verdict"] = judge(gen, elements, out["answerable"], p["doc_ids"], contexts,
-                                   max_gold, p["seed_doc_ids"], probs=quote_probs(rec),
+                                   max_gold, p["seed_doc_ids"], probs=quote_probs(rec, s),
                                    min_prob=s.min_prob)
         else:
             rec["verdict"] = judge(gen, None, False, p["doc_ids"], contexts, max_gold,
                                    probs={}, min_prob=s.min_prob)
-        (check_dir / f"{p['pool_id']}.json").write_text(
-            json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+        save(rec)
         print(p["pool_id"], "통과" if rec["verdict"]["passed"] else rec["verdict"]["reasons"])
 
     # 판정 규칙이 바뀌면 검사 기록 전체를 저장된 응답으로 다시 판정한다(검사 호출 없음). Jev는
@@ -322,11 +332,10 @@ def main() -> None:
             added = fill_quote_checks(r, contexts, s, ask)
             verdict = judge(r["gen"], r["elements"], json.loads(r["response"])["answerable"],
                             r["pool_doc_ids"], contexts, max_gold, seeds[r["pool_id"]],
-                            probs=quote_probs(r), min_prob=s.min_prob)
-            if added or verdict != r["verdict"]:
+                            probs=quote_probs(r, s), min_prob=s.min_prob)
+            if added or verdict != r.get("verdict"):
                 r["verdict"] = verdict
-                (check_dir / f"{r['pool_id']}.json").write_text(
-                    json.dumps(r, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+                save(r)
     with (ROOT / paths.multidoc_queries).open("w", encoding="utf-8", newline="\n") as f:
         for r in records:
             if r["verdict"]["passed"]:
@@ -336,7 +345,7 @@ def main() -> None:
                     "query": g["query"], "query_form": g.get("query_form", ""),
                     "gold_doc_ids": r["verdict"]["gold_doc_ids"],
                     "pool_doc_ids": r["pool_doc_ids"], "answer": g["answer"],
-                    "elements": resolve(r["elements"], contexts, quote_probs(r),
+                    "elements": resolve(r["elements"], contexts, quote_probs(r, s),
                                         s.min_prob)[0]},
                     ensure_ascii=False) + "\n")
     print(f"생성 대기 {len(todo) - len(ready)}개")

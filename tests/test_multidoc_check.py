@@ -75,9 +75,13 @@ def test_fill_quote_checks_asks_only_unmatched_quotes_once():
 
     assert fill_quote_checks(rec, CONTEXTS, SEM, ask) == 1
     assert [q for q, _ in asked] == [REPHRASED] and len(asked[0][1]) == 2
-    assert quote_probs(rec) == {("a", REPHRASED): 0.95}
+    assert quote_probs(rec, SEM) == {("a", REPHRASED): 0.95}
     # 이미 판정한 인용은 다시 묻지 않는다
     assert fill_quote_checks(rec, CONTEXTS, SEM, ask) == 0 and len(asked) == 1
+    # 질문 버전을 바꾸면 이전 판정을 쓰지 않고 다시 묻는다
+    sem2 = OmegaConf.merge(SEM, {"prompt_version": "v2"})
+    assert quote_probs(rec, sem2) == {}
+    assert fill_quote_checks(rec, CONTEXTS, sem2, ask) == 1 and len(asked) == 2
 
 
 def test_quote_missing_in_gen():
