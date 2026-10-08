@@ -118,3 +118,9 @@ uv run python -m rag.eval_multi.compare --base <기준.csv> --cand <후보.csv> 
 - 동결 세트 수정, `answer`·`elements` 사용(생성 평가)
 - dense 외 검색기의 multi-doc 점수(EXP-001부터 EXP 문서에서 함께 보고)
 - `test` 분할 질의
+
+## 실행 기록
+
+- 질의 임베딩: Colab T4 세션 `meet-rag-s09q`, 2026-10-08 14:29\~14:34(약 5분), 커밋 53fa5e9. Python 3.12.3, torch 2.13.0+cu126, transformers 5.14.1, sentence-transformers 5.6.1. 업로드는 `data/multidoc/queries_g3.vm.jsonl`(`qid`·`query`, 600건) 하나다. compute unit은 사용자 확인값 대기
+- 검색: 600건, 전체 정렬로 넘어간 질의 0건. 순위 파일 SHA-256 `8f14dc808c16b94afac5b4167c7e63088a27410290e1f113135d537643bf8289`
+- 결과와 k 결정: D-16, `notebooks/09_01_multidoc기준선.ipynb`
