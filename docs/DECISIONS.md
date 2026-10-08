@@ -187,6 +187,6 @@
 ## D-17 hybrid 검색 채택, 다음 실험의 기준 (EXP-001)
 - 결정: dense + BM25(Kiwi 형태소) RRF 결합(`configs/exp/exp001.yaml`)을 채택하고 다음 EXP의 기준 실험으로 둔다. 다음 실험은 `+exp=exp001` 위에서 실행하고 `data/runs/kure-v1-fixed-512-64-hybrid-dev-full.csv`(SHA-256 `0260382f1e6afe6233528fc3b653167a9fe6c4bd255ec923fb60a34998cb3678`)와 비교한다. multi-doc 기준은 `…-hybrid-multidoc.csv`(SHA-256 `28918a409dbc9765561e6706f443e565906596068f2ee663590f223a3a0f89ce`)
 - 근거: dev-full Recall@5 0.8584 → 0.9168, +5.84%p(95% 구간 [+4.93, +6.76])로 SPEC 채택 조건을 충족한다. 목표 0.90(D-09)을 넘었다(`docs/experiments/EXP-001.md`)
-- 관찰: multi-doc 전체 Recall@5는 −3.21%p([−5.03, −1.42]), `law`는 −7.59%p로 떨어졌다. multi-doc에서 BM25 단독 Recall@5가 dense보다 크게 낮아(`law` 0.121 대 0.299) 같은 비중의 RRF가 순위를 흐리는 것으로 본다. single-doc 향상에는 질의가 정답 문서를 보고 만들어진 어휘 겹침(SPEC 해석의 한계 1항)이 섞여 있을 수 있다. 하락은 판정에 쓰지 않고 BM25 비중 조정(H13)과 H2에서 함께 본다(사용자 결정)
+- 관찰: multi-doc 전체 Recall@5는 −3.21%p([−5.03, −1.42]), `law`는 −7.59%p로 떨어졌다. multi-doc에서 BM25 단독 Recall@5가 dense보다 크게 낮아(`law` 0.121 대 0.299) 같은 비중의 RRF가 순위를 흐리는 것으로 본다. single-doc 향상에는 질의가 정답 문서를 보고 만들어진 어휘 겹침(SPEC 해석의 한계 1항)이 섞여 있을 수 있다. 하락은 판정에 쓰지 않고 BM25 비중 조정(H13)과 H2에서 함께 본다(사용자 결정). 회복 여부는 hybrid 기준과 함께 dense 기준 `kure-v1-fixed-512-64-multidoc.csv`와도 비교해 본다
 - 근거 노트북: `notebooks/10_02_EXP001_판정근거.ipynb`
 - 날짜: 2026-10-08
