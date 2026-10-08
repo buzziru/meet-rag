@@ -94,12 +94,12 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 
 ## B. EXP 흐름
 
-1. **초안**: `docs/PLAN.md` 백로그에서 가설을 고르고, `docs/SPEC.md`, `docs/DECISIONS.md`, 기준 실험 문서를 읽은 뒤 `docs/experiments/EXP-NNN.md`와 `configs/exp/expNNN.yaml`을 쓴다. 판정 기준은 SPEC 판정 절을 그대로 옮기거나 더 엄격하게 쓴다
+1. **초안**: `docs/PLAN.md` 백로그에서 가설을 고르고, `docs/SPEC.md`, `docs/DECISIONS.md`, 기준 실험 문서를 읽은 뒤 `docs/experiments/EXP-NNN.md`와 `configs/exp/expNNN.yaml`을 쓴다. 판정 기준은 SPEC 판정 절을 그대로 옮기거나 더 엄격하게 쓴다. PLAN에 [메타데이터]로 표시된 가설이면 SPEC "메타데이터 가설의 판정" 절을 옮긴다. 같은 백로그 항목에서 앞서 비채택된 EXP가 있으면 몇 번째 변형인지 적는다(SPEC 가설 단위 중단)
 2. **승인 지점**: 가설, 바꾸는 것, 판정 기준을 사용자에게 보이고 승인받는다. 재임베딩이 필요하면(Colab) 예상 시간·크레딧을, 유료 API가 필요하면 예상 비용을 함께 보고한다. 승인 전에는 dev-small까지만 실행한다
 3. **실행**: 실험 코드가 새로 필요하면 config로 켜는 형태로 만들고 기준 설정의 동작을 바꾸지 않는다. 기존 모듈을 크게 바꿔야 하면 먼저 SLICE(A 흐름)로 분리한다. dev-small로 동작을 확인한 뒤 dev-full을 실행한다. 재임베딩이 필요하면 E를 따른다
-4. **판정**: `exp-judge`를 부른다. 프롬프트에 EXP 문서 경로, 기준·후보 순위 파일 경로, 실행 명령, 커밋 해시를 넣는다
+4. **판정**: `exp-judge`를 부른다. 프롬프트에 EXP 문서 경로, 기준·후보 순위 파일 경로(single-doc, multi-doc), 실행 명령, 커밋 해시를 넣는다
 5. **감사**: `protocol-auditor`를 작업 종류 EXP로 부른다. 4와 서로 독립이므로 병렬로 부른다
-6. **기록**: judge 초안의 수치를 직접 확인한다. 채택이면 근거 노트북을 먼저 쓰고 사용자에게 보인다("결정과 PR의 순서"). 이어서 EXP 문서 결과·결론, `docs/EXPERIMENTS.md`, 채택이면 `docs/DECISIONS.md`, `docs/PLAN.md` 백로그 상태를 갱신한다. 기각·보류도 병합한다. 비채택이 3회 연속이면 SPEC 중단 기준에 걸렸다고 사용자에게 알린다
+6. **기록**: judge 초안의 수치를 직접 확인한다. 채택이면 근거 노트북을 먼저 쓰고 사용자에게 보인다("결정과 PR의 순서"). 이어서 EXP 문서 결과·결론, `docs/EXPERIMENTS.md`, 채택이면 `docs/DECISIONS.md`, `docs/PLAN.md` 백로그 상태를 갱신한다. 기각·보류도 병합한다. 같은 백로그 항목에서 변형을 바꾼 EXP가 3회 연속 비채택이면 SPEC 가설 단위 중단에 걸렸다고 사용자에게 알리고 다음 항목으로 넘어간다. 서로 다른 항목의 비채택은 이어서 세지 않는다(D-18). 이 기준은 한 가설 안에서 변형을 계속 바꾸며 파고드는 것을 막으려는 것이다
 
 ## C. 세션 마무리
 

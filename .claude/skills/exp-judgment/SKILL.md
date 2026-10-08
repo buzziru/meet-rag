@@ -20,19 +20,31 @@ description: meet-rag EXP의 dev-full 결과를 SPEC 판정 규칙으로 채택�
 - 두 실험 각각의 Recall@1·5·10, MRR@10 (전체, 회의구분별, `qna_type`별)
 - Recall@5 차이의 paired bootstrap: 재표본 단위 회의, 10,000회, seed 20260929. 점 추정과 95% 구간
 
-S9 이후 EXP는 multi-doc 관찰도 적는다(PLAN). `src/rag/eval_multi/`의 비교 명령으로 기준·후보 multi-doc 순위 파일의 지표 차이와 95% 구간만 내고, 판정에는 쓰지 않는다(SPEC "보조 관찰").
+S9 이후 EXP는 multi-doc 결과도 적는다(PLAN). `src/rag/eval_multi/`의 비교 명령으로 기준·후보 multi-doc 순위 파일의 지표 차이와 95% 구간을 낸다. 판정에는 쓰지 않는다(SPEC "보조 관찰"). 예외는 메타데이터 가설이다(3절).
 
 평가 모듈에 필요한 기능이 없으면 직접 구현하지 말고 그 사실을 보고한다.
 
 ## 3. 판정
 
-SPEC 판정 절을 그대로 적용한다. EXP 문서에 더 엄격한 기준이 있으면 그것을 쓴다.
+EXP 문서 "판정 기준"과 SPEC 판정 절을 그대로 적용한다. EXP 문서에 더 엄격한 기준이 있으면 그것을 쓴다. 아래 표는 SPEC의 요약이고, 둘이 다르면 SPEC을 따른다. SPEC이 바뀌어도 이 표가 그대로 남아 옛 규칙으로 판정할 수 있기 때문이다(D-18 개정 때 이 표가 옛 규칙이었다).
+
+single-doc (dev-full Recall@5, 회의 단위 bootstrap):
 
 | 조건 | 판정 |
 | --- | --- |
 | 95% 구간 하한 > 0 이고 점 추정 차이 ≥ +1.0%p | 채택 |
 | 95% 구간 상한 < 0 | 기각 |
 | 그 밖 | 보류 |
+
+메타데이터 가설(PLAN [메타데이터], EXP 문서 판정 기준에 SPEC "메타데이터 가설의 판정"이 적힌 경우): single-doc이 채택·기각이면 그대로 쓰고, 보류이면 multi-doc(`pool_id` 단위 bootstrap)으로 정한다.
+
+| multi-doc 조건 | 판정 |
+| --- | --- |
+| Recall@5 차이 95% 구간 하한 > 0, 점 추정 ≥ +1.0%p, Complete@5 차이 95% 구간 상한 ≥ 0 | 채택 |
+| Recall@5 차이 95% 구간 상한 < 0 | 기각 |
+| 그 밖 | 보류 |
+
+결론에는 어느 단계(single-doc, multi-doc)에서 판정이 정해졌는지 적는다. multi-doc에서 채택했으면 SPEC 단서(세트가 메타데이터 검색에 유리함, test로 다시 확인할 수 없음)를 함께 적는다.
 
 보류이면 무엇을 더 확인하면 판정할 수 있는지 한 줄 적는다.
 
@@ -61,5 +73,5 @@ EXP 문서 "결론" 절: 판정 하나와 이유 한두 줄.
 `docs/EXPERIMENTS.md` 한 줄:
 
 ```markdown
-| EXP | 기준 | 바꾼 것 | dev-full R@5 | 차이 (95% CI) | 판정 |
+| EXP | 기준 | 바꾼 것 | dev-full R@5 | 차이 (95% 구간) | multi-doc R@5 차이 | 판정 |
 ```
