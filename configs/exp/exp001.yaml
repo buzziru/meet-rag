@@ -1,0 +1,13 @@
+# @package _global_
+# EXP-001 hybrid 검색 (docs/experiments/EXP-001.md). 실행: rag.search +exp=exp001
+retriever:
+  type: hybrid
+  bm25:
+    name: kiwi-v1  # 인덱스 디렉터리 이름. 토큰화를 바꾸면 이름도 바꾼다
+    tags: [NNG, NNP, NNB, NR, NP, VV, VA, XR, SL, SH, SN]
+    method: lucene
+    k1: 1.5
+    b: 0.75
+  fusion:
+    rrf_k: 60
+    depth: 100  # 검색기마다 결합에 넣는 상위 문서 수
