@@ -22,7 +22,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 
 ## 금지
 
-- `src/rag/eval/`(S3 완료 후), `src/rag/eval_multi/`와 `configs/config.yaml`의 `multidoc.eval`(S9 완료 후), `configs/eval/`, `data/splits/`(S2 완료 후)를 수정하지 않는다. 바꿔야 하면 사용자 승인 후 DECISIONS.md에 기록한다
+- `src/rag/eval/`(S3 완료 후), `src/rag/eval_multi/`와 `configs/config.yaml`의 `multidoc.eval`(S9 완료 후), G3 동결 세트를 정하는 `configs/multidoc/g3_exclude.yaml`과 `paths.multidoc_frozen`(D-15), `configs/eval/`, `data/splits/`(S2 완료 후)를 수정하지 않는다. 바꿔야 하면 사용자 승인 후 DECISIONS.md에 기록한다
 - test 분할의 질의를 읽거나 test 점수를 계산하지 않는다. 검색 단계 종료 시 사용자 지시로 1회만 실행한다
 - `docs/SPEC.md`의 평가 프로토콜은 사용자 승인 없이 바꾸지 않는다
 - 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다

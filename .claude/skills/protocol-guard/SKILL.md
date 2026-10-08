@@ -37,7 +37,7 @@ test 질의를 읽거나 test 점수를 계산하는 코드 경로가 새로 생
 ### P3. 보호 경로 수정
 
 - `configs/eval/`는 항상 보호된다
-- `src/rag/eval/`는 S3 완료 후, `src/rag/eval_multi/`와 `configs/config.yaml`의 `multidoc.eval` 키는 S9 완료 후, `data/splits/`는 S2 완료 후 보호된다. multi-doc 채점이 바뀌면 EXP마다 보고하는 multi-doc 관찰을 기준선(D-16)과 비교할 수 없다. 완료 여부는 `docs/PLAN.md` 체크 상태로 판단한다
+- `src/rag/eval/`는 S3 완료 후, `src/rag/eval_multi/`와 `configs/config.yaml`의 `multidoc.eval` 키는 S9 완료 후, `data/splits/`는 S2 완료 후 보호된다. G3 동결 세트를 정하는 `configs/multidoc/g3_exclude.yaml`과 `paths.multidoc_frozen` 키는 동결(D-15) 후 보호된다. multi-doc 채점이나 세트가 바뀌면 EXP마다 보고하는 multi-doc 관찰을 기준선(D-16)과 비교할 수 없다. 완료 여부는 `docs/PLAN.md` 체크 상태로 판단한다
 - `docs/SPEC.md`의 평가 프로토콜 절 수정
 
 보호 경로를 바꿨으면, 사용자 승인 기록과 `docs/DECISIONS.md` 항목이 같은 diff에 있는지 확인한다. 둘 다 있으면 통과이고 기록만 남긴다.
