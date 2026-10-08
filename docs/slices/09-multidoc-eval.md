@@ -59,6 +59,7 @@ SPEC은 multi-doc을 판정에 쓰지 않으므로 `compare`는 채택·기각·
 
 - `search.queries=multidoc`은 `index.scope=full`에서만 쓴다. 정답 문서가 dev 회의 전체에 걸쳐 있어 dev-small 인덱스로는 채점할 수 없다
 - 질의 목록과 순서는 동결 세트 파일 순서다. 질의 임베딩 캐시는 `paths.query_emb_multidoc`(`data/index/{임베딩}/queries-multidoc.npz`)에 두고 다시 쓴다
+- Colab 임베딩은 S5와 같은 `search.mode`를 쓴다. `export-queries`가 동결 세트의 `qid`·`query`만 `paths.queries_multidoc_vm`에 쓰고, VM의 `embed-queries`가 그 파일만 읽어 캐시를 만든다
 - 순위 파일은 `data/runs/{인덱스 이름}-multidoc.csv`다. 문서 순위·`top_k`·`chunk_pool`은 S5와 같다
 - 기본값 `summary_q`의 동작과 출력 파일은 바뀌지 않는다
 
@@ -108,7 +109,7 @@ uv run python -m rag.eval_multi.compare --base <기준.csv> --cand <후보.csv> 
 
 - `src/rag/eval_multi/`, `tests/test_eval_multi.py`
 - `src/rag/search.py`, `tests/test_search.py`
-- `configs/config.yaml`(`multidoc.eval`, `search.queries`, `paths.query_emb_multidoc`)
+- `configs/config.yaml`(`multidoc.eval`, `search.queries`, `paths.query_emb_multidoc`, `paths.queries_multidoc_vm`)
 - `notebooks/09_01_multidoc기준선.ipynb`
 - `CLAUDE.md` "명령" 절(채점·비교 명령), `docs/PLAN.md` S9 체크, `docs/DECISIONS.md`(기준선·k 결정), 이 문서
 
