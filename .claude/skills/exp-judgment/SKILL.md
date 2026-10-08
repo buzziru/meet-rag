@@ -20,6 +20,8 @@ description: meet-rag EXP의 dev-full 결과를 SPEC 판정 규칙으로 채택�
 - 두 실험 각각의 Recall@1·5·10, MRR@10 (전체, 회의구분별, `qna_type`별)
 - Recall@5 차이의 paired bootstrap: 재표본 단위 회의, 10,000회, seed 20260929. 점 추정과 95% 구간
 
+S9 이후 EXP는 multi-doc 관찰도 적는다(PLAN). `src/rag/eval_multi/`의 비교 명령으로 기준·후보 multi-doc 순위 파일의 지표 차이와 95% 구간만 내고, 판정에는 쓰지 않는다(SPEC "보조 관찰").
+
 평가 모듈에 필요한 기능이 없으면 직접 구현하지 말고 그 사실을 보고한다.
 
 ## 3. 판정
