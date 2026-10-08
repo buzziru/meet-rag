@@ -47,6 +47,9 @@ def main() -> None:
     a = ap.parse_args()
 
     if a.cmd == "plan":
+        # 덮어쓰면 작업 번호가 1부터 다시 매겨져 큐 기록의 이전 번호와 겹친다
+        if a.jobs.exists():
+            ap.error(f"{a.jobs}가 이미 있다. 단계·회차마다 새 작업 목록 파일을 쓴다")
         ids = missing(a.ids.read_text(encoding="utf-8").split(), a.out, a.ext)
         chunks = [ids[k:k + a.size] for k in range(0, len(ids), a.size)]
         with a.jobs.open("w", encoding="utf-8", newline="\n") as f:
@@ -55,6 +58,8 @@ def main() -> None:
         print(f"{len(ids)} ids -> {len(chunks)} jobs ({a.jobs})")
         return
 
+    if a.cmd in ("start", "done") and a.queue is None:
+        ap.error("start·done에는 --queue가 필요하다")
     jobs = load_jobs(a.jobs)
     if a.cmd == "status":
         todo = [n for n, ids in jobs.items() if missing(ids, a.out, a.ext)]
