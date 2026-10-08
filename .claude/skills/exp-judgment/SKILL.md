@@ -36,7 +36,7 @@ single-doc (dev-full Recall@5, 회의 단위 bootstrap):
 | 95% 구간 상한 < 0 | 기각 |
 | 그 밖 | 보류 |
 
-메타데이터 가설(PLAN [메타데이터], EXP 문서 판정 기준에 SPEC "메타데이터 가설의 판정"이 적힌 경우): single-doc이 채택·기각이면 그대로 쓰고, 보류이면 multi-doc(`pool_id` 단위 bootstrap)으로 정한다.
+메타데이터 가설(PLAN에 [메타데이터]로 표시된 가설이고, EXP 문서 판정 기준에도 SPEC "메타데이터 가설의 판정"이 적힌 경우. 둘 중 하나만 맞으면 판정하지 않고 보고한다): single-doc이 채택·기각이면 그대로 쓰고, 보류이면 multi-doc(`pool_id` 단위 bootstrap)으로 정한다.
 
 | multi-doc 조건 | 판정 |
 | --- | --- |
