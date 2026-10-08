@@ -65,6 +65,7 @@ EXP 문서 "결과" 절:
 - dev-full Recall@5: 후보 0.xxxx / 기준 0.xxxx / 차이 +x.xx%p (95% CI [a, b], 회의 단위 bootstrap 10,000회)
 - Recall@1 / @10 / MRR@10: 후보 … / 기준 …
 - 층별: (두드러진 층만)
+- multi-doc: Recall@5 / Complete@5 차이와 95% 구간(`pool_id` 단위), 유형별 Recall@5 차이. 메타데이터 가설이면 판정 근거이고, 아니면 관찰이라고 적는다
 - 실행: `명령` / 커밋 abc1234 / 소요 시간
 ```
 
