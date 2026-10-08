@@ -16,7 +16,7 @@ G3 동결 세트(`paths.multidoc_frozen`, 600건, D-15)를 SPEC "보조 관찰: 
 
 ### 동결 세트
 
-`paths.multidoc_frozen`(jsonl). 쓰는 필드는 `qid`, `type`, `pool_id`, `gold_doc_ids`이고, 검색에서만 `query`를 읽는다. `answer`·`elements`는 검수하지 않은 자료라 읽지 않는다(D-15 단서). 정답 문서 수는 2개 391건, 3개 143건, 4개 50건, 5개 16건이다.
+`paths.multidoc_frozen`(jsonl). 쓰는 필드는 `qid`, `type`, `pool_id`, `gold_doc_ids`이고, 검색에서만 `query`를 읽는다. 노트북은 분석에 `pool_doc_ids`와 실패 사례 몇 건의 `query`도 읽는다. `answer`·`elements`는 검수하지 않은 자료라 읽지 않는다(D-15 단서). 정답 문서 수는 2개 391건, 3개 143건, 4개 50건, 5개 16건이다.
 
 ### 순위 파일
 
@@ -44,7 +44,7 @@ CSV, 열 `qid`, `rank`, `doc_id`. 검증 규칙은 S3와 같다.
 SPEC은 multi-doc을 판정에 쓰지 않으므로 `compare`는 채택·기각·보류를 내지 않는다.
 
 1. 두 순위 파일을 각각 채점해 질의별 지표 값을 얻는다
-2. 지표마다 질의별 차이 `c_i - b_i`를 `paired_bootstrap(diff, groups=pool_id, ...)`에 넣는다. `n_resamples`, `seed`, `alpha`는 `configs/eval/spec_v1.yaml`의 `bootstrap`에서 읽는다(SPEC "반복 횟수와 seed는 판정 절과 같다")
+2. 지표마다 질의별 차이 `c_i - b_i`를 `paired_bootstrap(diff, groups=pool_id, ...)`에 넣는다. `n_resamples`, `seed`, `alpha`는 `configs/eval/spec_v1.yaml`의 `bootstrap`에서 읽는다(SPEC "반복 횟수와 seed는 판정 절과 같다"). 같은 절의 `unit`(`conference_number`)은 single-doc 판정용이라 읽지 않는다
 3. 전체와 유형별로 점 추정과 95% 구간을 낸다
 
 재표본 단위는 SPEC대로 질의를 만든 묶음(`pool_id`)이다. 동결 세트는 후보 집합 하나에서 질의를 하나만 만들어(600건, `pool_id` 600개) 이 단위는 질의 단위와 같다.
