@@ -19,6 +19,11 @@ g3_scope:
   type: law
   must: 각각
   any: 쟁점|질의와 답변
+# G3 law 질의 재판정(범위 모호·정답 내용 불일치). 작업 하나에 입력 크기 합 max_chars, 질의 max_queries 이하
+g3_judge:
+  prompt_version: scope_v1
+  max_chars: 60000
+  max_queries: 10
 
 # 저장소 루트 기준 상대경로. 쓰는 쪽에서 루트와 결합한다
 paths:
@@ -51,6 +56,9 @@ paths:
   multidoc_scope_review: data/multidoc/review/g3_scope.md  # G3 범위 재판정 파일
   multidoc_exclude: configs/multidoc/g3_exclude.yaml  # G3 검수에서 뺀 질의
   multidoc_frozen: data/multidoc/queries_g3.jsonl  # G3 동결 세트. S9 입력
+  multidoc_judge_in: data/multidoc/judge_in  # G3 재판정 입력(서브에이전트가 읽는다)
+  multidoc_judge_out: data/multidoc/judge_out  # G3 재판정 출력(서브에이전트가 쓴다)
+  multidoc_judge_jobs: data/multidoc/judge_jobs.jsonl
 
 embedding:
   model_name: nlpai-lab/KURE-v1

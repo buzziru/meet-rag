@@ -6,7 +6,10 @@
 --scope는 표본 검수에서 나온 범위 재판정 대상(g3_scope)을 표본 밖에서 골라, 질의와 정답 문서
 회의의 안건만 보여 주는 재판정 파일을 쓴다(notebooks/08_04_G3검수.ipynb).
 
-    uv run python -m rag.multidoc.review [--scope]
+--judge는 g3_scope.type 질의 전체의 재판정 입력(질의, 정답 문서 머리·안건·본문, 지시 g3_judge)과
+작업 목록을 쓴다. 서브에이전트가 입력을 읽고 판정 JSON을 쓴다(사용자 결정 2026-10-08).
+
+    uv run python -m rag.multidoc.review [--scope | --judge]
 """
 
 import json
@@ -17,6 +20,7 @@ from pathlib import Path
 
 from hydra import compose, initialize_config_dir
 
+from rag.multidoc.check import load_prompt, wrap_lines
 from rag.sample_review import sample_qids
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -130,6 +134,55 @@ def scope_main(cfg, queries: dict[str, dict]) -> None:
     print(f"{len(todo)} queries -> {paths.multidoc_scope_review} (target {len(hit)})")
 
 
+def judge_input(prompt, q: dict, meta: dict[str, dict], width: int) -> str:
+    """재판정 입력 파일 본문. 정답 문서에 날짜순으로 1부터 번호를 붙인다."""
+    gold = sorted(q["gold_doc_ids"], key=lambda d: meta[d]["date"])
+    keys = ("date", "committee_name", "meeting_number", "session_number")
+    blocks = [prompt.document.format(n=i, agenda=" ".join(agenda_items(meta[d]["agenda"])),
+                                     text=wrap_lines(meta[d]["context"], width),
+                                     **{k: meta[d][k] for k in keys})
+              for i, d in enumerate(gold, 1)]
+    user = prompt.user.format(query=q["query"], documents="\n\n".join(blocks))
+    return f"# 지시\n\n{prompt.system}\n\n# 입력\n\n{user}"
+
+
+def jobs(sizes: list[tuple[str, int]], max_chars: int, max_queries: int) -> list[list[str]]:
+    """qid 순서대로 입력 크기 합이 max_chars, 개수가 max_queries를 넘지 않게 묶는다."""
+    out, cur, total = [], [], 0
+    for qid, n in sizes:
+        if cur and (total + n > max_chars or len(cur) == max_queries):
+            out.append(cur)
+            cur, total = [], 0
+        cur.append(qid)
+        total += n
+    return out + [cur] if cur else out
+
+
+def judge_main(cfg, queries: dict[str, dict]) -> None:
+    j, paths = cfg.g3_judge, cfg.paths
+    prompt, _ = load_prompt(j.prompt_version)
+    todo = sorted((q for q in queries.values() if q["type"] == cfg.g3_scope.type),
+                  key=lambda q: q["qid"])
+    gold = {d for q in todo for d in q["gold_doc_ids"]}
+    meta = {}
+    with (ROOT / paths.corpus).open(encoding="utf-8") as f:
+        for d in map(json.loads, f):
+            if d["doc_id"] in gold:
+                meta[d["doc_id"]] = d
+    out = ROOT / paths.multidoc_judge_in
+    out.mkdir(parents=True, exist_ok=True)
+    sizes = []
+    for q in todo:
+        text = judge_input(prompt, q, meta, cfg.multidoc.check.max_line_chars)
+        (out / f"{q['qid']}.md").write_text(text, encoding="utf-8", newline="\n")
+        sizes.append((q["qid"], len(text)))
+    batches = jobs(sizes, j.max_chars, j.max_queries)
+    with (ROOT / paths.multidoc_judge_jobs).open("w", encoding="utf-8", newline="\n") as f:
+        for i, b in enumerate(batches, 1):
+            f.write(json.dumps({"job": i, "qids": b}, ensure_ascii=False) + "\n")
+    print(f"{len(todo)} queries -> {paths.multidoc_judge_in}, {len(batches)} jobs")
+
+
 def main() -> None:
     with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
         cfg = compose(config_name="config")
@@ -138,6 +191,9 @@ def main() -> None:
         queries = {q["qid"]: q for q in map(json.loads, f)}
     if "--scope" in sys.argv[1:]:
         scope_main(cfg, queries)
+        return
+    if "--judge" in sys.argv[1:]:
+        judge_main(cfg, queries)
         return
     picked = [queries[qid] for qid in sample_qids(list(queries), cfg.seed, cfg.g3_sample_size)]
 

@@ -1,5 +1,5 @@
 from rag.multidoc.freeze import excluded
-from rag.multidoc.review import agenda_items, doc_heads, render, scope_target
+from rag.multidoc.review import agenda_items, doc_heads, jobs, render, scope_target
 
 
 def test_render_numbers_docs_by_pool_order():
@@ -30,3 +30,9 @@ def test_scope_target_needs_both_terms():
 
 def test_excluded_merges_groups():
     assert excluded({"sample": ["a", "b"], "scope": ["c"]}) == {"a", "b", "c"}
+
+
+def test_jobs_respects_size_and_count():
+    sizes = [("a", 40), ("b", 30), ("c", 10), ("d", 100), ("e", 1)]
+
+    assert jobs(sizes, max_chars=70, max_queries=2) == [["a", "b"], ["c"], ["d"], ["e"]]
