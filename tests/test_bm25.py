@@ -1,8 +1,10 @@
 import json
 
+import bm25s
 import numpy as np
+from kiwipiepy import Kiwi
 
-from rag.bm25 import BM25Retriever
+from rag.bm25 import BM25Retriever, build, doc_meta, forms
 from rag.index import load_cfg
 from rag.search import rank_docs, rrf
 
@@ -37,3 +39,31 @@ def test_bm25_finds_lexical_match(tmp_path):
     # 캐시를 다시 읽어도 같은 점수
     again = BM25Retriever(cfg, tmp_path)
     assert np.allclose(again.scores(ids[0]), bm25.scores(ids[0]))
+
+
+def test_meta_prefix_makes_metadata_searchable(tmp_path):
+    corpus = [
+        {"doc_id": "d1", "date": "2019년3월5일(화)", "committee_name": "국방위원회"},
+        {"doc_id": "d2", "date": "2020년7월1일(수)", "committee_name": ""},
+    ]
+    with (tmp_path / "corpus.jsonl").open("w", encoding="utf-8") as f:
+        f.writelines(json.dumps(c, ensure_ascii=False) + "\n" for c in corpus)
+    meta = doc_meta(tmp_path / "corpus.jsonl", ["date", "committee_name"])
+    assert meta == {"d1": "2019년3월5일(화) 국방위원회", "d2": "2020년7월1일(수)"}
+
+    chunks = [{"doc_id": "d1", "text": "예산을 논의했습니다."},
+              {"doc_id": "d2", "text": "예산을 논의했습니다."}]
+    with (tmp_path / "chunks.jsonl").open("w", encoding="utf-8") as f:
+        f.writelines(json.dumps(c, ensure_ascii=False) + "\n" for c in chunks)
+    b = load_cfg(["+exp=exp002"]).retriever.bm25
+    build(tmp_path / "chunks.jsonl", tmp_path / "idx", b, Kiwi(), meta)
+    model = bm25s.BM25.load(tmp_path / "idx", load_vocab=True)
+    q = model.get_tokens_ids(next(forms(Kiwi(), ["국방위원회 예산"], set(b.tags))))
+    scores = model.get_scores_from_ids(q)
+    assert scores[0] > scores[1]
+
+
+def test_run_name_overrides_file_suffix():
+    cfg = load_cfg(["+exp=exp002"])
+    assert cfg.retriever.run_name == "hybrid-meta" and cfg.retriever.bm25.name == "kiwi-meta-v1"
+    assert load_cfg(["+exp=exp001"]).retriever.get("run_name") is None

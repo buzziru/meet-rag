@@ -165,8 +165,9 @@ def search(cfg) -> None:
                 lexical = rank_docs(bm25.scores(q_ids[j]), chunk_doc_ids, depth, r.chunk_pool)
                 docs = rrf([docs, lexical], r.fusion.rrf_k, r.top_k)
             rows += [{"qid": qids[j], "rank": i, "doc_id": d} for i, d in enumerate(docs, 1)]
-    # dense는 기존 이름을 유지해 기준 순위 파일과 같은 경로를 쓴다
-    kind = "" if r.type == "dense" else f"-{r.type}"
+    # dense는 기존 이름을 유지해 기준 순위 파일과 같은 경로를 쓴다. run_name이 있으면 그 이름을 쓴다
+    name = r.get("run_name") or r.type
+    kind = "" if name == "dense" else f"-{name}"
     out = ROOT / cfg.paths.runs_dir / f"{index_dir.parent.name}{kind}-{files['name']}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(out, index=False, lineterminator="\n")
