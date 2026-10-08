@@ -1,0 +1,47 @@
+# G3 검수에서 동결 세트에서 뺀 질의 (notebooks/08_04_G3검수.ipynb, 사용자 결정 2026-10-08)
+# 표본 검수 불량: law-0012·0108 질의 모호, law-0190 질의 전제와 정답 내용 불일치
+sample:
+  - md-law-0012
+  - md-law-0108
+  - md-law-0190
+# law 회의별 쟁점형 재판정에서 모호: 회의 주제가 여럿인데 범위를 정하지 않음
+scope:
+  - md-law-0022
+  - md-law-0045
+  - md-law-0046
+  - md-law-0047
+  - md-law-0072
+  - md-law-0091
+  - md-law-0096
+  - md-law-0103
+  - md-law-0105
+  - md-law-0109
+  - md-law-0117
+  - md-law-0137
+  - md-law-0143
+  - md-law-0149
+  - md-law-0161
+  - md-law-0164
+  - md-law-0192
+  - md-law-0195
+  - md-law-0199
+  - md-law-0235
+# law 질의 서브에이전트 재판정(scope_v2)에서 통과가 아님. 사용자 결정 2026-10-08: 작업자 판정대로 모두 뺀다
+judge:
+  - md-law-0001
+  - md-law-0006
+  - md-law-0025
+  - md-law-0028
+  - md-law-0031
+  - md-law-0098
+  - md-law-0115
+  - md-law-0127
+  - md-law-0134
+  - md-law-0159
+  - md-law-0170
+  - md-law-0220
+# scope_v1에서 통과가 아니었고 scope_v2에서만 통과. 사용자 결정 2026-10-08: 한 번이라도 통과가 아니면 뺀다
+judge_v1:
+  - md-law-0020
+  - md-law-0024
+  - md-law-0083
