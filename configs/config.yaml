@@ -12,6 +12,9 @@ seed: 20260929
 # G1 summary_q 검수 표본 크기 (SPEC 미결 1)
 g1_sample_size: 100
 
+# G3 multi-doc 질의 검수 표본 크기 (PLAN G3)
+g3_sample_size: 50
+
 # 저장소 루트 기준 상대경로. 쓰는 쪽에서 루트와 결합한다
 paths:
   raw_dir: data
@@ -39,6 +42,7 @@ paths:
   multidoc_check_out: data/multidoc/check_out  # 검사 출력(multidoc-checker가 쓴다)
   multidoc_check: data/multidoc/check
   multidoc_queries: data/multidoc/queries.jsonl
+  multidoc_review: data/multidoc/review/g3_sample.md  # G3 검수 파일. 검수 칸은 비워 둔다
 
 embedding:
   model_name: nlpai-lab/KURE-v1
