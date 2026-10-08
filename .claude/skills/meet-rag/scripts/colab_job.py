@@ -117,12 +117,18 @@ def blocked(path: str) -> bool:
 
 
 def non_dev_qids(path: Path) -> int:
-    """jsonl에서 qid가 있고 dev 분할이 아닌 행 수. test 질의는 VM에 올리지 않는다(SPEC 자원 제약).
+    """jsonl에서 qid가 있고 dev 질의가 아닌 행 수. test 질의는 VM에 올리지 않는다(SPEC 자원 제약).
 
-    파일 이름과 무관하게 내용으로 판정한다. qid가 없는 행(코퍼스)은 세지 않는다.
+    dev 질의는 summary_q dev 분할과 G3 multi-doc 동결 세트(test 회의를 뺀 문서로만 만든 dev 전용
+    세트, SPEC "보조 관찰")다. 파일 이름과 무관하게 내용으로 판정한다.
+    qid가 없는 행(코퍼스)은 세지 않는다.
     """
     splits = pd.read_csv(ROOT / "data/splits/queries.csv", dtype=str)
     dev = set(splits.loc[splits["split"] == "dev", "qid"])
+    frozen = ROOT / "data/multidoc/queries_g3.jsonl"
+    if frozen.exists():
+        with frozen.open(encoding="utf-8") as f:
+            dev |= {json.loads(line)["qid"] for line in f}
     with path.open(encoding="utf-8") as f:
         rows = (json.loads(line) for line in f)
         return sum("qid" in r and r["qid"] not in dev for r in rows)
