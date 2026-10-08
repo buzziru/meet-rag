@@ -69,7 +69,8 @@ SLICE 문서의 "수정 허용 파일" 밖의 파일이 바뀌었으면 보고�
 - 정답 쪽 값: 질의 파일의 `query` 밖 필드(`doc_id`·`answer`·`qna_type`·`question_comment`·`answer_comment`), `load_gold`가 돌려주는 열 중 index(`qid`) 밖의 열(정답 `doc_id`, `conference_number`, 정답 문서의 `meeting_name` 등), `data/splits/queries.csv`의 `conference_number`, multi-doc 동결 세트의 `gold_doc_ids`·`pool_doc_ids`·`answer`·`elements`·`type`·`pool_id`
 - `qid` 문자열 파싱: `qid`는 `{conference_number}-{question_number}`라 정답 회의 번호를 담는다. `qid`를 질의 식별·순서·분할 선택에 쓰는 것은 정상이다(`rag.search`가 `load_gold(...).index`로 질의 목록만 얻는 것 등). `qid`를 나눠 회의 조건으로 쓰면 위반이다
 - 원천 라벨 결합: QA 단위 필드(`questioner_name`·`answerer_name`·`law` 등)를 `qid`로 질의에 붙여 필터·가점 조건으로 쓰는 경우. 질의 조건(H14)은 질의 텍스트에서 뽑은 값만 쓴다(PLAN H12·H14)
-- 조건 사전의 출처: 질의 조건 추출에 쓰는 사전(위원회·이름 등)은 문서 쪽 필드에서 만든다. 평가 질의 레코드나 그 정답 문서 목록에서 값을 모으면 위반이다
+- 조건 사전의 출처: 질의 조건 추출에 쓰는 사전(위원회·이름 등)은 코퍼스 전체 문서의 필드에서 만든다. 평가 질의 레코드에서 값을 모으거나, 정답 문서 목록으로 문서를 골라 값을 모으면 위반이다. 같은 필드 이름(`meeting_name` 등)이라도 출처가 코퍼스 전체인지 정답 문서인지로 가른다
+- 평가 층 범위는 해당하지 않는다: SPEC이 정한 분할과 평가 층(`data/splits/`, `dev_small_docs`로 색인 문서를 거르는 것, 분할에 따라 질의 집합을 고르는 것)은 정답 쪽 값을 쓰지만 검색이 풀 문제의 범위를 정하는 것이라 위반이 아니다
 - 위치로 면제하지 않는다: 채점 코드(`src/rag/eval*`)와 분석 노트북이 정답 쪽 값을 읽는 것은 해당하지 않지만, 노트북 안에서도 그 값이 검색 호출이나 순위 계산에 들어가면 위반이다
 - 문서에 붙인 QA 라벨 유래 필드(S10의 화자)는 문서 속성으로 쓸 수 있다. 다만 single-doc 정답 문서의 그 값은 질의를 만든 QA 라벨에서 오므로, 이 필드를 쓰는 EXP 문서에 그 사실이 해석의 단서로 적혀 있지 않으면 보고한다
 
