@@ -4,7 +4,8 @@
 - naive RAG 베이스라인 완료(S1\~S6). dev-full Recall@5 0.8584, 목표 0.90(D-09)
 - multi-doc: S7·S8·S8b·S8c 완료(D-13, D-14). PR #37\~#39 병합
 - G3 본 생성 판정 완료(2026-10-08): 통과 638(conf 233, law 190, questioner 215) → `data/multidoc/queries.jsonl`. Jev 누적 13건 $0.00050. 생성·검사·판정 대기 0, 보류 0
-- PR #40(`fix/s08-check-long-lines`) 리뷰 대기: 검사 입력의 긴 줄(본문·안건)을 `max_line_chars`(2000)에서 나눔. 감사 위반 없음. 이 STATUS 커밋도 이 브랜치에 있음
+- PR #40 병합(3f2b9bc). 본 생성 범위 950개 완료, 대기·보류 0이라 `queries.jsonl` 638건이 동결 대상(SHA-256 `d2169035…8cc48061`)
+- G3 사용자 검수 대기: `data/multidoc/review/g3_sample.md`(무작위 50건, conf 14·law 11·questioner 25, SHA-256 `352a74f2…552c055a6e`, `rag.multidoc.review`). 파일럿 통과 질의는 본 생성에서 다시 만들어져 세트에 없어 표본에서 뺌(사용자). 도구 PR은 `chore/g3-review`, 진행 기록 `_workspace/g3_main_progress.md`
 - 진행 기록 `_workspace/s08_main_progress.md`, 큐 `_workspace/g3_queue.jsonl`(작업 404까지 done), 판정 로그 `_workspace/g3_judge_run1\~3.log`
 
 ## 실행 중 작업
@@ -15,8 +16,8 @@
 - 재검사 19개는 줄을 나눈 입력으로 검사(나머지 762개는 이전 형식). 대체된 출력·기록은 `check_out/superseded/`, `check/superseded/`
 
 ## 다음 행동
-1. [D] PR #40 리뷰·병합(판단할 곳 1: law-0031에 2000자 초과 줄 6개 남음, 판단할 곳 3: 이전 형식 762개 재검사 안 함)
-2. [D] G3 검수: 파일럿 통과 질의, 본 생성 통과 중 무작위 50건 → 세트 SHA-256 동결. DECISIONS 기록 때 재검사 19개 목록과 `08c-checker-agent.md` 검사 입력 설명 갱신
+1. [D] `chore/g3-review` PR 병합, 사용자가 `g3_sample.md` 검수 칸을 채워 제출
+2. [D] G3 집계(D3: 불량 유형·비율) → 노트북·결정(D4) → DECISIONS에 세트 SHA-256 동결, 재검사 19개 목록, `08c-checker-agent.md` 검사 입력 설명 갱신(D5)
 3. [D] 검수 뒤 `pilot_v1`\~`v4` 삭제(사용자 결정, 아직 안 함)
 4. [F] 하네스 대기 24·25 반영(`_workspace/00_main_harness-pending.md`, chore/, harness:evolve)
 5. [B] EXP-001 = H1 hybrid(dense + BM25 Kiwi, RRF). G3와 병렬 가능
