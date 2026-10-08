@@ -39,6 +39,9 @@ paths:
   index_dir: data/index/${embedding.slug}-${chunking.name}-${chunking.chunk_tokens}-${chunking.overlap_tokens}/${index.scope}
   # 범위별 질의 임베딩. 청킹과 무관해 후보끼리 다시 쓴다
   query_emb: data/index/${embedding.slug}/queries-${index.scope}.npz
+  # multi-doc 동결 세트 질의 임베딩과, 그 qid·query만 내보낸 VM 업로드 파일 (docs/slices/09-multidoc-eval.md)
+  query_emb_multidoc: data/index/${embedding.slug}/queries-multidoc.npz
+  queries_multidoc_vm: data/multidoc/queries_g3.vm.jsonl
   runs_dir: data/runs
   # 생성 호출 기록. 호출마다 JSON 하나
   generate_dir: data/runs/generate
@@ -88,6 +91,7 @@ index:
 # 검색 실행 방식 (docs/slices/05-retrieve.md)
 search:
   mode: run  # run | export-queries(로컬) | embed-queries(VM)
+  queries: summary_q  # summary_q | multidoc(G3 동결 세트, index.scope=full만)
 
 # 생성 질의 (rag.generate). dev 질의는 qid, 자유 질의는 query 하나만 준다
 ask:
@@ -103,6 +107,10 @@ chunk_sweep:
 # multi-doc 묶음 구성 (docs/slices/07-bundles.md). 값은 D-13에서 확정
 multidoc:
   types: [conf, law, questioner]
+  # S9 채점 (docs/SPEC.md "보조 관찰"). 순위 파일은 질의마다 서로 다른 문서 max(ks)개 이상
+  eval:
+    ks: [5, 10]
+    breakdowns: [type]
   pool_max_docs: 20  # 완전성 검사가 후보 집합 전체를 읽으므로 크기 상한
   # 유형별 준비 수. law를 바꾸면 rng 소비가 달라져 questioner 순서가 바뀐다(D-13, S8 결정 2026-10-06)
   n_pools_per_type: {conf: 350, law: 250, questioner: 350}
