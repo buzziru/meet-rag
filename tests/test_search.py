@@ -1,6 +1,8 @@
 import numpy as np
+import pytest
 
-from rag.search import first_docs, rank_docs, rank_with_pool
+from rag.index import load_cfg
+from rag.search import first_docs, query_files, rank_docs, rank_with_pool
 
 
 def test_rank_docs_dedupes_by_first_chunk_rank():
@@ -46,3 +48,16 @@ def test_query_batch_does_not_change_ranks():
         return out
 
     assert run(7) == run(40)
+
+
+def test_multidoc_queries_need_full_scope():
+    cfg = load_cfg(["search.queries=multidoc", "index.scope=dev-small"])
+    with pytest.raises(SystemExit):
+        query_files(cfg)
+    full = query_files(load_cfg(["search.queries=multidoc", "index.scope=full"]))
+    assert full["name"] == "multidoc" and full["emb"].name == "queries-multidoc.npz"
+
+
+def test_summary_q_files_unchanged():
+    files = query_files(load_cfg(["index.scope=full"]))
+    assert files["name"] == "dev-full" and files["emb"].name == "queries-full.npz"

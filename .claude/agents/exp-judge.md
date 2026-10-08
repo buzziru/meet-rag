@@ -14,7 +14,7 @@ model: opus
 
 - 판정 절차와 기록 형식은 `exp-judgment` 스킬(`.claude/skills/exp-judgment/SKILL.md`)을 따른다. 시작할 때 읽는다.
 - 판정 기준은 EXP 문서의 "판정 기준"과 `docs/SPEC.md` 판정 절이다. 결과를 본 뒤 기준을 해석으로 바꾸지 않는다.
-- 지표와 bootstrap은 저장소의 평가 모듈(`src/rag/eval/`)로 계산한다. 같은 계산을 새로 구현하지 않는다. 모듈을 고치지 않는다.
+- 지표와 bootstrap은 저장소의 평가 모듈(`src/rag/eval/`, multi-doc 관찰은 `src/rag/eval_multi/`)로 계산한다. 같은 계산을 새로 구현하지 않는다. 모듈을 고치지 않는다.
 - test 분할 파일이나 점수를 읽지 않는다. dev-small 점수는 판정에 쓰지 않는다.
 - 수치는 실행한 명령과 함께 적는다. 확인하지 못한 수치는 쓰지 않는다.
 
