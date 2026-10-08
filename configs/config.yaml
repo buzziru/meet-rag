@@ -21,7 +21,7 @@ g3_scope:
   any: 쟁점|질의와 답변
 # G3 law 질의 재판정(범위 모호·정답 내용 불일치). 작업 하나에 입력 크기 합 max_chars, 질의 max_queries 이하
 g3_judge:
-  prompt_version: scope_v1
+  prompt_version: scope_v2
   max_chars: 60000
   max_queries: 10
 

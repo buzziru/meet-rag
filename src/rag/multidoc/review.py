@@ -21,6 +21,7 @@ from pathlib import Path
 from hydra import compose, initialize_config_dir
 
 from rag.multidoc.check import load_prompt, wrap_lines
+from rag.multidoc.prepare import load_docs, speaker_text
 from rag.sample_review import sample_qids
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -140,6 +141,7 @@ def judge_input(prompt, q: dict, meta: dict[str, dict], width: int) -> str:
     keys = ("date", "committee_name", "meeting_number", "session_number")
     blocks = [prompt.document.format(n=i, agenda=" ".join(agenda_items(meta[d]["agenda"])),
                                      text=wrap_lines(meta[d]["context"], width),
+                                     speakers=speaker_text(meta[d]["speakers"]),
                                      **{k: meta[d][k] for k in keys})
               for i, d in enumerate(gold, 1)]
     user = prompt.user.format(query=q["query"], documents="\n\n".join(blocks))
@@ -163,12 +165,8 @@ def judge_main(cfg, queries: dict[str, dict]) -> None:
     prompt, _ = load_prompt(j.prompt_version)
     todo = sorted((q for q in queries.values() if q["type"] == cfg.g3_scope.type),
                   key=lambda q: q["qid"])
-    gold = {d for q in todo for d in q["gold_doc_ids"]}
-    meta = {}
-    with (ROOT / paths.corpus).open(encoding="utf-8") as f:
-        for d in map(json.loads, f):
-            if d["doc_id"] in gold:
-                meta[d["doc_id"]] = d
+    # 질의자(speakers)를 붙인 코퍼스 행. 정답 문서만 필요해 후보 집합 대신 정답 문서로 묶는다
+    meta = load_docs(cfg, [{"doc_ids": q["gold_doc_ids"]} for q in todo])
     out = ROOT / paths.multidoc_judge_in
     out.mkdir(parents=True, exist_ok=True)
     sizes = []
