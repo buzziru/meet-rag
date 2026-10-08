@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from rag.bm25 import BM25Retriever
 from rag.eval.metrics import load_gold
 from rag.index import ROOT, encoder, load_cfg, load_embeddings, load_model
 
@@ -51,6 +52,18 @@ def rank_docs(scores: np.ndarray, chunk_doc_ids: np.ndarray, k: int,
               pool: int | None = None) -> list[str]:
     """청크 점수 내림차순에서 문서가 처음 나온 순서로 상위 k개 문서를 고른다."""
     return rank_with_pool(scores, chunk_doc_ids, k, pool)[0]
+
+
+def rrf(rankings: list[list[str]], k: int, top_k: int) -> list[str]:
+    """문서 순위 목록들을 RRF(Σ 1/(k + 순위))로 합친다.
+
+    동점이면 앞 목록(dense)에 먼저 나온 문서가 앞선다.
+    """
+    score: dict[str, float] = {}
+    for docs in rankings:
+        for rank, doc in enumerate(docs, 1):
+            score[doc] = score.get(doc, 0.0) + 1 / (k + rank)
+    return sorted(score, key=score.__getitem__, reverse=True)[:top_k]
 
 
 def embed_queries(cfg, texts: list[str]) -> np.ndarray:
@@ -137,14 +150,24 @@ def search(cfg) -> None:
     qids, text_path = query_list(cfg)
     q_emb = query_embeddings(cfg, qids, text_path, files["emb"])
     r = cfg.retriever
+    hybrid = r.type == "hybrid"
+    if hybrid:
+        bm25 = BM25Retriever(cfg, index_dir)
+        q_ids = bm25.query_ids(read_texts(text_path, qids))
+    depth = r.fusion.depth if hybrid else r.top_k
     rows, fallbacks = [], 0
     for start in range(0, len(qids), r.query_batch):
         scores = q_emb[start : start + r.query_batch] @ chunk_emb.T
-        for qid, row in zip(qids[start : start + r.query_batch], scores, strict=True):
-            docs, full = rank_with_pool(row, chunk_doc_ids, r.top_k, r.chunk_pool)
+        for j, row in enumerate(scores, start):
+            docs, full = rank_with_pool(row, chunk_doc_ids, depth, r.chunk_pool)
             fallbacks += full
-            rows += [{"qid": qid, "rank": i, "doc_id": d} for i, d in enumerate(docs, 1)]
-    out = ROOT / cfg.paths.runs_dir / f"{index_dir.parent.name}-{files['name']}.csv"
+            if hybrid:
+                lexical = rank_docs(bm25.scores(q_ids[j]), chunk_doc_ids, depth, r.chunk_pool)
+                docs = rrf([docs, lexical], r.fusion.rrf_k, r.top_k)
+            rows += [{"qid": qids[j], "rank": i, "doc_id": d} for i, d in enumerate(docs, 1)]
+    # dense는 기존 이름을 유지해 기준 순위 파일과 같은 경로를 쓴다
+    kind = "" if r.type == "dense" else f"-{r.type}"
+    out = ROOT / cfg.paths.runs_dir / f"{index_dir.parent.name}{kind}-{files['name']}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(out, index=False, lineterminator="\n")
     print(f"{len(qids)} queries -> {out.relative_to(ROOT)} (전체 정렬 {fallbacks}건)")
