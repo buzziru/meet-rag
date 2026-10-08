@@ -171,11 +171,29 @@ def judge(gen: dict, elements: list[dict] | None, answerable: bool, pool_doc_ids
             "dropped_quotes": n_support - n_matched}
 
 
-def check_input(prompt, query: str, pool_doc_ids: list[str], docs: dict[str, dict]) -> str:
+def wrap_lines(text: str, width: int) -> str:
+    """width자를 넘는 줄을 문장 끝 뒤 공백에서 줄바꿈으로 나눈다. 검사 작업자가 한 번에 읽을 수
+    있는 줄 길이를 넘는 문단 때문이다. 공백 하나를 줄바꿈으로 바꿀 뿐이라 공백을 줄인 인용 대조는
+    같다."""
+    out = []
+    for line in text.split("\n"):
+        cur = ""
+        for sent in re.split(r"(?<=[.?!…]) ", line) if len(line) > width else [line]:
+            if cur and len(cur) + 1 + len(sent) > width:
+                out.append(cur)
+                cur = sent
+            else:
+                cur = f"{cur} {sent}" if cur else sent
+        out.append(cur)
+    return "\n".join(out)
+
+
+def check_input(prompt, query: str, pool_doc_ids: list[str], docs: dict[str, dict],
+                width: int) -> str:
     """검사 입력 파일 본문. 후보 집합 문서에 1부터 번호를 붙인다(pool_doc_ids 순서, 오름차순)."""
-    blocks = [prompt.document.format(n=i, text=docs[d]["context"],
+    blocks = [prompt.document.format(n=i, text=wrap_lines(docs[d]["context"], width),
                                      speakers=speaker_text(docs[d]["speakers"]),
-                                     **{k: docs[d][k] for k in META})
+                                     **{k: wrap_lines(str(docs[d][k]), width) for k in META})
               for i, d in enumerate(pool_doc_ids, 1)]
     user = prompt.user.format(query=query, documents="\n\n".join(blocks))
     return f"# 지시\n\n{prompt.system}\n\n# 입력\n\n{user}"
@@ -309,7 +327,8 @@ def main() -> None:
         for p in todo:
             gen = read_json(dirs["gen_out"] / f"{p['pool_id']}.json")
             (dirs["check_in"] / f"{p['pool_id']}.md").write_text(
-                check_input(prompt, gen["query"], p["doc_ids"], docs), encoding="utf-8",
+                check_input(prompt, gen["query"], p["doc_ids"], docs, c.max_line_chars),
+                encoding="utf-8",
                 newline="\n")
         print(f"검사 입력 {len(todo)}개를 썼다 → {dirs['check_in']}. "
               f"검사 대기 {counts['check_wait'] + len(todo)}개")
