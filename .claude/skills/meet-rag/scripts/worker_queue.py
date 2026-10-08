@@ -13,7 +13,8 @@
 start는 작업의 항목 중 출력이 없는 것만 출력한다. 에이전트 프롬프트의 항목 목록은 이 출력을
 그대로 붙인다. 손으로 옮기다 항목을 빠뜨린 사례가 있다(G3 작업 274·290).
 hold는 작업자가 입력을 끝까지 읽지 못해 건너뛴 항목을 보류로 기록한다. 같은 입력이면 다시
-실패하므로 plan이 이 항목을 빼고, 처리는 사용자가 정한다.
+실패하므로 plan·start·status가 이 항목을 빼고, 처리는 사용자가 정한다. 보류를 푸는 명령은
+두지 않는다. 입력을 고친 뒤(긴 줄 나누기 등)에는 새 큐 파일로 다음 회차를 시작한다.
 """
 
 import argparse
@@ -74,16 +75,19 @@ def main() -> None:
         return
 
     jobs = load_jobs(a.jobs)
+    skip = held(a.queue)
     if a.cmd == "status":
-        todo = [n for n, ids in jobs.items() if missing(ids, a.out, a.ext)]
-        print(f"done {len(jobs) - len(todo)}/{len(jobs)} jobs, next: {todo[:5]}")
+        todo = [n for n, ids in jobs.items() if set(missing(ids, a.out, a.ext)) - skip]
+        print(f"done {len(jobs) - len(todo)}/{len(jobs)} jobs, next: {todo[:5]}, held {len(skip)}")
         return
     if a.queue is None:
         ap.error(f"{a.cmd}에는 --queue가 필요하다")
+    if bad := [n for n in a.job if n not in jobs]:
+        ap.error(f"작업 {bad}이 {a.jobs}에 없다")
+    if a.cmd == "hold" and (len(a.job) != 1 or not a.hold or set(a.hold) - set(jobs[a.job[0]])):
+        ap.error("hold는 작업 하나와 그 작업에 속한 --hold 항목이 필요하다")
     for n in a.job:
-        if n not in jobs:
-            ap.error(f"작업 {n}이 {a.jobs}에 없다")
-        left = missing(jobs[n], a.out, a.ext)
+        left = [i for i in missing(jobs[n], a.out, a.ext) if i not in skip]
         if a.cmd == "hold":
             log(a.queue, a.jobs, n, "held", a.hold)
             print(f"{n}: held {' '.join(a.hold)}")
