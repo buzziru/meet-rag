@@ -1,6 +1,6 @@
 ---
 name: protocol-guard
-description: meet-rag 브랜치 diff에서 평가 오염과 저장소 금지 조항 위반을 찾는 점검표. test 분할 접근, src/rag/eval·configs/eval·data/splits 수정, 파라미터 하드코딩, data/·.env 스테이징, 평가 질의(summary_q)의 LLM 전송(dev만 허용), EXP 범위 밖 변경을 판정한다. protocol-auditor 에이전트가 PR 전 감사에서 쓰고, 메인이 커밋 직전 빠른 확인에 쓴다. 일반 코드 리뷰에는 쓰지 않는다.
+description: meet-rag 브랜치 diff에서 평가 오염과 저장소 금지 조항 위반을 찾는 점검표. test 분할 접근, src/rag/eval·src/rag/eval_multi·configs/eval·data/splits 수정, 파라미터 하드코딩, data/·.env 스테이징, 평가 질의(summary_q)의 LLM 전송(dev만 허용), EXP 범위 밖 변경을 판정한다. protocol-auditor 에이전트가 PR 전 감사에서 쓰고, 메인이 커밋 직전 빠른 확인에 쓴다. 일반 코드 리뷰에는 쓰지 않는다.
 ---
 
 # protocol-guard: 평가 프로토콜 점검표
@@ -37,7 +37,7 @@ test 질의를 읽거나 test 점수를 계산하는 코드 경로가 새로 생
 ### P3. 보호 경로 수정
 
 - `configs/eval/`는 항상 보호된다
-- `src/rag/eval/`는 S3 완료 후, `data/splits/`는 S2 완료 후 보호된다. 완료 여부는 `docs/PLAN.md` 체크 상태로 판단한다
+- `src/rag/eval/`는 S3 완료 후, `src/rag/eval_multi/`와 `configs/config.yaml`의 `multidoc.eval` 키는 S9 완료 후, `data/splits/`는 S2 완료 후 보호된다. multi-doc 채점이 바뀌면 EXP마다 보고하는 multi-doc 관찰을 기준선(D-16)과 비교할 수 없다. 완료 여부는 `docs/PLAN.md` 체크 상태로 판단한다
 - `docs/SPEC.md`의 평가 프로토콜 절 수정
 
 보호 경로를 바꿨으면, 사용자 승인 기록과 `docs/DECISIONS.md` 항목이 같은 diff에 있는지 확인한다. 둘 다 있으면 통과이고 기록만 남긴다.
