@@ -49,6 +49,8 @@ paths:
   multidoc_queries: data/multidoc/queries.jsonl
   multidoc_review: data/multidoc/review/g3_sample.md  # G3 검수 파일. 검수 칸은 비워 둔다
   multidoc_scope_review: data/multidoc/review/g3_scope.md  # G3 범위 재판정 파일
+  multidoc_exclude: configs/multidoc/g3_exclude.yaml  # G3 검수에서 뺀 질의
+  multidoc_frozen: data/multidoc/queries_g3.jsonl  # G3 동결 세트. S9 입력
 
 embedding:
   model_name: nlpai-lab/KURE-v1

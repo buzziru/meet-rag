@@ -1,3 +1,4 @@
+from rag.multidoc.freeze import excluded
 from rag.multidoc.review import agenda_items, doc_heads, render, scope_target
 
 
@@ -25,3 +26,7 @@ def test_agenda_items_drops_proposers_and_splits():
 def test_scope_target_needs_both_terms():
     assert scope_target("두 회의에서 각각 논의된 쟁점은?", "각각", "쟁점|질의와 답변")
     assert not scope_target("두 회의에서 논의된 쟁점은?", "각각", "쟁점|질의와 답변")
+
+
+def test_excluded_merges_groups():
+    assert excluded({"sample": ["a", "b"], "scope": ["c"]}) == {"a", "b", "c"}
