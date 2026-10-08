@@ -40,3 +40,8 @@ judge:
   - md-law-0159
   - md-law-0170
   - md-law-0220
+# scope_v1에서 통과가 아니었고 scope_v2에서만 통과. 사용자 결정 2026-10-08: 한 번이라도 통과가 아니면 뺀다
+judge_v1:
+  - md-law-0020
+  - md-law-0024
+  - md-law-0083

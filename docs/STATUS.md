@@ -5,7 +5,7 @@
 - multi-doc: S7·S8·S8b·S8c 완료(D-13, D-14). PR #37\~#39 병합
 - G3 본 생성 판정 완료(2026-10-08): 통과 638(conf 233, law 190, questioner 215) → `data/multidoc/queries.jsonl`. Jev 누적 13건 $0.00050. 생성·검사·판정 대기 0, 보류 0
 - PR #40 병합(3f2b9bc). 본 생성 범위 950개 완료, 대기·보류 0이라 `queries.jsonl` 638건이 동결 대상(SHA-256 `d2169035…8cc48061`)
-- G3 검수 완료(2026-10-08): 표본 50건 불량 3(모두 law), law 회의별 쟁점형 113건 사용자 재판정 모호 20, law 190건 서브에이전트 재판정(`scope_v2`, 정답 문서 본문·질의자 포함)에서 동결분 비통과 12. 35건을 빼 동결 세트 `data/multidoc/queries_g3.jsonl` 603건(conf 233, law 155, questioner 215, SHA-256 `ad8a8fc3…4e436f8cf4`, `rag.multidoc.freeze`). 근거 `notebooks/08_04_G3검수.ipynb`. D-14 규칙 5 유지(사용자). PR #41(`chore/g3-review`) 리뷰 대기, DECISIONS 미기록
+- G3 검수 완료(2026-10-08): 표본 50건 불량 3(모두 law), law 회의별 쟁점형 113건 사용자 재판정 모호 20, law 190건 서브에이전트 재판정(`scope_v2`, 정답 문서 본문·질의자 포함)에서 동결분 비통과 12와 v1에서만 비통과 3. 38건을 빼 동결 세트 `data/multidoc/queries_g3.jsonl` 600건(conf 233, law 152, questioner 215, SHA-256 `0c385a2b…8d1a874436`, `rag.multidoc.freeze`). 근거 `notebooks/08_04_G3검수.ipynb`. D-14 규칙 5 유지(사용자). PR #41(`chore/g3-review`) 리뷰 대기, DECISIONS 미기록
 - 진행 기록 `_workspace/s08_main_progress.md`, 큐 `_workspace/g3_queue.jsonl`(작업 404까지 done), 판정 로그 `_workspace/g3_judge_run1\~3.log`
 
 ## 실행 중 작업
