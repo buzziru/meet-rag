@@ -4,7 +4,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[1] / ".claude/skills/meet-rag/scripts/worker_queue.py"
+# 하네스 테스트는 PR 병합 조건(uv run pytest -q)에 들지 않게 스크립트 옆에 둔다
+# (pytest는 .으로 시작하는 .claude/를 모으지 않는다)
+SCRIPT = Path(__file__).resolve().parent / "worker_queue.py"
 
 
 def run(*args, cwd):
