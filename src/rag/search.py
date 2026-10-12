@@ -55,8 +55,8 @@ def rank_docs(scores: np.ndarray, chunk_doc_ids: np.ndarray, k: int,
     return rank_with_pool(scores, chunk_doc_ids, k, pool)[0]
 
 
-def rrf(rankings: list[list[str]], k: int, top_k: int) -> list[str]:
-    """문서 순위 목록들을 RRF(Σ 1/(k + 순위))로 합친다.
+def rrf(rankings: list[list[str]], k: int, top_k: int | None) -> list[str]:
+    """문서 순위 목록들을 RRF(Σ 1/(k + 순위))로 합친다. top_k가 None이면 후보 전체를 낸다.
 
     동점이면 앞 목록(dense)에 먼저 나온 문서가 앞선다.
     """
@@ -65,6 +65,11 @@ def rrf(rankings: list[list[str]], k: int, top_k: int) -> list[str]:
         for rank, doc in enumerate(docs, 1):
             score[doc] = score.get(doc, 0.0) + 1 / (k + rank)
     return sorted(score, key=score.__getitem__, reverse=True)[:top_k]
+
+
+def conditions_first(docs: list[str], matched: set[str]) -> list[str]:
+    """조건에 맞는 문서(matched)를 순서를 유지한 채 앞으로 옮긴다(EXP-004 필터링)."""
+    return sorted(docs, key=lambda d: d not in matched)
 
 
 def condition_docs(counts: dict[int, int], doc_scores: np.ndarray, doc_names: np.ndarray,
@@ -193,12 +198,16 @@ def search(cfg) -> None:
                 lexical = rank_docs(bm25.scores(q_ids[j]), chunk_doc_ids, depth, r.chunk_pool)
                 lists = [docs, lexical]
                 counts = cond_index.match_counts(conds[qids[j]]) if use_cond else {}
+                matched = set()
                 if counts and max(counts.values()) >= r.conditions.min_fields:
                     doc_scores = np.full(len(doc_names), -np.inf, dtype=row.dtype)
                     np.maximum.at(doc_scores, chunk_doc, row)
                     lists.append(condition_docs(counts, doc_scores, doc_names, depth,
                                                 r.conditions.min_fields))
-                docs = rrf(lists, r.fusion.rrf_k, r.top_k)
+                    if r.conditions.get("filter") == "best":  # 맞은 필드 수가 가장 많은 문서
+                        top = max(counts.values())
+                        matched = {doc_names[i] for i, c in counts.items() if c == top}
+                docs = conditions_first(rrf(lists, r.fusion.rrf_k, None), matched)[: r.top_k]
             rows += [{"qid": qids[j], "rank": i, "doc_id": d} for i, d in enumerate(docs, 1)]
     # dense는 기존 이름을 유지해 기준 순위 파일과 같은 경로를 쓴다. run_name이 있으면 그 이름을 쓴다
     name = r.get("run_name") or r.type
