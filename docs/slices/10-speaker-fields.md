@@ -17,7 +17,7 @@ H14(질의 조건 방식, D-19)가 질의에서 뽑은 조건을 문서와 대�
 - `questioners`: `{name, position, affiliation}` 목록. 값은 `questioner_name`·`questioner_position`·`questioner_affiliation`
 - `answerers`: 같은 형식. 값은 `answerer_name`·`answerer_position`·`answerer_affiliation`
 - 각 값은 `strip()`한다. 공백 한 칸만 든 값이 있다(`docs/data.md` §9). 빈 값은 `""`로 둔다
-- 세 값이 모두 같은 항목은 하나만 남긴다. 순서는 `qid` 순으로 처음 나온 순서다. 같은 입력이면 같은 출력이 나와야 한다
+- 세 값이 모두 빈 항목은 넣지 않는다. 세 값이 모두 같은 항목은 하나만 남긴다. 순서는 `qid` 순으로 처음 나온 순서다. 같은 입력이면 같은 출력이 나와야 한다
 - `*_ID`·`*_ISNI`는 넣지 않는다. 응답자 쪽은 98%가 비어 필터 근거로 쓸 수 없다(`docs/data.md` §9)
 - 이름 정규화(직함이 이름에 붙은 경우 등)는 노트북 12_01을 본 뒤 정한다. 정하기 전에는 `strip()`만 한다
 
@@ -33,7 +33,7 @@ H14(질의 조건 방식, D-19)가 질의에서 뽑은 조건을 문서와 대�
 - 항목: 위원회(`committee_name`), 회의 종류(`meeting_name`), 사람 이름(`questioners`·`answerers`의 `name`), 직위(`position`), 소속(`affiliation`)
 - 값마다 그 값을 가진 문서 수를 적는다. 빈 값은 넣지 않는다. 키 순서를 정렬해 같은 입력이면 같은 파일이 나오게 한다
 
-### test 분할 회의 문서를 사전에 넣는가 (사용자 결정)
+### test 분할 회의 문서를 사전에 넣는가 (사용자 결정: 전체 문서, 2026-10-12)
 
 test 회의 문서의 화자 값도 그 회의 QA 라벨에서 온다. SPEC은 "설정 선택, 필터 규칙, 프롬프트 작성에 test 질의를 쓰지 않는다"고 정한다(`docs/SPEC.md:81`).
 
@@ -57,7 +57,7 @@ test 회의 문서의 화자 값도 그 회의 QA 라벨에서 온다. SPEC은 "
 1. `uv run python -m rag.ingest` 결과 코퍼스 38,516건, 질의 39,633건
 2. 질의 파일 SHA-256이 이번 변경 전과 같다
 3. 코퍼스에서 `questioners`·`answerers`를 뺀 나머지가 변경 전 파일과 같다(문서 순서 포함)
-4. 모든 문서에 두 필드가 있고, 항목 수 합이 1 이상이다
+4. 모든 문서에 두 필드가 있다. 두 필드가 모두 빈 문서는 원천 라벨의 이름·직위·소속이 모두 빈 경우뿐이다(구현 중 확인: 2건, `050921-b69e83f124`·`051081-c92165ea6a`, 질의자 ID만 있음)
 5. `uv run python -m rag.meta_dict`를 두 번 실행한 결과 SHA-256이 같다. 사전 코드가 코퍼스 밖 파일을 열지 않는다
 6. `uv run python -m rag.search +exp=exp001 index.scope=dev-small`의 순위 파일 SHA-256이 변경 전과 같다(인덱스 재사용 확인)
 7. `uv run pytest -q`, `uv run ruff check .` 통과. 화자 모으기(중복 제거, 순서, strip)와 사전 값 세기 단위 테스트를 둔다
