@@ -8,6 +8,7 @@
 import json
 import re
 import sys
+from collections import Counter
 
 from rag.index import ROOT, load_cfg
 
@@ -97,6 +98,32 @@ def doc_values(doc: dict) -> dict[str, set[str]]:
         "meeting_name": {doc.get("meeting_name", "")},
         "names": names,
     }
+
+
+class ConditionIndex:
+    """문서 값의 역색인. 질의 조건에 맞는 필드 수를 문서마다 센다(H14, EXP-003)."""
+
+    def __init__(self, docs: list[dict], year_ref_offsets):
+        self.offsets = year_ref_offsets
+        self.index: dict[str, dict[str, set[int]]] = {}  # 필드 → 값 → 문서 번호
+        for i, doc in enumerate(docs):
+            for field, values in doc_values(doc).items():
+                for v in values - {""}:
+                    self.index.setdefault(field, {}).setdefault(v, set()).add(i)
+
+    def match_counts(self, conditions: dict[str, list[str]]) -> Counter:
+        """필드 안에서는 질의 값 중 하나라도 맞으면 그 필드가 맞는다.
+
+        `year_ref` Y는 회의 연도 Y+offset(예산안 Y-1, 집행 Y, 결산 Y+1)과 맞춘다.
+        """
+        counts = Counter()
+        for field, values in conditions.items():
+            if field == "year_ref":
+                field = "date"
+                values = [str(int(y) + o) for y in values for o in self.offsets]
+            by_value = self.index.get(field, {})
+            counts.update(set().union(*(by_value.get(v, set()) for v in values)))
+        return counts
 
 
 def read_queries(cfg) -> list[dict]:
