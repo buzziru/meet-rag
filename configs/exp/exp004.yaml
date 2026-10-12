@@ -1,0 +1,11 @@
+# @package _global_
+# EXP-004 조건에 맞는 문서를 앞으로 (docs/experiments/EXP-004.md). 기준 EXP-003 설정 위에 바꾼다.
+# 실행: rag.search +exp=exp004
+defaults:
+  - exp003
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter  # 순위 파일 이름. EXP-003(hybrid-cond) 파일을 덮어쓰지 않는다
+  conditions:
+    filter: true  # 조건 필드가 min_fields개 이상 맞은 문서를 RRF 순서를 유지한 채 앞으로 옮긴다
