@@ -236,3 +236,12 @@
 - 단서: D-21과 같이 EXP-003(H14) 문서에 적는다. 이번 규칙은 G3 측정 뒤 사용자 코멘트로 더한 규칙이다. G3 위원회 적중 증가 16개는 모두 `국회 본회의` 항목에서 나왔고, 이 항목은 G3 관찰에서 처음 확인한 표기다(사용자 판단은 위 약칭 유지 항목). `year_ref`를 문서 연도와 맞추는 방식(같은 해, 앞뒤 1년 등)은 EXP-003에서 정한다
 - 산출물: `data/conditions/multidoc.jsonl` SHA-256 `1017c190da3005b72f0f2d1f6a11d72acc4d77fe17f42c4bf78924a68c435d90`, `data/conditions/summary_q.jsonl` SHA-256 `e1f30e00b9a654509970225db022e18481545a9f280fb8dc3613f7cbc2968c90`(두 번 실행 일치). D-21의 산출물 해시를 대체한다
 - 날짜: 2026-10-12
+
+## D-23 질의 조건 목록 채택, 다음 실험의 기준 (EXP-003)
+- 결정: EXP-001 hybrid에 질의 조건 문서 목록(조건 필드 2개 이상 일치, 맞은 필드 수·dense 문서 점수 순)을 RRF 세 번째 목록으로 더한 설정(`configs/exp/exp003.yaml`)을 채택하고 다음 EXP의 기준 실험으로 둔다. 다음 실험은 `+exp=exp003` 위에서 실행한다. 기준 순위는 single-doc `data/runs/kure-v1-fixed-512-64-hybrid-cond-dev-full.csv`(SHA-256 `b0ce2203d013a9742145b3055d78f6255f28f924163c108323849efbaeca8436`), multi-doc `…-hybrid-cond-multidoc.csv`(SHA-256 `00657754d0085b7bb6445b68f0c67b85fe95eda3b55ce5140c299039e57a4c67`)다. 조건 파일(`rag.conditions`, D-22 해시)이 먼저 있어야 한다
+- 근거: SPEC "메타데이터 가설의 판정"(D-18). single-doc dev-full Recall@5 차이 0.00%p [0.00, 0.00]로 보류, multi-doc Recall@5 +14.71%p [+12.82, +16.64], Complete@5 +13.50%p [+10.83, +16.33]로 채택 조건을 충족한다(`docs/experiments/EXP-003.md`). multi-doc은 dense 기준(Recall@5 0.4657)도 넘어 D-17의 하락을 회복했다
+- 설계 경위: 처음 설계(필드 1개 이상 일치)는 dev-small에서 필드 하나짜리 조건이 정답을 밀어내 `min_fields: 2`로 바꿨다(사용자 결정, dev-full·multi-doc을 보기 전, `notebooks/14_01_EXP003_조건목록확인.ipynb`)
+- 한계: single-doc에서 조건 목록이 붙는 질의는 dev 7건(그중 목록이 생긴 4건)뿐이고 모두 정답이 1위라 single-doc 해는 거의 시험되지 않았다. multi-doc 단계 채택이라 test로 다시 확인할 수 없다(SPEC). 조건 추출 규칙의 G3 관찰 뒤 수정(D-21·D-22)으로 낙관 편향이 있을 수 있다
+- 다음(사용자 지시): H14 후속 변형은 가중 결합(조건 목록 가중치를 낮게), 필터링 순으로 검토한다. 필터링은 single-doc 위험이 커 마지막이다. dense + BM25 + 조건 목록 뒤 리랭킹은 H2와 이어 따로 논의한다
+- 근거 노트북: `notebooks/14_02_EXP003_판정근거.ipynb`
+- 날짜: 2026-10-12
