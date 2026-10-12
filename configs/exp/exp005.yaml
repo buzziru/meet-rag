@@ -1,0 +1,30 @@
+# @package _global_
+# EXP-005 cross-encoder reranker로 상위 후보 재정렬 (docs/experiments/EXP-005.md). 기준 EXP-004 위에 더한다.
+# 순서: rag.search search.mode=rerank-pairs → (Colab) rag.rerank → rag.search
+defaults:
+  - exp004
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter-rerank  # 순위 파일 이름. EXP-004 파일을 덮어쓰지 않는다
+  rerank:
+    enabled: true  # 점수 파일로 RRF 상위 depth개를 다시 줄 세운 뒤 필터를 적용한다
+    model: nlpai-lab/KURE-Reranker-nano
+    revision: f3b3eff2b5251f135b638891ebe7d6c5ae94cc3e
+    depth: 20  # RRF 순서(필터 전) 상위 문서 수
+    # 질의 + 청크 하나(KURE-v1 토큰 512개). 토크나이저가 달라 여유를 둔다
+    max_length: 1024
+    batch_size: 32
+    mode: score  # score | latency
+    # 로컬 cpu·float32. Colab은 명령에서 cuda·float16으로 바꾼다
+    device: cpu
+    dtype: float32
+    threads: null  # 지연 측정에서 CPU 스레드 수를 고정할 때 쓴다(HF Spaces 무료 CPU 2 vCPU)
+    latency:
+      n_queries: 100
+      seed: 20260929
+
+paths:
+  rerank_pairs: data/rerank/${search.queries}-${index.scope}.pairs.jsonl
+  rerank_scores: data/rerank/${search.queries}-${index.scope}.scores.jsonl
+  rerank_latency: data/rerank/latency-${search.queries}-${index.scope}-${retriever.rerank.device}.json

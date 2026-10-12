@@ -72,6 +72,35 @@ def conditions_first(docs: list[str], matched: set[str]) -> list[str]:
     return sorted(docs, key=lambda d: d not in matched)
 
 
+def rerank_top(docs: list[str], scores: dict[str, float], depth: int) -> list[str]:
+    """상위 depth개를 reranker 점수 내림차순으로 바꾸고 나머지는 그대로 둔다(EXP-005)."""
+    return sorted(docs[:depth], key=lambda d: -scores[d]) + docs[depth:]
+
+
+def chunks_by_doc(chunk_doc_ids: np.ndarray) -> dict[str, np.ndarray]:
+    """문서마다 청크 번호 배열."""
+    names, inv = np.unique(chunk_doc_ids, return_inverse=True)
+    groups = np.split(np.argsort(inv, kind="stable"), np.cumsum(np.bincount(inv))[:-1])
+    return dict(zip(names, groups, strict=True))
+
+
+def write_pairs(cfg, index_dir: Path, picks: list[tuple[str, str, int]], texts: dict) -> None:
+    """후보 쌍(qid, doc_id, 질의, 문서의 최고점 청크)을 질의 순서대로 쓴다."""
+    need = {c for _, _, c in picks}
+    chunk_text = {}
+    with (index_dir / "chunks.jsonl").open(encoding="utf-8") as f:
+        for i, line in enumerate(f):
+            if i in need:
+                chunk_text[i] = json.loads(line)["text"]
+    out = ROOT / cfg.paths.rerank_pairs
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8", newline="\n") as f:
+        for qid, doc, c in picks:
+            row = {"qid": qid, "doc_id": doc, "query": texts[qid], "text": chunk_text[c]}
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    print(f"{len(picks):,} pairs -> {cfg.paths.rerank_pairs}")
+
+
 def condition_docs(counts: dict[int, int], doc_scores: np.ndarray, doc_names: np.ndarray,
                    depth: int, min_fields: int) -> list[str]:
     """조건 필드가 min_fields개 이상 맞은 문서를 맞은 필드 수, dense 문서 점수 내림차순으로
@@ -187,6 +216,17 @@ def search(cfg) -> None:
     use_cond = hybrid and r.get("conditions") and r.conditions.enabled
     if use_cond:
         doc_names, chunk_doc, cond_index, conds = condition_setup(cfg, chunk_doc_ids)
+    export_pairs = cfg.search.mode == "rerank-pairs"
+    use_rerank = hybrid and r.get("rerank") and r.rerank.enabled and not export_pairs
+    if export_pairs:
+        doc_chunks = chunks_by_doc(chunk_doc_ids)
+        texts = dict(zip(qids, read_texts(text_path, qids), strict=True))
+        picks = []
+    if use_rerank:
+        rerank_scores: dict[str, dict[str, float]] = {}
+        with (ROOT / cfg.paths.rerank_scores).open(encoding="utf-8") as f:
+            for x in map(json.loads, f):
+                rerank_scores.setdefault(x["qid"], {})[x["doc_id"]] = x["score"]
     depth = r.fusion.depth if hybrid else r.top_k
     rows, fallbacks = [], 0
     for start in range(0, len(qids), r.query_batch):
@@ -207,8 +247,18 @@ def search(cfg) -> None:
                     if r.conditions.get("filter") == "best":  # 맞은 필드 수가 가장 많은 문서
                         top = max(counts.values())
                         matched = {doc_names[i] for i, c in counts.items() if c == top}
-                docs = conditions_first(rrf(lists, r.fusion.rrf_k, None), matched)[: r.top_k]
+                fused = rrf(lists, r.fusion.rrf_k, None)
+                if export_pairs:
+                    picks += [(qids[j], d, int(doc_chunks[d][np.argmax(row[doc_chunks[d]])]))
+                              for d in fused[: r.rerank.depth]]
+                    continue
+                if use_rerank:
+                    fused = rerank_top(fused, rerank_scores[qids[j]], r.rerank.depth)
+                docs = conditions_first(fused, matched)[: r.top_k]
             rows += [{"qid": qids[j], "rank": i, "doc_id": d} for i, d in enumerate(docs, 1)]
+    if export_pairs:
+        write_pairs(cfg, index_dir, picks, texts)
+        return
     # dense는 기존 이름을 유지해 기준 순위 파일과 같은 경로를 쓴다. run_name이 있으면 그 이름을 쓴다
     name = r.get("run_name") or r.type
     kind = "" if name == "dense" else f"-{name}"
@@ -223,7 +273,8 @@ def main() -> None:
     mode = cfg.search.mode
     if mode in ("export-queries", "embed-queries") and cfg.index.scope != "full":
         raise SystemExit(f"{mode}는 index.scope=full에서만 쓴다")
-    {"run": search, "export-queries": export_queries, "embed-queries": embed_vm_queries}[mode](cfg)
+    {"run": search, "rerank-pairs": search, "export-queries": export_queries,
+     "embed-queries": embed_vm_queries}[mode](cfg)
 
 
 if __name__ == "__main__":
