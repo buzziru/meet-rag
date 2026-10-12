@@ -1,0 +1,13 @@
+# @package _global_
+# EXP-002 BM25 문서에 메타데이터 추가 (docs/experiments/EXP-002.md). 기준 EXP-001 설정 위에 바꾼다.
+# 실행: rag.search +exp=exp002
+defaults:
+  - exp001
+  - _self_
+
+retriever:
+  run_name: hybrid-meta  # 순위 파일 이름. EXP-001(hybrid) 파일을 덮어쓰지 않는다
+  bm25:
+    name: kiwi-meta-v1  # 인덱스 디렉터리 이름. 토큰화 입력이 달라 EXP-001 인덱스와 나눈다
+    # 청크 텍스트 앞에 붙이는 문서 메타데이터(corpus_context.jsonl 필드). 같은 문서의 청크는 같은 값을 받는다
+    meta_fields: [date, committee_name, meeting_name, meeting_number, session_number, agenda]
