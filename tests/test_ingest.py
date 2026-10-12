@@ -3,7 +3,10 @@ import zipfile
 
 import pytest
 
-from rag.ingest import build, iter_labels, make_doc_id
+from rag.index import load_cfg
+from rag.ingest import build, iter_labels, make_doc_id, normalize_name
+
+TITLES = tuple(load_cfg().ingest.name_titles)
 
 
 def label(conf: str, qnum: str, context: str, **kw) -> dict:
@@ -14,6 +17,7 @@ def label(conf: str, qnum: str, context: str, **kw) -> dict:
         "session_number": "s", "agenda": "a", "original": "http://x",
         "context_summary": {"summary_q": f"q{qnum}", "summary_a": f"a{qnum}"},
         "question": {"comment": "qc"}, "answer": {"comment": "ac"},
+        **kw.get("people", {}),
     }
 
 
@@ -34,7 +38,7 @@ def test_build_dedupes_context_and_tracks_splits(tmp_path):
         label("000001", "0001", "같은 구간", date="early"),
     ])
 
-    corpus, queries = build(iter_labels(tmp_path))
+    corpus, queries = build(iter_labels(tmp_path), TITLES)
 
     assert [q["qid"] for q in queries] == ["000001-0001", "000001-0002", "000002-0001"]
     assert [d["doc_id"] for d in corpus] == sorted(d["doc_id"] for d in corpus)
@@ -42,7 +46,7 @@ def test_build_dedupes_context_and_tracks_splits(tmp_path):
     assert list(shared) == [
         "doc_id", "context", "conference_number", "date", "meeting_name", "generation_number",
         "committee_name", "meeting_number", "session_number", "agenda", "original",
-        "splits", "n_qa",
+        "splits", "n_qa", "questioners", "answerers",
     ]
     assert shared["doc_id"] == make_doc_id("000001", "같은 구간")
     assert shared["splits"] == ["Training", "Validation"]
@@ -62,4 +66,38 @@ def test_build_rejects_duplicate_qid():
         ("Validation", label("000001", "0001", "y")),
     ]
     with pytest.raises(ValueError):
-        build(iter(records))
+        build(iter(records), TITLES)
+
+
+def test_build_collects_speakers_in_qid_order(tmp_path):
+    kim = {"questioner_name": " 김갑 ", "questioner_position": "위원", "questioner_affiliation": ""}
+    lee = {"questioner_name": "이을 위원", "questioner_position": "위원장"}
+    minister = {"answerer_name": "박병", "answerer_position": "장관",
+                "answerer_affiliation": "교육부", "answerer_ID": " "}
+    write_zip(tmp_path / "Training/02.라벨링데이터/TL_본회의.zip", [
+        label("000001", "0003", "구간", people={**kim, **minister}),
+        label("000001", "0002", "구간", people={**lee, "answerer_name": " "}),
+        label("000001", "0001", "구간", people={**kim, **minister}),
+    ])
+
+    (doc,), _ = build(iter_labels(tmp_path), TITLES)
+
+    assert doc["questioners"] == [
+        {"name": "김갑", "position": "위원", "affiliation": ""},
+        {"name": "이을", "position": "위원장", "affiliation": ""},
+    ]
+    # 0002의 응답자는 세 값이 모두 비어 빠진다. ID는 넣지 않는다
+    assert doc["answerers"] == [{"name": "박병", "position": "장관", "affiliation": "교육부"}]
+
+
+@pytest.mark.parametrize("raw, name", [
+    ("김갑", "김갑"),
+    ("김갑 위원", "김갑"),
+    ("조달청장 김갑", "김갑"),
+    ("김갑(비)", "김갑"),
+    ("김갑 위", "김갑"),  # 잘린 직함
+    ("데이비드 스트라우브", "스트라우브"),
+    ("김갑위원", "김갑위원"),  # 붙여 쓴 직함은 그대로 둔다
+])
+def test_normalize_name(raw, name):
+    assert normalize_name(raw, TITLES) == name

@@ -30,6 +30,8 @@ paths:
   raw_dir: data
   corpus: data/processed/corpus_context.jsonl
   queries: data/processed/queries_summary_q.jsonl
+  # 질의 조건 추출용 값 사전. 코퍼스 문서 필드에서만 만든다(S10, rag.meta_dict)
+  meta_dict: data/processed/meta_dict.json
   # dev 질의만 내보낸 파일. Colab 질의 임베딩에 올린다(D-07)
   queries_dev: data/processed/queries_summary_q.dev.jsonl
   splits: data/splits/queries.csv
@@ -62,6 +64,10 @@ paths:
   multidoc_judge_in: data/multidoc/judge_in  # G3 재판정 입력(서브에이전트가 읽는다)
   multidoc_judge_out: data/multidoc/judge_out  # G3 재판정 출력(서브에이전트가 쓴다)
   multidoc_judge_jobs: data/multidoc/judge_jobs.jsonl
+
+# 화자 이름 정규화(S10, D-20). 공백으로 나뉜 이름의 마지막 토막이 이 직함으로 끝나면 첫 토막을 이름으로 둔다
+ingest:
+  name_titles: [위원, 의원, 장관, 위원장, 의장, 차관, 청장, 총리, 대표, 간사]
 
 embedding:
   model_name: nlpai-lab/KURE-v1
