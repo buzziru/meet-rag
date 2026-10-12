@@ -1,0 +1,12 @@
+# @package _global_
+# EXP-003 질의 조건 목록을 RRF에 더함 (docs/experiments/EXP-003.md). 기준 EXP-001 설정 위에 더한다.
+# 실행: rag.conditions [search.queries=multidoc] 뒤 rag.search +exp=exp003
+defaults:
+  - exp001
+  - _self_
+
+retriever:
+  run_name: hybrid-cond  # 순위 파일 이름. EXP-001(hybrid) 파일을 덮어쓰지 않는다
+  conditions:
+    enabled: true  # 조건 파일(paths.conditions)로 만든 문서 목록을 RRF 세 번째 목록으로 넣는다
+    year_ref_offsets: [-1, 0, 1]  # 회계연도 Y 언급이 맞는 회의 연도: 예산안 Y-1, 집행 Y, 결산 Y+1
