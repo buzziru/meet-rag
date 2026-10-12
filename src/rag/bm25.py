@@ -12,8 +12,13 @@ from pathlib import Path
 import bm25s
 import numpy as np
 from kiwipiepy import Kiwi
+from omegaconf import OmegaConf
 
 from rag.index import ROOT
+
+# 인덱스를 만든 retriever.bm25 설정. 읽을 때 지금 설정과 다르면 멈춘다
+# (이름만 같은 이전 인덱스를 조용히 읽지 않게)
+SETTINGS = "settings.json"
 
 
 def forms(kiwi: Kiwi, texts: Iterable[str], tags: set[str]):
@@ -53,16 +58,35 @@ def build(chunks_path: Path, out: Path, b, kiwi: Kiwi, meta: dict[str, str] | No
     model.save(out)
 
 
+def write_settings(out: Path, settings: dict) -> None:
+    text = json.dumps(settings, ensure_ascii=False, indent=2)
+    (out / SETTINGS).write_text(text, encoding="utf-8")
+
+
 class BM25Retriever:
     def __init__(self, cfg, index_dir: Path):
         b = cfg.retriever.bm25
         self.tags = set(b.tags)
         self.kiwi = Kiwi()
         out = index_dir / f"bm25-{b.name}"
+        settings = OmegaConf.to_container(b)
         if not (out / "params.index.json").exists():
             fields = b.get("meta_fields")
             meta = doc_meta(ROOT / cfg.paths.corpus, fields) if fields else None
             build(index_dir / "chunks.jsonl", out, b, self.kiwi, meta)
+            write_settings(out, settings)
+        elif not (out / SETTINGS).exists():
+            # 설정 기록 전에 만든 인덱스(kiwi-v1, kiwi-meta-v1).
+            # 지금 설정으로 만들었다고 보고 한 번 기록한다
+            write_settings(out, settings)
+            print(f"{out.name}: 설정 기록이 없어 지금 설정을 {SETTINGS}에 기록함")
+        else:
+            saved = json.loads((out / SETTINGS).read_text(encoding="utf-8"))
+            if saved != settings:
+                raise SystemExit(
+                    f"{out} 인덱스는 다른 retriever.bm25 설정으로 만들어졌다. "
+                    f"설정을 바꾸면 bm25.name도 바꾼다\n저장: {saved}\n현재: {settings}"
+                )
         self.model = bm25s.BM25.load(out, load_vocab=True)
 
     def query_ids(self, texts: list[str]) -> list[list[int]]:

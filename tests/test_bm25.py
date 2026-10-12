@@ -2,6 +2,7 @@ import json
 
 import bm25s
 import numpy as np
+import pytest
 from kiwipiepy import Kiwi
 
 from rag.bm25 import BM25Retriever, build, doc_meta, forms
@@ -39,6 +40,18 @@ def test_bm25_finds_lexical_match(tmp_path):
     # 캐시를 다시 읽어도 같은 점수
     again = BM25Retriever(cfg, tmp_path)
     assert np.allclose(again.scores(ids[0]), bm25.scores(ids[0]))
+
+
+def test_changed_settings_with_same_name_stops(tmp_path):
+    with (tmp_path / "chunks.jsonl").open("w", encoding="utf-8") as f:
+        row = {"doc_id": "d1", "text": "예산을 논의했습니다."}
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    cfg = load_cfg(["+exp=exp001"])
+    BM25Retriever(cfg, tmp_path)
+    BM25Retriever(cfg, tmp_path)  # 같은 설정이면 캐시를 읽는다
+    changed = load_cfg(["+exp=exp001", "+retriever.bm25.meta_fields=[date]"])
+    with pytest.raises(SystemExit, match="bm25.name"):
+        BM25Retriever(changed, tmp_path)
 
 
 def test_meta_prefix_makes_metadata_searchable(tmp_path):
