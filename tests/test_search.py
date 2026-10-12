@@ -2,7 +2,15 @@ import numpy as np
 import pytest
 
 from rag.index import load_cfg
-from rag.search import condition_docs, first_docs, query_files, rank_docs, rank_with_pool
+from rag.search import (
+    condition_docs,
+    conditions_first,
+    first_docs,
+    query_files,
+    rank_docs,
+    rank_with_pool,
+    rrf,
+)
 
 
 def test_rank_docs_dedupes_by_first_chunk_rank():
@@ -75,3 +83,13 @@ def test_condition_docs_min_fields():
     scores = np.array([0.1, 0.9, 0.5])
     assert condition_docs({0: 2, 1: 1, 2: 3}, scores, names, 10, min_fields=2) == ["c", "a"]
     assert condition_docs({1: 1}, scores, names, 10, min_fields=2) == []
+
+
+def test_conditions_first_keeps_order_within_groups():
+    assert conditions_first(["a", "b", "c", "d"], {"c", "a"}) == ["a", "c", "b", "d"]
+    assert conditions_first(["a", "b"], set()) == ["a", "b"]
+
+
+def test_rrf_without_top_k_returns_all():
+    assert rrf([["a", "b"], ["c"]], 60, None) == ["a", "c", "b"]
+    assert rrf([["a", "b"], ["c"]], 60, 2) == ["a", "c"]
