@@ -10,6 +10,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 테스트·린트: `uv run pytest -q`, `uv run ruff check .`
 - 데이터 적재: `uv run python -m rag.ingest` (→ `data/processed/`)
 - 평가 분할: `uv run python -m rag.splits` (→ `data/splits/`)
+- 값 사전: `uv run python -m rag.meta_dict` (적재 뒤. 코퍼스 문서 필드만 읽음, slices/10-speaker-fields.md)
 - 채점: `uv run python -m rag.eval.score --run <순위.csv> --layer dev-small|dev-full [--out <결과.json>]` (순위 파일 열 `qid`, `rank`, `doc_id`)
 - 판정: `uv run python -m rag.eval.compare --base <기준.csv> --cand <후보.csv> [--out <결과.json>]` (dev-full 고정)
 - multi-doc 채점·비교: `uv run python -m rag.eval_multi.score --run <순위.csv> [--out <결과.json>]`, `rag.eval_multi.compare --base <기준.csv> --cand <후보.csv>` (순위는 `rag.search index.scope=full search.queries=multidoc`, slices/09-multidoc-eval.md)

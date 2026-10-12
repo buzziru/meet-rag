@@ -518,13 +518,17 @@ AI Hub 문서에도 데이터설명서에도 설명이 없다. 열어보니 **�
  "conference_number": "046770", "date": "...", "meeting_name": "국정감사",
  "generation_number": "20", "committee_name": "...", "meeting_number": "...",
  "session_number": "...", "agenda": "...", "original": "http://likms...",
- "splits": ["Training", "Validation"], "n_qa": 3}
+ "splits": ["Training", "Validation"], "n_qa": 3,
+ "questioners": [{"name": "...", "position": "위원", "affiliation": ""}],
+ "answerers": [{"name": "...", "position": "장관", "affiliation": "..."}]}
 
 // queries_summary_q.jsonl
 {"qid": "046770-0001", "doc_id": "046770-7a2d49803f", "split": "Validation",
  "qna_type": "추출형", "query": "...", "answer": "...",
  "question_comment": "...", "answer_comment": "..."}
 ```
+
+`questioners`·`answerers`는 그 문서에서 나온 QA 라벨의 화자를 `qid` 순으로 모은 것이다(S10, D-20). 세 값이 모두 빈 화자는 넣지 않고, 이름은 직함·괄호 표기를 지운다. 라벨링된 QA의 화자만 담기며 같은 구간의 다른 발언자는 빠진다. 원천 라벨에 화자 값이 전혀 없는 문서 2개는 두 필드가 비어 있다.
 
 **Training–Validation 교차 171개는 지우지 않았다.** 문서마다 `splits`에 AI Hub 분할 출처를 남겼다. 평가는 이 구분 대신 회의 단위 분할을 쓴다(`docs/SPEC.md`).
 

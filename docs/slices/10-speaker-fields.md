@@ -6,7 +6,7 @@ H14(질의 조건 방식, D-19)가 질의에서 뽑은 조건을 문서와 대�
 
 - `src/rag/ingest.py`: 코퍼스 문서에 화자 필드 `questioners`·`answerers`를 더한다. 질의 파일은 바꾸지 않는다
 - `src/rag/meta_dict.py`: 코퍼스 파일만 읽어 값 사전을 만드는 명령 `uv run python -m rag.meta_dict`
-- `configs/config.yaml`: 사전 경로 `paths.meta_dict`(`data/processed/meta_dict.json`)
+- `configs/config.yaml`: 사전 경로 `paths.meta_dict`(`data/processed/meta_dict.json`), 이름 정규화 직함 목록 `ingest.name_titles`
 - `notebooks/12_01_화자필드.ipynb`: 화자 필드와 사전의 품질 확인. 이름 정규화 규칙을 정하는 근거다
 
 ## 규칙
@@ -19,7 +19,7 @@ H14(질의 조건 방식, D-19)가 질의에서 뽑은 조건을 문서와 대�
 - 각 값은 `strip()`한다. 공백 한 칸만 든 값이 있다(`docs/data.md` §9). 빈 값은 `""`로 둔다
 - 세 값이 모두 빈 항목은 넣지 않는다. 세 값이 모두 같은 항목은 하나만 남긴다. 순서는 `qid` 순으로 처음 나온 순서다. 같은 입력이면 같은 출력이 나와야 한다
 - `*_ID`·`*_ISNI`는 넣지 않는다. 응답자 쪽은 98%가 비어 필터 근거로 쓸 수 없다(`docs/data.md` §9)
-- 이름 정규화(직함이 이름에 붙은 경우 등)는 노트북 12_01을 본 뒤 정한다. 정하기 전에는 `strip()`만 한다
+- 이름 정규화(D-20, 노트북 12_01 뒤 사용자 결정): 끝의 괄호 표기를 지우고, 공백이 있으면 마지막 토막이 직함(`configs/config.yaml`의 `ingest.name_titles`)으로 끝날 때 첫 토막을, 아니면 마지막 토막을 이름으로 둔다. 직위·소속은 `strip()`만 한다
 
 ### 불변 조건
 
@@ -66,7 +66,7 @@ test 회의 문서의 화자 값도 그 회의 QA 라벨에서 온다. SPEC은 "
 
 - `src/rag/ingest.py`, `src/rag/meta_dict.py`(새 파일)
 - `tests/test_ingest.py`, `tests/test_meta_dict.py`
-- `configs/config.yaml`의 `paths.meta_dict` 추가(기존 값은 바꾸지 않는다)
+- `configs/config.yaml`의 `paths.meta_dict`, `ingest.name_titles` 추가(기존 값은 바꾸지 않는다)
 - `notebooks/12_01_화자필드.ipynb`
 - `docs/data.md`(코퍼스 형식 절), `docs/DECISIONS.md`(정규화 규칙·test 포함 결정), `docs/PLAN.md`(S10 체크), `CLAUDE.md` 명령 한 줄
 
