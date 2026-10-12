@@ -68,7 +68,7 @@ def rrf(rankings: list[list[str]], k: int, top_k: int) -> list[str]:
 
 
 def condition_docs(counts: dict[int, int], doc_scores: np.ndarray, doc_names: np.ndarray,
-                   depth: int, min_fields: int = 1) -> list[str]:
+                   depth: int, min_fields: int) -> list[str]:
     """조건 필드가 min_fields개 이상 맞은 문서를 맞은 필드 수, dense 문서 점수 내림차순으로
     depth개 고른다."""
     keep = [i for i, c in counts.items() if c >= min_fields]

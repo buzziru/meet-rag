@@ -66,8 +66,8 @@ def test_summary_q_files_unchanged():
 def test_condition_docs_orders_by_count_then_dense():
     names = np.array(["a", "b", "c", "d"])
     scores = np.array([0.1, 0.9, 0.5, 0.7])
-    assert condition_docs({0: 2, 1: 1, 2: 1, 3: 2}, scores, names, 10) == ["d", "a", "b", "c"]
-    assert condition_docs({0: 2, 1: 1, 2: 1, 3: 2}, scores, names, 2) == ["d", "a"]
+    assert condition_docs({0: 2, 1: 1, 2: 1, 3: 2}, scores, names, 10, 1) == ["d", "a", "b", "c"]
+    assert condition_docs({0: 2, 1: 1, 2: 1, 3: 2}, scores, names, 2, 1) == ["d", "a"]
 
 
 def test_condition_docs_min_fields():
