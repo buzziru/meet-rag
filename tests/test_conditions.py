@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from rag.conditions import Extractor, committee_base, doc_values
+from rag.conditions import ConditionIndex, Extractor, committee_base, doc_values
 from rag.index import ROOT, load_cfg
 
 CFG = load_cfg()
@@ -123,3 +123,30 @@ def test_alias_names_in_dictionary():
                   ["committee_name"]}
     names = {n for v in CFG.conditions.committee_aliases.values() for n in v}
     assert names <= committees
+
+
+def _doc(date, committee, names=()):
+    return {"date": date, "generation_number": "21", "meeting_number": "제382회",
+            "session_number": "제1차", "committee_name": committee, "meeting_name": "소위원회",
+            "questioners": [{"name": n, "position": "", "affiliation": ""} for n in names],
+            "answerers": []}
+
+
+def test_condition_index_counts_fields():
+    docs = [_doc("2020년12월30일(수)", "법제사법위원회", ["박주민"]),
+            _doc("2020년12월30일(수)", "정무위원회"),
+            _doc("2019년3월5일(화)", "법제사법위원회")]
+    idx = ConditionIndex(docs, [-1, 0, 1])
+    got = idx.match_counts({"date": ["2020-12-30"], "committee_name": ["법제사법위원회"],
+                            "names": ["박주민", "없는이름"]})
+    assert got == {0: 3, 1: 1, 2: 1}
+    # 여러 값을 내는 약칭은 하나만 맞아도 그 필드가 맞는다
+    both = {"committee_name": ["정무위원회", "법제사법위원회"]}
+    assert idx.match_counts(both) == {0: 1, 1: 1, 2: 1}
+    assert idx.match_counts({}) == {}
+
+
+def test_condition_index_year_ref_window():
+    docs = [_doc(f"{y}년1월1일(월)", "정무위원회") for y in (2017, 2018, 2019, 2020, 2021)]
+    idx = ConditionIndex(docs, [-1, 0, 1])
+    assert set(idx.match_counts({"year_ref": ["2019"]})) == {1, 2, 3}
