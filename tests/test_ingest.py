@@ -14,6 +14,7 @@ def label(conf: str, qnum: str, context: str, **kw) -> dict:
         "session_number": "s", "agenda": "a", "original": "http://x",
         "context_summary": {"summary_q": f"q{qnum}", "summary_a": f"a{qnum}"},
         "question": {"comment": "qc"}, "answer": {"comment": "ac"},
+        **kw.get("people", {}),
     }
 
 
@@ -42,7 +43,7 @@ def test_build_dedupes_context_and_tracks_splits(tmp_path):
     assert list(shared) == [
         "doc_id", "context", "conference_number", "date", "meeting_name", "generation_number",
         "committee_name", "meeting_number", "session_number", "agenda", "original",
-        "splits", "n_qa",
+        "splits", "n_qa", "questioners", "answerers",
     ]
     assert shared["doc_id"] == make_doc_id("000001", "같은 구간")
     assert shared["splits"] == ["Training", "Validation"]
@@ -63,3 +64,24 @@ def test_build_rejects_duplicate_qid():
     ]
     with pytest.raises(ValueError):
         build(iter(records))
+
+
+def test_build_collects_speakers_in_qid_order(tmp_path):
+    kim = {"questioner_name": " 김갑 ", "questioner_position": "위원", "questioner_affiliation": ""}
+    lee = {"questioner_name": "이을", "questioner_position": "위원장"}
+    minister = {"answerer_name": "박병", "answerer_position": "장관",
+                "answerer_affiliation": "교육부", "answerer_ID": " "}
+    write_zip(tmp_path / "Training/02.라벨링데이터/TL_본회의.zip", [
+        label("000001", "0003", "구간", people={**kim, **minister}),
+        label("000001", "0002", "구간", people={**lee, "answerer_name": " "}),
+        label("000001", "0001", "구간", people={**kim, **minister}),
+    ])
+
+    (doc,), _ = build(iter_labels(tmp_path))
+
+    assert doc["questioners"] == [
+        {"name": "김갑", "position": "위원", "affiliation": ""},
+        {"name": "이을", "position": "위원장", "affiliation": ""},
+    ]
+    # 0002의 응답자는 세 값이 모두 비어 빠진다. ID는 넣지 않는다
+    assert doc["answerers"] == [{"name": "박병", "position": "장관", "affiliation": "교육부"}]

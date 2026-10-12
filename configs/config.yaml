@@ -30,6 +30,8 @@ paths:
   raw_dir: data
   corpus: data/processed/corpus_context.jsonl
   queries: data/processed/queries_summary_q.jsonl
+  # 질의 조건 추출용 값 사전. 코퍼스 문서 필드에서만 만든다(S10, rag.meta_dict)
+  meta_dict: data/processed/meta_dict.json
   # dev 질의만 내보낸 파일. Colab 질의 임베딩에 올린다(D-07)
   queries_dev: data/processed/queries_summary_q.dev.jsonl
   splits: data/splits/queries.csv
