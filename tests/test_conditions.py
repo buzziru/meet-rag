@@ -1,7 +1,9 @@
+import json
+
 import pytest
 
-from rag.conditions import Extractor, doc_values
-from rag.index import load_cfg
+from rag.conditions import Extractor, committee_base, doc_values
+from rag.index import ROOT, load_cfg
 
 CFG = load_cfg()
 META = {
@@ -83,3 +85,41 @@ def test_doc_values():
     assert v["date"] == {"2000", "2000-06", "2000-06-28"}
     assert v["committee_name"] == {"국방위원회-제1반", "국방위원회"}
     assert v["names"] == {"김갑"}
+
+
+@pytest.fixture(scope="module")
+def ex_alias():
+    c = CFG.conditions
+    return Extractor(META, CFG.ingest.name_titles, c.name_suffixes, set(c.name_exclude),
+                     c.committee_aliases)
+
+
+@pytest.mark.parametrize("text, date, year_ref", [
+    ("2019년도 예산안", None, ["2019"]),
+    ("2018회계연도 결산과 2017 회계연도", None, ["2018", "2017"]),
+    ("'19년 3월 회의", ["2019-03"], None),
+    ("'19년도와 98년도 예산", None, ["2019", "1998"]),
+    ("19년 만에 개정, 19년간 유지", None, None),  # 기간 표현
+])
+def test_year_forms(ex, text, date, year_ref):
+    got = ex.extract(text)
+    assert got.get("date") == date
+    assert got.get("year_ref") == year_ref
+
+
+def test_committee_alias_table(ex_alias):
+    assert ex_alias.extract("법사위 회의")["committee_name"] == ["법제사법위원회"]
+    assert ex_alias.extract("국회 본회의에서")["committee_name"] == ["국회본회의"]
+    # 시기별로 여러 위원회를 가리키는 약칭은 모두 낸다
+    assert ex_alias.extract("외통위")["committee_name"] == ["외교통일위원회", "외교통상통일위원회"]
+
+
+META_DICT = ROOT / CFG.paths.meta_dict
+
+
+@pytest.mark.skipif(not META_DICT.exists(), reason="값 사전은 data/에 있어 저장소에 없다")
+def test_alias_names_in_dictionary():
+    committees = {committee_base(c) for c in json.loads(META_DICT.read_text(encoding="utf-8"))
+                  ["committee_name"]}
+    names = {n for v in CFG.conditions.committee_aliases.values() for n in v}
+    assert names <= committees

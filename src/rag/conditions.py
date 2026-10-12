@@ -2,7 +2,7 @@
 
 입력은 질의 텍스트와 값 사전(rag.meta_dict)뿐이다. 정답·qid는 쓰지 않는다(protocol-guard P9).
 출력 값은 doc_values와 같은 형식이라 H14가 문서 값과 그대로 비교한다.
-규칙은 docs/slices/11-query-conditions.md.
+규칙은 docs/slices/11-query-conditions.md, 표기 차이는 docs/slices/11b-condition-variants.md.
 """
 
 import json
@@ -11,13 +11,23 @@ import sys
 
 from rag.index import ROOT, load_cfg
 
-# `YYYY년도`는 회계연도라 회의 날짜가 아니다(D-21)
-DATE = re.compile(r"(\d{4})\s*년(?!도)(?:\s*(\d{1,2})\s*월(?:\s*(\d{1,2})\s*일)?)?")
+# `YYYY년도`는 회계연도라 회의 날짜가 아니다(D-21). 두 자리 연도는 `'YY년`만 날짜로 본다(D-22)
+DATE = re.compile(
+    r"(?<!\d)(?:(\d{4})|'(\d{2}))\s*년(?!도)(?:\s*(\d{1,2})\s*월(?:\s*(\d{1,2})\s*일)?)?"
+)
+# 회의 연도와 어긋날 수 있는 연도 언급(`2019년도 예산안`, `2018회계연도`, `'19년도`).
+# date와 따로 둔다(D-22)
+YEAR_REF = re.compile(r"(?<!\d)(?:(\d{4})|'?(\d{2}))\s*(?:회계\s*)?[년연]도")
 DOC_DATE = re.compile(r"(\d{4})[년年](\d{1,2})[월月](\d{1,2})[일日]")
 GENERATION = re.compile(r"(?:제\s*)?(\d{1,2})\s*대\s*국회")
 # 코퍼스 회기 번호는 세 자리(180~402)다. `제1회 추가경정예산` 같은 다른 `제N회`를 막는다(D-21)
 MEETING_NUMBER = re.compile(r"제\s*(\d{3})\s*회(?!의)")
 SESSION_NUMBER = re.compile(r"제\s*(\d+)\s*차(?!관)")  # 제1차관(직위)은 차수가 아니다
+
+
+def full_year(y4, y2) -> str:
+    """두 자리 연도는 30 이하면 20YY, 아니면 19YY다. 코퍼스 회의 연도는 1996~2023이다(D-22)."""
+    return y4 or (f"20{y2}" if int(y2) <= 30 else f"19{y2}")
 
 
 def date_keys(year, month=None, day=None) -> list[str]:
@@ -41,11 +51,12 @@ def alternation(values) -> re.Pattern:
 
 
 class Extractor:
-    def __init__(self, meta_dict: dict, titles, suffixes, exclude=()):
+    def __init__(self, meta_dict: dict, titles, suffixes, exclude=(), aliases=None):
         committees = {committee_base(c) for c in meta_dict["committee_name"]}
-        # 약칭: `국방위원회` → `국방위`
-        self.committee_of = {c: c for c in committees}
-        self.committee_of |= {c[:-2]: c for c in committees if c.endswith("위원회")}
+        # 약칭: `국방위원회` → `국방위`, 그리고 공식·관용 약칭 표(D-22)
+        self.committee_of = {c: [c] for c in committees}
+        self.committee_of |= {c[:-2]: [c] for c in committees if c.endswith("위원회")}
+        self.committee_of |= {a: list(names) for a, names in (aliases or {}).items()}
         self.committee = alternation(self.committee_of)
         self.meeting = alternation(meta_dict["meeting_name"])
         tail = "|".join(re.escape(t) for t in sorted([*titles, *suffixes], key=len, reverse=True))
@@ -58,11 +69,14 @@ class Extractor:
 
     def extract(self, text: str) -> dict[str, list[str]]:
         found = {
-            "date": [date_keys(*m.groups())[-1] for m in DATE.finditer(text)],
+            "date": [date_keys(full_year(y4, y2), mo, d)[-1]
+                     for y4, y2, mo, d in DATE.findall(text)],
+            "year_ref": [full_year(y4, y2) for y4, y2 in YEAR_REF.findall(text)],
             "generation_number": [m.group(1) for m in GENERATION.finditer(text)],
             "meeting_number": [f"제{m.group(1)}회" for m in MEETING_NUMBER.finditer(text)],
             "session_number": [f"제{m.group(1)}차" for m in SESSION_NUMBER.finditer(text)],
-            "committee_name": [self.committee_of[m.group()] for m in self.committee.finditer(text)],
+            "committee_name": [c for m in self.committee.finditer(text)
+                               for c in self.committee_of[m.group()]],
             "meeting_name": [m.group() for m in self.meeting.finditer(text)],
             "names": [m.group(1) for m in self.name.finditer(text)],
         }
@@ -96,7 +110,8 @@ def main() -> None:
     cfg = load_cfg(sys.argv[1:])
     meta_dict = json.loads((ROOT / cfg.paths.meta_dict).read_text(encoding="utf-8"))
     c = cfg.conditions
-    ex = Extractor(meta_dict, cfg.ingest.name_titles, c.name_suffixes, set(c.name_exclude))
+    ex = Extractor(meta_dict, cfg.ingest.name_titles, c.name_suffixes, set(c.name_exclude),
+                   c.committee_aliases)
     out = ROOT / cfg.paths.conditions
     out.parent.mkdir(parents=True, exist_ok=True)
     queries = read_queries(cfg)
