@@ -68,3 +68,10 @@ def test_condition_docs_orders_by_count_then_dense():
     scores = np.array([0.1, 0.9, 0.5, 0.7])
     assert condition_docs({0: 2, 1: 1, 2: 1, 3: 2}, scores, names, 10) == ["d", "a", "b", "c"]
     assert condition_docs({0: 2, 1: 1, 2: 1, 3: 2}, scores, names, 2) == ["d", "a"]
+
+
+def test_condition_docs_min_fields():
+    names = np.array(["a", "b", "c"])
+    scores = np.array([0.1, 0.9, 0.5])
+    assert condition_docs({0: 2, 1: 1, 2: 3}, scores, names, 10, min_fields=2) == ["c", "a"]
+    assert condition_docs({1: 1}, scores, names, 10, min_fields=2) == []

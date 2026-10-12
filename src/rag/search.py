@@ -68,9 +68,11 @@ def rrf(rankings: list[list[str]], k: int, top_k: int) -> list[str]:
 
 
 def condition_docs(counts: dict[int, int], doc_scores: np.ndarray, doc_names: np.ndarray,
-                   depth: int) -> list[str]:
-    """조건이 하나 이상 맞은 문서를 맞은 필드 수, dense 문서 점수 내림차순으로 depth개 고른다."""
-    order = sorted(counts, key=lambda i: (-counts[i], -doc_scores[i], i))
+                   depth: int, min_fields: int = 1) -> list[str]:
+    """조건 필드가 min_fields개 이상 맞은 문서를 맞은 필드 수, dense 문서 점수 내림차순으로
+    depth개 고른다."""
+    keep = [i for i, c in counts.items() if c >= min_fields]
+    order = sorted(keep, key=lambda i: (-counts[i], -doc_scores[i], i))
     return [doc_names[i] for i in order[:depth]]
 
 
@@ -191,10 +193,11 @@ def search(cfg) -> None:
                 lexical = rank_docs(bm25.scores(q_ids[j]), chunk_doc_ids, depth, r.chunk_pool)
                 lists = [docs, lexical]
                 counts = cond_index.match_counts(conds[qids[j]]) if use_cond else {}
-                if counts:
+                if counts and max(counts.values()) >= r.conditions.min_fields:
                     doc_scores = np.full(len(doc_names), -np.inf, dtype=row.dtype)
                     np.maximum.at(doc_scores, chunk_doc, row)
-                    lists.append(condition_docs(counts, doc_scores, doc_names, depth))
+                    lists.append(condition_docs(counts, doc_scores, doc_names, depth,
+                                                r.conditions.min_fields))
                 docs = rrf(lists, r.fusion.rrf_k, r.top_k)
             rows += [{"qid": qids[j], "rank": i, "doc_id": d} for i, d in enumerate(docs, 1)]
     # dense는 기존 이름을 유지해 기준 순위 파일과 같은 경로를 쓴다. run_name이 있으면 그 이름을 쓴다
