@@ -21,13 +21,13 @@ H14(D-19)가 질의에서 회의를 지목하는 조건을 뽑아 문서 메타�
 
 | 조건 | 방법 | 대조할 문서 필드 |
 | --- | --- | --- |
-| `date` | 정규식: `YYYY년 M월 D일`, `YYYY년 M월`, `YYYY년`(공백 유무 허용). 연·월·일 중 있는 것만 담는다 | `date`(`1996년7월20일(토)`를 파싱) |
+| `date` | 정규식: `YYYY년 M월 D일`, `YYYY년 M월`, `YYYY년`(공백 유무 허용). 연·월·일 중 있는 것만 담는다. `YYYY년도`(회계연도)는 뽑지 않는다(D-21) | `date`(`1996년7월20일(토)`를 파싱) |
 | `generation_number` | 정규식: `제NN대 국회`, `NN대 국회` | `generation_number` |
-| `meeting_number` | 정규식: `제NNN회`(회기) | `meeting_number` |
+| `meeting_number` | 정규식: 세 자리 `제NNN회`(회기, 코퍼스 180\~402. D-21) | `meeting_number` |
 | `session_number` | 정규식: `제N차` | `session_number` |
 | `committee_name` | 사전 값의 부분 문자열 일치. 긴 값부터 맞추고 겹친 짧은 값은 버린다. 약칭은 값에서 `원회`를 뺀 형태(`국방위원회` → `국방위`)를 함께 맞춘다 | `committee_name` |
 | `meeting_name` | 사전 값 5종의 부분 문자열 일치, 긴 값 우선(`예산결산특별위원회` 안의 `특별위원회`는 버린다) | `meeting_name` |
-| `names` | 사전 이름의 부분 문자열 일치에 경계 규칙을 둔다. 앞은 질의 시작이나 한글 밖 문자, 뒤는 질의 끝, 한글 밖 문자, 직함(`ingest.name_titles`), 조사(`conditions.name_suffixes`) 중 하나일 때만 인정한다 | `questioners`·`answerers`의 `name` |
+| `names` | 사전 이름의 부분 문자열 일치에 경계 규칙을 둔다. 앞은 질의 시작이나 한글 밖 문자, 뒤는 질의 끝, 한글 밖 문자, 직함(`ingest.name_titles`), 조사(`conditions.name_suffixes`) 중 하나일 때만 인정한다. 사전 값 중 한글 밖 문자가 있거나 직함으로 끝나거나 `conditions.name_exclude`에 있는 값은 이름으로 쓰지 않는다(D-21) | `questioners`·`answerers`의 `name` |
 
 - 안건·법안(`agenda`, QA의 `law`)과 직위만으로 된 조건(`장관이 답변한`)은 뽑지 않는다. 안건은 H14에서 항목 단위 색인으로 다룬다(D-19)
 - 출력은 질의마다 `{qid, conditions: {필드: [값...]}}` 한 줄이다. 뽑힌 것이 없는 필드는 넣지 않는다
