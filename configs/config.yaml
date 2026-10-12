@@ -65,6 +65,10 @@ paths:
   multidoc_judge_out: data/multidoc/judge_out  # G3 재판정 출력(서브에이전트가 쓴다)
   multidoc_judge_jobs: data/multidoc/judge_jobs.jsonl
 
+# 화자 이름 정규화(S10, D-20). 공백으로 나뉜 이름의 마지막 토막이 이 직함으로 끝나면 첫 토막을 이름으로 둔다
+ingest:
+  name_titles: [위원, 의원, 장관, 위원장, 의장, 차관, 청장, 총리, 대표, 간사]
+
 embedding:
   model_name: nlpai-lab/KURE-v1
   slug: kure-v1

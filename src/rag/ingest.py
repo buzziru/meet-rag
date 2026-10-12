@@ -6,6 +6,7 @@
 
 import hashlib
 import json
+import re
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -38,8 +39,22 @@ def make_doc_id(conference_number: str, context: str) -> str:
     return f"{conference_number}-{hashlib.sha1(context.encode('utf-8')).hexdigest()[:10]}"
 
 
-def speaker(r: dict, prefix: str) -> dict:
-    return {k: (r.get(f"{prefix}_{k}") or "").strip() for k in SPEAKER_KEYS}
+def normalize_name(name: str, titles: tuple[str, ...]) -> str:
+    """끝의 괄호 표기를 지우고, 공백이 있으면 직함 앞 토막이나 마지막 토막을 이름으로 둔다.
+
+    `○○○ 위원` → `○○○`, `조달청장 ○○○` → `○○○`, `○○○(비)` → `○○○` (D-20).
+    """
+    name = re.sub(r"\s*[(（][^)）]*[)）]$", "", name).strip()
+    if " " in name:
+        parts = name.split()
+        name = parts[0] if parts[-1].endswith(titles) else parts[-1]
+    return name
+
+
+def speaker(r: dict, prefix: str, titles: tuple[str, ...]) -> dict:
+    person = {k: (r.get(f"{prefix}_{k}") or "").strip() for k in SPEAKER_KEYS}
+    person["name"] = normalize_name(person["name"], titles)
+    return person
 
 
 def collect_speakers(entries: list[tuple[str, dict]]) -> dict:
@@ -55,7 +70,9 @@ def collect_speakers(entries: list[tuple[str, dict]]) -> dict:
     return out
 
 
-def build(records: Iterator[tuple[str, dict]]) -> tuple[list[dict], list[dict]]:
+def build(
+    records: Iterator[tuple[str, dict]], titles: tuple[str, ...]
+) -> tuple[list[dict], list[dict]]:
     """context 완전 일치 중복만 제거해 (코퍼스, 질의)를 doc_id·qid 순으로 반환한다."""
     queries = []
     docs, first_qid, splits, n_qa, speakers = {}, {}, {}, {}, {}
@@ -78,7 +95,7 @@ def build(records: Iterator[tuple[str, dict]]) -> tuple[list[dict], list[dict]]:
             first_qid[doc_id] = qid
         splits.setdefault(doc_id, set()).add(split)
         n_qa[doc_id] = n_qa.get(doc_id, 0) + 1
-        people = {field: speaker(r, prefix) for field, prefix in SPEAKERS.items()}
+        people = {field: speaker(r, prefix, titles) for field, prefix in SPEAKERS.items()}
         speakers.setdefault(doc_id, []).append((qid, people))
 
     qids = [q["qid"] for q in queries]
@@ -102,8 +119,9 @@ def write_jsonl(rows: list[dict], path: Path) -> None:
 
 def main() -> None:
     with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
-        paths = compose(config_name="config").paths
-    corpus, queries = build(iter_labels(ROOT / paths.raw_dir))
+        cfg = compose(config_name="config")
+    paths = cfg.paths
+    corpus, queries = build(iter_labels(ROOT / paths.raw_dir), tuple(cfg.ingest.name_titles))
     write_jsonl(corpus, ROOT / paths.corpus)
     write_jsonl(queries, ROOT / paths.queries)
     print(f"corpus {len(corpus):,} docs -> {paths.corpus}")
