@@ -42,12 +42,15 @@ def make_doc_id(conference_number: str, context: str) -> str:
 def normalize_name(name: str, titles: tuple[str, ...]) -> str:
     """끝의 괄호 표기를 지우고, 공백이 있으면 직함 앞 토막이나 마지막 토막을 이름으로 둔다.
 
+    마지막 토막이 한 글자면 잘린 직함(`○○○ 위`)으로 보고 첫 토막을 둔다.
+
     `○○○ 위원` → `○○○`, `조달청장 ○○○` → `○○○`, `○○○(비)` → `○○○` (D-20).
     """
     name = re.sub(r"\s*[(（][^)）]*[)）]$", "", name).strip()
     if " " in name:
         parts = name.split()
-        name = parts[0] if parts[-1].endswith(titles) else parts[-1]
+        last = parts[-1]
+        name = parts[0] if last.endswith(titles) or len(last) == 1 else last
     return name
 
 
