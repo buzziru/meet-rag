@@ -8,13 +8,23 @@
 4. 작업이 끝나면 PR을 만든다.
 5. 사용자는 PR 화면에서 diff를 한 번 읽는다.
 6. 테스트와 린트가 통과한 뒤 병합한다.
-7. 병합 후 브랜치를 삭제한다.
+7. 병합 후 브랜치를 삭제한다. 원격 브랜치는 사용자가 병합하며 지우고, 로컬 브랜치는 Claude가 아래 "main 맞추기"에서 지운다.
 
 ## 세션 시작
 
 - `git branch --show-current`로 현재 브랜치를 확인한다.
 - `main`이면 코드나 문서를 고치기 전에 브랜치를 만든다.
 - 다른 목적의 브랜치에 있으면 사용자에게 알리고 정리한 뒤 진행한다.
+- `main`에 있거나 지금 브랜치의 PR이 병합됐으면 아래 "main 맞추기"를 한다. PR 병합을 확인할 때와 핸드오프 1단계에서도 한다.
+
+## main 맞추기
+
+main을 원격과 맞출 때마다 병합된 로컬 브랜치도 함께 지운다. 사용자가 병합하며 원격 브랜치만 지우므로, 로컬 브랜치는 따로 지우지 않으면 쌓인다(2026-10-12 세션 시작 때 병합된 로컬 브랜치 12개).
+
+1. `git status --short --untracked-files=no`가 비어 있는지 본다(추적하지 않는 파일은 switch해도 그대로 남는다). 커밋하지 않은 변경이 있으면 switch하지 않고 사용자에게 알린다
+2. `git switch main`, `git fetch --prune`, `git pull --ff-only`
+3. `git branch --merged main -vv`에 나온 브랜치(`main` 제외)를 `git branch -d`로 지운다. `-D`는 쓰지 않는다. 그중 원격 브랜치가 남아 있던(upstream이 있고 `gone`이 아닌) 브랜치는 지운 뒤 사용자에게 알린다. 원격 삭제는 사용자 몫이다
+4. `git branch --no-merged main -vv`에서 원격이 `gone`인 브랜치는 지우지 않고 사용자에게 알린다. 병합하지 않고 닫은 PR일 수 있다. 원격이 있거나 아직 올리지 않은 작업 브랜치는 알리지 않는다
 
 ## 브랜치
 
@@ -49,7 +59,7 @@ Claude가 브랜치를 원격에 올리고 `gh pr create`로 PR을 만든다. di
 STATUS는 세션마다 덮어쓰는 스냅샷이고 코드가 아니므로 PR을 거치지 않는다.
 
 - 작업 PR이 병합된 뒤 핸드오프하면 `main`에 직접 커밋한다
-  1. `git switch main`, `git pull --ff-only`로 원격과 맞춘다
+  1. 위 "main 맞추기"로 원격과 맞춘다
   2. `docs/STATUS.md`를 덮어쓴다
   3. `git add docs/STATUS.md` 후 `git diff --cached --name-only`가 이 파일 하나뿐인지 확인한다
   4. `docs: STATUS 갱신`으로 커밋하고 원격에 올린다
