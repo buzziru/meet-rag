@@ -11,19 +11,21 @@ META = {
     "meeting_name": dict.fromkeys(
         ["국정감사", "소위원회", "특별위원회", "예산결산특별위원회", "본회의"], 1
     ),
-    "name": {"김갑동": 2, "김갑": 1, "이을": 1},
+    "name": {"김갑동": 2, "김갑": 1, "이을": 1, "위원": 9, "정부": 9, "000": 1},
 }
 
 
 @pytest.fixture(scope="module")
 def ex():
-    return Extractor(META, CFG.ingest.name_titles, CFG.conditions.name_suffixes)
+    c = CFG.conditions
+    return Extractor(META, CFG.ingest.name_titles, c.name_suffixes, set(c.name_exclude))
 
 
 @pytest.mark.parametrize("text, want", [
     ("2019년 3월 5일 회의", ["2019-03-05"]),
     ("2019년3월에 열린", ["2019-03"]),
     ("2019년과 2020년 회의", ["2019", "2020"]),
+    ("2018년도 예산안을 2017년 11월에 심사", ["2017-11"]),  # 년도는 회계연도
 ])
 def test_date(ex, text, want):
     assert ex.extract(text)["date"] == want
@@ -37,7 +39,7 @@ def test_numbers(ex):
 
 
 def test_numbers_reject(ex):
-    got = ex.extract("제1회의실에서 제1차관이 답했다")
+    got = ex.extract("제1회의실에서 제1차관이 제2회 추가경정예산을 설명했다")
     assert "meeting_number" not in got and "session_number" not in got
 
 
@@ -62,6 +64,7 @@ def test_names(ex, text, want):
 @pytest.mark.parametrize("text", [
     "김갑동산 개발",  # 뒤가 이름 경계가 아니다
     "새김갑 위원",  # 앞이 한글이다
+    "정부 위원 000 의견",  # 사전 이름 칸의 이름이 아닌 값
 ])
 def test_names_reject(ex, text):
     assert "names" not in ex.extract(text)

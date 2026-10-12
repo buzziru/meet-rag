@@ -74,6 +74,8 @@ ingest:
 # 질의 조건 추출(S11). 이름 뒤에 이 조사나 ingest.name_titles가 오면 이름 경계로 인정한다
 conditions:
   name_suffixes: [의, 이, 가, 은, 는, 을, 를, 과, 와, 도, 만, 에게, 께서, 에]
+  # 사전 이름 칸에 있지만 이름이 아닌 값. 한글 밖 문자나 직함으로 끝나는 값은 코드가 뺀다(D-21)
+  name_exclude: [정부, 징세과장]
 
 embedding:
   model_name: nlpai-lab/KURE-v1

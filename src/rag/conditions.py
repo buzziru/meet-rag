@@ -11,10 +11,12 @@ import sys
 
 from rag.index import ROOT, load_cfg
 
-DATE = re.compile(r"(\d{4})\s*년(?:\s*(\d{1,2})\s*월(?:\s*(\d{1,2})\s*일)?)?")
+# `YYYY년도`는 회계연도라 회의 날짜가 아니다(D-21)
+DATE = re.compile(r"(\d{4})\s*년(?!도)(?:\s*(\d{1,2})\s*월(?:\s*(\d{1,2})\s*일)?)?")
 DOC_DATE = re.compile(r"(\d{4})[년年](\d{1,2})[월月](\d{1,2})[일日]")
 GENERATION = re.compile(r"(?:제\s*)?(\d{1,2})\s*대\s*국회")
-MEETING_NUMBER = re.compile(r"제\s*(\d+)\s*회(?!의)")
+# 코퍼스 회기 번호는 세 자리(180~402)다. `제1회 추가경정예산` 같은 다른 `제N회`를 막는다(D-21)
+MEETING_NUMBER = re.compile(r"제\s*(\d{3})\s*회(?!의)")
 SESSION_NUMBER = re.compile(r"제\s*(\d+)\s*차(?!관)")  # 제1차관(직위)은 차수가 아니다
 
 
@@ -39,7 +41,7 @@ def alternation(values) -> re.Pattern:
 
 
 class Extractor:
-    def __init__(self, meta_dict: dict, titles, suffixes):
+    def __init__(self, meta_dict: dict, titles, suffixes, exclude=()):
         committees = {committee_base(c) for c in meta_dict["committee_name"]}
         # 약칭: `국방위원회` → `국방위`
         self.committee_of = {c: c for c in committees}
@@ -47,7 +49,11 @@ class Extractor:
         self.committee = alternation(self.committee_of)
         self.meeting = alternation(meta_dict["meeting_name"])
         tail = "|".join(re.escape(t) for t in sorted([*titles, *suffixes], key=len, reverse=True))
-        names = "|".join(re.escape(n) for n in sorted(meta_dict["name"], key=len, reverse=True))
+        # 사전 이름 칸에 섞인 이름이 아닌 값(`위원`, `통일부장관`, `000` 등)을 뺀다(D-21)
+        kept = [n for n in meta_dict["name"]
+                if re.fullmatch("[가-힣]+", n) and not n.endswith(tuple(titles))
+                and n not in exclude]
+        names = "|".join(re.escape(n) for n in sorted(kept, key=len, reverse=True))
         self.name = re.compile(f"(?<![가-힣])({names})(?=$|[^가-힣]|{tail})")
 
     def extract(self, text: str) -> dict[str, list[str]]:
@@ -89,7 +95,8 @@ def read_queries(cfg) -> list[dict]:
 def main() -> None:
     cfg = load_cfg(sys.argv[1:])
     meta_dict = json.loads((ROOT / cfg.paths.meta_dict).read_text(encoding="utf-8"))
-    ex = Extractor(meta_dict, cfg.ingest.name_titles, cfg.conditions.name_suffixes)
+    c = cfg.conditions
+    ex = Extractor(meta_dict, cfg.ingest.name_titles, c.name_suffixes, set(c.name_exclude))
     out = ROOT / cfg.paths.conditions
     out.parent.mkdir(parents=True, exist_ok=True)
     queries = read_queries(cfg)
