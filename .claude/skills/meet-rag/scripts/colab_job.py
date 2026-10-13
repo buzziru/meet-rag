@@ -10,6 +10,9 @@
   → VM에 uv를 깔고 `uv sync`로 lock 그대로 맞춘다
 - colab exec는 20분 전후로 끊길 수 있다 → 긴 작업은 VM 안 nohup으로 띄우고 짧은 exec로 로그를 본다
 - tar는 `C:` 경로를 원격 호스트로 해석한다 → 압축 해제는 Python tarfile로 한다
+- colab exec(커널 웹소켓)가 응답 없이 멈추거나 "Connection was lost"로 끊긴다(EXP-009에서 40분 대기)
+  → 호출마다 시간 제한을 두고, 다시 실행해도 되는 명령만 재시도한다. VM 안 nohup 실행(start_bg)은
+  두 번 띄우면 같은 산출물을 동시에 쓰므로 재시도하지 않는다
 
 사용 (저장소 루트에서):
   uv run python .claude/skills/meet-rag/scripts/colab_job.py preflight [override ...]
@@ -48,22 +51,38 @@ NOISE = re.compile(
 )
 
 
-def colab(*args, stdin=None, check=True) -> str:
-    r = subprocess.run(["colab", *args], input=stdin, capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", env=ENV)
-    out = "\n".join(line for line in (r.stdout + r.stderr).splitlines() if not NOISE.search(line))
-    if check and r.returncode != 0:
-        sys.exit(f"colab {' '.join(args[:2])} 실패 (코드 {r.returncode}):\n{out}")
+TIMEOUT = 300  # colab 호출 하나의 시간 제한(초). 큰 파일 전송은 TRANSFER_TIMEOUT
+TRANSFER_TIMEOUT = 1800
+RETRIES = 2  # 시간 초과·연결 끊김일 때 다시 시도하는 횟수
+LOST = "Connection was lost"
+
+
+def colab(*args, stdin=None, check=True, timeout=TIMEOUT, retries=RETRIES) -> str:
+    for attempt in range(retries + 1):
+        try:
+            r = subprocess.run(["colab", *args], input=stdin, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", env=ENV, timeout=timeout)
+            code, raw = r.returncode, r.stdout + r.stderr
+        except subprocess.TimeoutExpired:
+            code, raw = -1, f"{timeout}초 시간 초과"
+        out = "\n".join(line for line in raw.splitlines() if not NOISE.search(line))
+        if code == 0 or not (code == -1 or LOST in out) or attempt == retries:
+            break
+        print(f"colab {args[0]} 재시도 {attempt + 1}/{retries}: {out.splitlines()[-1]}", flush=True)
+    if check and code != 0:
+        sys.exit(f"colab {' '.join(args[:2])} 실패 (코드 {code}):\n{out}\n"
+                 "exec가 계속 멈추면 colab restart-kernel -s 세션 뒤 다시 하고, "
+                 "그래도 안 되면 colab console로 같은 명령을 보낸다(meet-rag E절 오류 처리)")
     return out.strip()
 
 
-def vm_sh(session: str, cmd: str, check=True) -> str:
+def vm_sh(session: str, cmd: str, check=True, retries=RETRIES) -> str:
     """VM에서 셸 명령을 실행하고 출력을 돌려준다. 짧은 명령에만 쓴다."""
     code = ("import subprocess\n"
             f"r = subprocess.run({cmd!r}, shell=True, capture_output=True, text=True)\n"
             "print(r.stdout + r.stderr)\n"
             "print('EXIT', r.returncode)\n")
-    out = colab("exec", "-s", session, stdin=code)
+    out = colab("exec", "-s", session, stdin=code, retries=retries)
     m = re.search(r"EXIT (\d+)\s*$", out)
     if check and (not m or m.group(1) != "0"):
         sys.exit(f"VM 명령 실패: {cmd}\n{out}")
@@ -93,7 +112,7 @@ def preflight(overrides: list[str]) -> None:
 def start_bg(session: str, cmd: str) -> None:
     """VM 안에서 nohup으로 띄운다. exec 연결이 끊겨도 작업은 계속된다."""
     wrapped = f"({cmd}) && echo {DONE} || echo {FAIL}"
-    vm_sh(session, f"nohup bash -c {shlex.quote(wrapped)} > {LOG} 2>&1 &")
+    vm_sh(session, f"nohup bash -c {shlex.quote(wrapped)} > {LOG} 2>&1 &", retries=0)
 
 
 def setup(session: str, commit: str) -> None:
@@ -147,10 +166,10 @@ def upload(session: str, local: str, remote: str) -> None:
             gz = Path(tmp) / (src.name + ".gz")
             with src.open("rb") as f, gzip.open(gz, "wb") as g:
                 shutil.copyfileobj(f, g)
-            print(colab("upload", "-s", session, str(gz), target + ".gz"))
+            print(colab("upload", "-s", session, str(gz), target + ".gz", timeout=TRANSFER_TIMEOUT))
         vm_sh(session, f"gunzip -f {shlex.quote(target)}.gz")
     else:
-        print(colab("upload", "-s", session, str(src), target))
+        print(colab("upload", "-s", session, str(src), target, timeout=TRANSFER_TIMEOUT))
     print(vm_sh(session, f"wc -lc {shlex.quote(target)}"))
 
 
@@ -179,7 +198,7 @@ def fetch(session: str, remote: str, dest: Path) -> None:
     vm_sh(session, f"cd {VM_REPO} && tar czf {tgz} {shlex.quote(remote)} && ls -l {tgz}")
     with tempfile.TemporaryDirectory() as tmp:
         local = Path(tmp) / "fetch.tgz"
-        print(colab("download", "-s", session, tgz, str(local)))
+        print(colab("download", "-s", session, tgz, str(local), timeout=TRANSFER_TIMEOUT))
         with tarfile.open(local) as t:
             t.extractall(dest, filter="data")
     print(f"extracted {remote} -> {dest / remote}")
