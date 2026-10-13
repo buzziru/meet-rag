@@ -152,7 +152,9 @@ def condition_setup(cfg, chunk_doc_ids: np.ndarray):
         for doc in map(json.loads, f):
             if doc["doc_id"] in pos:
                 docs[pos[doc["doc_id"]]] = doc
-    index = ConditionIndex(docs, cfg.retriever.conditions.year_ref_offsets)
+    c = cfg.conditions
+    law_min = c.law_min_chars if c.get("agenda_law") else None
+    index = ConditionIndex(docs, cfg.retriever.conditions.year_ref_offsets, law_min)
     with (ROOT / cfg.paths.conditions).open(encoding="utf-8") as f:
         conds = {r["qid"]: r["conditions"] for r in map(json.loads, f)}
     return doc_names, chunk_doc, index, conds

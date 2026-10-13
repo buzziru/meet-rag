@@ -2,7 +2,13 @@ import json
 
 import pytest
 
-from rag.conditions import ConditionIndex, Extractor, committee_base, doc_values
+from rag.conditions import (
+    ConditionIndex,
+    Extractor,
+    agenda_laws,
+    committee_base,
+    doc_values,
+)
 from rag.index import ROOT, load_cfg
 
 CFG = load_cfg()
@@ -150,3 +156,28 @@ def test_condition_index_year_ref_window():
     docs = [_doc(f"{y}년1월1일(월)", "정무위원회") for y in (2017, 2018, 2019, 2020, 2021)]
     idx = ConditionIndex(docs, [-1, 0, 1])
     assert set(idx.match_counts({"year_ref": ["2019"]})) == {1, 2, 3}
+
+
+def test_agenda_laws():
+    agenda = ("1. 은행법 일부개정법률안(민병덕 의원 대표발의)(의안번호 2114299) "
+              "2. 인터넷전문은행 설립 및 운영에 관한 특례법 일부개정법률안(김병욱 의원 대표발의) "
+              "3. 4ㆍ16세월호참사 피해구제 특별법안(계속) 4. 2002년도예산안")
+    assert agenda_laws(agenda, 3) == {
+        "은행법", "인터넷전문은행설립및운영에관한특례법", "416세월호참사피해구제특별법"}
+    assert agenda_laws("1. 업무보고가. 보건복지부", 3) == set()
+
+
+def test_law_extract_allows_spaces_and_blocks_longer_names():
+    c = CFG.conditions
+    ex = Extractor(META, CFG.ingest.name_titles, c.name_suffixes, set(c.name_exclude),
+                   laws={"은행법", "인터넷전문은행설립및운영에관한특례법"})
+    got = ex.extract("인터넷전문은행 설립 및 운영에 관한 특례법과 은행법 개정안 논의")
+    assert got["law"] == ["인터넷전문은행설립및운영에관한특례법", "은행법"]
+    assert "law" not in ex.extract("한국은행법 개정")  # 앞에 한글이 붙은 더 긴 이름
+
+
+def test_doc_values_law_only_when_enabled():
+    doc = {"date": "", "questioners": [], "answerers": [],
+           "agenda": "1. 소득세법 일부개정법률안(정부 제출)"}
+    assert "law" not in doc_values(doc)
+    assert doc_values(doc, 3)["law"] == {"소득세법"}
