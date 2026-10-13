@@ -11,8 +11,9 @@
 - colab exec는 20분 전후로 끊길 수 있다 → 긴 작업은 VM 안 nohup으로 띄우고 짧은 exec로 로그를 본다
 - tar는 `C:` 경로를 원격 호스트로 해석한다 → 압축 해제는 Python tarfile로 한다
 - colab exec(커널 웹소켓)가 응답 없이 멈추거나 "Connection was lost"로 끊긴다(EXP-009에서 40분 대기)
-  → 호출마다 시간 제한을 두고, 다시 실행해도 되는 명령만 재시도한다. VM 안 nohup 실행(start_bg)은
-  두 번 띄우면 같은 산출물을 동시에 쓰므로 재시도하지 않는다
+  → 호출마다 시간 제한을 두고, 다시 실행해도 되는 명령만 재시도한다. 시간 초과로 끊겨도 VM 안 명령은
+  계속 돌 수 있어, VM 안 nohup 실행(start_bg)과 결과 압축(fetch의 tar)은 겹쳐 돌면 같은 파일을
+  동시에 쓰므로 재시도하지 않는다
 
 사용 (저장소 루트에서):
   uv run python .claude/skills/meet-rag/scripts/colab_job.py preflight [override ...]
@@ -195,7 +196,7 @@ def fetch(session: str, remote: str, dest: Path) -> None:
     if not remote.startswith("data/"):
         sys.exit("산출물은 data/ 아래 경로만 받는다. 추적 파일을 VM 결과로 덮어쓰지 않기 위해서다")
     tgz = "/content/fetch.tgz"
-    vm_sh(session, f"cd {VM_REPO} && tar czf {tgz} {shlex.quote(remote)} && ls -l {tgz}")
+    vm_sh(session, f"cd {VM_REPO} && tar czf {tgz} {shlex.quote(remote)} && ls -l {tgz}", retries=0)
     with tempfile.TemporaryDirectory() as tmp:
         local = Path(tmp) / "fetch.tgz"
         print(colab("download", "-s", session, tgz, str(local), timeout=TRANSFER_TIMEOUT))
