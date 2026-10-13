@@ -52,7 +52,7 @@ NOISE = re.compile(
 )
 
 
-TIMEOUT = 120  # colab 호출 하나의 시간 제한(초). 재시도까지 최악 6분. 큰 파일 전송은 TRANSFER_TIMEOUT
+TIMEOUT = 120  # colab 호출 하나의 시간 제한(초), 재시도까지 최악 6분
 TRANSFER_TIMEOUT = 1800
 RETRIES = 2  # 시간 초과·연결 끊김일 때 다시 시도하는 횟수
 LOST = "Connection was lost"
@@ -168,7 +168,8 @@ def upload(session: str, local: str, remote: str) -> None:
             with src.open("rb") as f, gzip.open(gz, "wb") as g:
                 shutil.copyfileobj(f, g)
             print(colab("upload", "-s", session, str(gz), target + ".gz", timeout=TRANSFER_TIMEOUT))
-        vm_sh(session, f"gunzip -f {shlex.quote(target)}.gz", retries=0)  # 두 번째 실행은 .gz가 없어 실패
+        # 두 번째 실행은 .gz가 없어 실패하므로 재시도하지 않는다
+        vm_sh(session, f"gunzip -f {shlex.quote(target)}.gz", retries=0)
     else:
         print(colab("upload", "-s", session, str(src), target, timeout=TRANSFER_TIMEOUT))
     print(vm_sh(session, f"wc -lc {shlex.quote(target)}"))
