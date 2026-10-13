@@ -162,7 +162,7 @@ def condition_setup(cfg, chunk_doc_ids: np.ndarray):
 
 def embed_queries(cfg, texts: list[str]) -> np.ndarray:
     model = load_model(cfg, cfg.embedding.query_max_tokens)
-    encode = encoder(model, cfg)
+    encode = encoder(model, cfg, cfg.embedding.get("query_prompt"))
     step = cfg.embedding.max_batch_size
     return np.concatenate([encode(texts[i : i + step]) for i in range(0, len(texts), step)])
 

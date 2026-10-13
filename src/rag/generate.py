@@ -117,7 +117,7 @@ class Pipeline:
     def embed(self, query: str) -> np.ndarray:
         if self._model is None:
             self._model = load_model(self.cfg, self.cfg.embedding.query_max_tokens)
-        return encoder(self._model, self.cfg)([query])[0]
+        return encoder(self._model, self.cfg, self.cfg.embedding.get("query_prompt"))([query])[0]
 
     @traceable(name="retrieve", process_inputs=lambda i: {"k": i["k"]})
     def retrieve(self, q_emb: np.ndarray, k: int) -> list[dict]:
