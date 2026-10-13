@@ -1,0 +1,47 @@
+# @package _global_
+# EXP-005 reranker로 상위 후보 재정렬(Jev, docs/experiments/EXP-005.md). 기준 EXP-004 위에 더한다.
+# 순서: rag.search search.mode=rerank-pairs → rag.rerank → rag.search
+defaults:
+  - exp004
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter-rerank  # 순위 파일 이름. EXP-004 파일을 덮어쓰지 않는다
+  rerank:
+    enabled: true  # 점수 파일로 RRF 상위 depth개를 다시 줄 세운 뒤 필터를 적용한다
+    depth: 20  # RRF 순서(필터 전) 상위 문서 수
+    backend: jev  # jev | cross-encoder
+    # 질의 하나의 후보 depth개를 한 요청에 묶고 후보마다 score 질문을 붙인다(notebooks/15_01 시험)
+    jev:
+      url: https://openrouter.ai/api/alpha/decisions
+      model: typesafe/jev-1.13
+      api_key_env: OPENROUTER_API
+      workers: 8  # 동시 요청 수
+      timeout: 120
+      instructions: 이 후보 문서는 질의에 얼마나 답하는가?
+      levels:
+        - 질의와 관련 없는 내용이다
+        - 질의의 주제와 관련은 있지만 질의가 묻는 것에 답하지 않는다
+        - 질의가 묻는 것의 일부를 간접적으로 담고 있다
+        - 질의가 묻는 것의 대부분에 답한다
+        - 질의가 묻는 것에 직접적이고 완전하게 답한다
+    # 아래는 cross-encoder(KURE-Reranker-nano) 설정. CPU 지연 측정에만 썼다(EXP-005 실행 기록)
+    model: nlpai-lab/KURE-Reranker-nano
+    revision: f3b3eff2b5251f135b638891ebe7d6c5ae94cc3e
+    # 질의 + 청크 하나(KURE-v1 토큰 512개). 토크나이저가 달라 여유를 둔다
+    max_length: 1024
+    batch_size: 32
+    mode: score  # score | latency
+    # 로컬 cpu·float32. Colab은 명령에서 cuda·float16으로 바꾼다
+    device: cpu
+    dtype: float32
+    threads: null  # 지연 측정에서 CPU 스레드 수를 고정할 때 쓴다(HF Spaces 무료 CPU 2 vCPU)
+    latency:
+      n_queries: 100
+      seed: 20260929
+
+paths:
+  rerank_pairs: data/rerank/${search.queries}-${index.scope}.pairs.jsonl
+  rerank_scores: data/rerank/${search.queries}-${index.scope}.scores.jsonl
+  rerank_latency: data/rerank/latency-${search.queries}-${index.scope}-${retriever.rerank.backend}.json
+  rerank_jev_cache: data/rerank/jev_cache

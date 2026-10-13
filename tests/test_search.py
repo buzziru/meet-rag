@@ -3,12 +3,14 @@ import pytest
 
 from rag.index import load_cfg
 from rag.search import (
+    chunks_by_doc,
     condition_docs,
     conditions_first,
     first_docs,
     query_files,
     rank_docs,
     rank_with_pool,
+    rerank_top,
     rrf,
 )
 
@@ -93,3 +95,13 @@ def test_conditions_first_keeps_order_within_groups():
 def test_rrf_without_top_k_returns_all():
     assert rrf([["a", "b"], ["c"]], 60, None) == ["a", "c", "b"]
     assert rrf([["a", "b"], ["c"]], 60, 2) == ["a", "c"]
+
+
+def test_rerank_top_reorders_head_only():
+    docs = ["a", "b", "c", "d"]
+    assert rerank_top(docs, {"a": 0.1, "b": 0.9, "c": 0.5}, 3) == ["b", "c", "a", "d"]
+
+
+def test_chunks_by_doc():
+    got = chunks_by_doc(np.array(["x", "y", "x", "z", "y"]))
+    assert {k: v.tolist() for k, v in got.items()} == {"x": [0, 2], "y": [1, 4], "z": [3]}
