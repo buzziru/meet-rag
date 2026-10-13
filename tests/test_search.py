@@ -128,3 +128,10 @@ def test_weight_1_matches_max_ranking():
         scores = rng.standard_normal(3000).astype(np.float32)
         got = top_docs(weighted_doc_scores(scores, inv, len(names), [1.0]), names, 10)
         assert got == rank_docs(scores, names[inv], 10)
+
+
+def test_rrf_weights_favor_weighted_list():
+    # 가중치 1이면 동점(앞 목록 우선), dense에 2를 주면 dense 1위가 확실히 앞선다
+    assert rrf([["a", "b"], ["b", "a"]], 60, None, [1.0, 1.0]) == ["a", "b"]
+    assert rrf([["b", "a"], ["a", "b"]], 60, None, [2.0, 1.0]) == ["b", "a"]
+    assert rrf([["x"], ["y"], ["y"]], 60, None, [2.0, 1.0, 1.0]) == ["x", "y"]  # 2/61 = 1/61 + 1/61
