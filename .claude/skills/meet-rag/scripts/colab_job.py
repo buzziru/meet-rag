@@ -77,13 +77,13 @@ def colab(*args, stdin=None, check=True, timeout=TIMEOUT, retries=RETRIES) -> st
     return out.strip()
 
 
-def vm_sh(session: str, cmd: str, check=True, retries=RETRIES) -> str:
+def vm_sh(session: str, cmd: str, check=True, retries=RETRIES, timeout=TIMEOUT) -> str:
     """VM에서 셸 명령을 실행하고 출력을 돌려준다. 짧은 명령에만 쓴다."""
     code = ("import subprocess\n"
             f"r = subprocess.run({cmd!r}, shell=True, capture_output=True, text=True)\n"
             "print(r.stdout + r.stderr)\n"
             "print('EXIT', r.returncode)\n")
-    out = colab("exec", "-s", session, stdin=code, retries=retries)
+    out = colab("exec", "-s", session, stdin=code, retries=retries, timeout=timeout)
     m = re.search(r"EXIT (\d+)\s*$", out)
     if check and (not m or m.group(1) != "0"):
         sys.exit(f"VM 명령 실패: {cmd}\n{out}")
@@ -197,7 +197,8 @@ def fetch(session: str, remote: str, dest: Path) -> None:
     if not remote.startswith("data/"):
         sys.exit("산출물은 data/ 아래 경로만 받는다. 추적 파일을 VM 결과로 덮어쓰지 않기 위해서다")
     tgz = "/content/fetch.tgz"
-    vm_sh(session, f"cd {VM_REPO} && tar czf {tgz} {shlex.quote(remote)} && ls -l {tgz}", retries=0)
+    vm_sh(session, f"cd {VM_REPO} && tar czf {tgz} {shlex.quote(remote)} && ls -l {tgz}",
+          retries=0, timeout=TRANSFER_TIMEOUT)  # 전체 인덱스 압축은 수 분 걸린다
     with tempfile.TemporaryDirectory() as tmp:
         local = Path(tmp) / "fetch.tgz"
         print(colab("download", "-s", session, tgz, str(local), timeout=TRANSFER_TIMEOUT))
