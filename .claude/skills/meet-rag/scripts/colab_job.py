@@ -13,7 +13,7 @@
 - colab exec(커널 웹소켓)가 응답 없이 멈추거나 "Connection was lost"로 끊긴다(EXP-009에서 40분 대기)
   → 호출마다 시간 제한을 두고, 다시 실행해도 되는 명령만 재시도한다. 시간 초과로 끊겨도 VM 안 명령은
   계속 돌 수 있어, VM 안 nohup 실행(start_bg)과 결과 압축(fetch의 tar)은 겹쳐 돌면 같은 파일을
-  동시에 쓰므로 재시도하지 않는다
+  동시에 쓰므로 재시도하지 않는다. 두 번 실행하면 실패하는 명령(upload의 gunzip)도 재시도하지 않는다
 
 사용 (저장소 루트에서):
   uv run python .claude/skills/meet-rag/scripts/colab_job.py preflight [override ...]
@@ -52,7 +52,7 @@ NOISE = re.compile(
 )
 
 
-TIMEOUT = 300  # colab 호출 하나의 시간 제한(초). 큰 파일 전송은 TRANSFER_TIMEOUT
+TIMEOUT = 120  # colab 호출 하나의 시간 제한(초). 재시도까지 최악 6분. 큰 파일 전송은 TRANSFER_TIMEOUT
 TRANSFER_TIMEOUT = 1800
 RETRIES = 2  # 시간 초과·연결 끊김일 때 다시 시도하는 횟수
 LOST = "Connection was lost"
@@ -168,7 +168,7 @@ def upload(session: str, local: str, remote: str) -> None:
             with src.open("rb") as f, gzip.open(gz, "wb") as g:
                 shutil.copyfileobj(f, g)
             print(colab("upload", "-s", session, str(gz), target + ".gz", timeout=TRANSFER_TIMEOUT))
-        vm_sh(session, f"gunzip -f {shlex.quote(target)}.gz")
+        vm_sh(session, f"gunzip -f {shlex.quote(target)}.gz", retries=0)  # 두 번째 실행은 .gz가 없어 실패
     else:
         print(colab("upload", "-s", session, str(src), target, timeout=TRANSFER_TIMEOUT))
     print(vm_sh(session, f"wc -lc {shlex.quote(target)}"))
