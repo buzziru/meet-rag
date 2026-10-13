@@ -24,6 +24,30 @@ GENERATION = re.compile(r"(?:제\s*)?(\d{1,2})\s*대\s*국회")
 # 코퍼스 회기 번호는 세 자리(180~402)다. `제1회 추가경정예산` 같은 다른 `제N회`를 막는다(D-21)
 MEETING_NUMBER = re.compile(r"제\s*(\d{3})\s*회(?!의)")
 SESSION_NUMBER = re.compile(r"제\s*(\d+)\s*차(?!관)")  # 제1차관(직위)은 차수가 아니다
+# 안건 항목의 법률명(EXP-008): `○○법 일부개정법률안`, `○○법안`의 `○○법`. 안건은 회의 단위 필드다
+AGENDA_ITEM = re.compile(r"(?:^|\s)\d+\.\s*")
+AGENDA_LAW = re.compile(r"([가-힣A-Za-z0-9ㆍ·․‧\s]+?법)\s*(?:일부|전부)?\s*(?:개정)?\s*(?:법률)?안")
+SUB_ITEM = re.compile(r"^[가-힣]\.")  # `가.` 같은 하위 항목 번호
+LAW_SEP = r"[\sㆍ·․‧]"  # 법률명 안에서 무시하는 공백·가운뎃점
+
+
+def agenda_laws(agenda: str, min_chars: int) -> set[str]:
+    """안건 문자열의 법률명. 공백·가운뎃점을 지운 형태로, min_chars자 미만은 버린다.
+
+    Args:
+        agenda: 문서의 `agenda` 필드.
+        min_chars: 법률명 최소 글자 수.
+
+    Returns:
+        법률명 집합.
+    """
+    out = set()
+    for item in AGENDA_ITEM.split(agenda):
+        for m in AGENDA_LAW.finditer(item):
+            name = SUB_ITEM.sub("", re.sub(LAW_SEP, "", m.group(1)))
+            if len(name) >= min_chars:
+                out.add(name)
+    return out
 
 
 def full_year(y4, y2) -> str:
@@ -52,7 +76,7 @@ def alternation(values) -> re.Pattern:
 
 
 class Extractor:
-    def __init__(self, meta_dict: dict, titles, suffixes, exclude=(), aliases=None):
+    def __init__(self, meta_dict: dict, titles, suffixes, exclude=(), aliases=None, laws=()):
         committees = {committee_base(c) for c in meta_dict["committee_name"]}
         # 약칭: `국방위원회` → `국방위`, 그리고 공식·관용 약칭 표(D-22)
         self.committee_of = {c: [c] for c in committees}
@@ -67,6 +91,9 @@ class Extractor:
                 and n not in exclude]
         names = "|".join(re.escape(n) for n in sorted(kept, key=len, reverse=True))
         self.name = re.compile(f"(?<![가-힣])({names})(?=$|[^가-힣]|{tail})")
+        # 법률명은 글자 사이 공백·가운뎃점을 허용해 찾는다. 긴 이름을 먼저 맞춘다(EXP-008)
+        pats = [f"{LAW_SEP}*".join(map(re.escape, n)) for n in sorted(laws, key=len, reverse=True)]
+        self.law = re.compile(f"(?<![가-힣])(?:{'|'.join(pats)})") if pats else None
 
     def extract(self, text: str) -> dict[str, list[str]]:
         found = {
@@ -80,16 +107,21 @@ class Extractor:
                                for c in self.committee_of[m.group()]],
             "meeting_name": [m.group() for m in self.meeting.finditer(text)],
             "names": [m.group(1) for m in self.name.finditer(text)],
+            "law": [re.sub(LAW_SEP, "", m.group()) for m in self.law.finditer(text)]
+            if self.law else [],
         }
         return {k: list(dict.fromkeys(v)) for k, v in found.items() if v}
 
 
-def doc_values(doc: dict) -> dict[str, set[str]]:
-    """문서 하나에서 조건 필드마다 맞는 값의 집합. 날짜는 연·연-월·연-월-일을 모두 담는다."""
+def doc_values(doc: dict, law_min_chars: int | None = None) -> dict[str, set[str]]:
+    """문서 하나에서 조건 필드마다 맞는 값의 집합. 날짜는 연·연-월·연-월-일을 모두 담는다.
+
+    law_min_chars가 있으면 안건 항목의 법률명을 `law` 필드로 더한다(EXP-008).
+    """
     m = DOC_DATE.match(doc.get("date", ""))
     names = {p["name"] for f in ("questioners", "answerers") for p in doc[f]} - {""}
     committee = doc.get("committee_name", "")
-    return {
+    values = {
         "date": set(date_keys(*m.groups())) if m else set(),
         "generation_number": {doc.get("generation_number", "")},
         "meeting_number": {doc.get("meeting_number", "")},
@@ -98,16 +130,19 @@ def doc_values(doc: dict) -> dict[str, set[str]]:
         "meeting_name": {doc.get("meeting_name", "")},
         "names": names,
     }
+    if law_min_chars is not None:
+        values["law"] = agenda_laws(doc.get("agenda", ""), law_min_chars)
+    return values
 
 
 class ConditionIndex:
     """문서 값의 역색인. 질의 조건에 맞는 필드 수를 문서마다 센다(H14, EXP-003)."""
 
-    def __init__(self, docs: list[dict], year_ref_offsets):
+    def __init__(self, docs: list[dict], year_ref_offsets, law_min_chars: int | None = None):
         self.offsets = year_ref_offsets
         self.index: dict[str, dict[str, set[int]]] = {}  # 필드 → 값 → 문서 번호
         for i, doc in enumerate(docs):
-            for field, values in doc_values(doc).items():
+            for field, values in doc_values(doc, law_min_chars).items():
                 for v in values - {""}:
                     self.index.setdefault(field, {}).setdefault(v, set()).add(i)
 
@@ -137,8 +172,13 @@ def main() -> None:
     cfg = load_cfg(sys.argv[1:])
     meta_dict = json.loads((ROOT / cfg.paths.meta_dict).read_text(encoding="utf-8"))
     c = cfg.conditions
+    laws = set()
+    if c.get("agenda_law"):  # 법률명 사전은 코퍼스 안건에서만 만든다(EXP-008)
+        with (ROOT / cfg.paths.corpus).open(encoding="utf-8") as f:
+            for doc in map(json.loads, f):
+                laws |= agenda_laws(doc.get("agenda", ""), c.law_min_chars)
     ex = Extractor(meta_dict, cfg.ingest.name_titles, c.name_suffixes, set(c.name_exclude),
-                   c.committee_aliases)
+                   c.committee_aliases, laws)
     out = ROOT / cfg.paths.conditions
     out.parent.mkdir(parents=True, exist_ok=True)
     queries = read_queries(cfg)

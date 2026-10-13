@@ -1,0 +1,16 @@
+# @package _global_
+# EXP-008 안건 항목의 법률명을 조건 필드로 (H14, docs/experiments/EXP-008.md). 기준 EXP-004 위에 더한다.
+# 실행: rag.conditions +exp=exp008 [search.queries=multidoc] 뒤 rag.search +exp=exp008
+defaults:
+  - exp004
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter-law  # EXP-004 순위 파일을 덮어쓰지 않는다
+
+conditions:
+  agenda_law: true  # 질의의 법률명과 문서(회의) 안건 항목의 법률명을 `law` 필드로 맞춘다
+  law_min_chars: 3  # 이보다 짧은 법률명은 버린다(`법` 조각 방지). 코퍼스 최단 실제 법률명은 `국회법` 등 3자
+
+paths:
+  conditions: data/conditions/${search.queries}-law.jsonl  # EXP-004 조건 파일을 덮어쓰지 않는다
