@@ -88,15 +88,18 @@ def top_docs(doc_scores: np.ndarray, doc_names: np.ndarray, k: int) -> list[str]
     return list(doc_names[np.argsort(-doc_scores, kind="stable")[:k]])
 
 
-def rrf(rankings: list[list[str]], k: int, top_k: int | None) -> list[str]:
-    """문서 순위 목록들을 RRF(Σ 1/(k + 순위))로 합친다. top_k가 None이면 후보 전체를 낸다.
+def rrf(rankings: list[list[str]], k: int, top_k: int | None,
+        weights: list[float] | None = None) -> list[str]:
+    """문서 순위 목록들을 RRF(Σ w / (k + 순위))로 합친다. top_k가 None이면 후보 전체를 낸다.
 
+    weights는 목록마다의 가중치(EXP-010)이고 없으면 모두 1이다.
     동점이면 앞 목록(dense)에 먼저 나온 문서가 앞선다.
     """
     score: dict[str, float] = {}
-    for docs in rankings:
+    for i, docs in enumerate(rankings):
+        w = weights[i] if weights else 1.0
         for rank, doc in enumerate(docs, 1):
-            score[doc] = score.get(doc, 0.0) + 1 / (k + rank)
+            score[doc] = score.get(doc, 0.0) + w / (k + rank)
     return sorted(score, key=score.__getitem__, reverse=True)[:top_k]
 
 
@@ -293,7 +296,8 @@ def search(cfg) -> None:
                     if r.conditions.get("filter") == "best":  # 맞은 필드 수가 가장 많은 문서
                         top = max(counts.values())
                         matched = {doc_names[i] for i, c in counts.items() if c == top}
-                fused = rrf(lists, r.fusion.rrf_k, None)
+                weights = r.fusion.get("weights")  # [dense, BM25, 조건 목록]
+                fused = rrf(lists, r.fusion.rrf_k, None, list(weights) if weights else None)
                 if export_pairs:
                     picks += [(qids[j], d, int(doc_chunks[d][np.argmax(row[doc_chunks[d]])]))
                               for d in fused[: r.rerank.depth]]

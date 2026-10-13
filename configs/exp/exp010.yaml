@@ -1,0 +1,11 @@
+# @package _global_
+# EXP-010 snowflake-ko 임베딩 + RRF에서 dense 가중치 2 (H13, docs/experiments/EXP-010.md). EXP-009 설정 위에 바꾼다.
+# 실행: rag.search +exp=exp010 (EXP-009 인덱스·질의 임베딩·조건 파일 재사용)
+defaults:
+  - exp009
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter-law-w2  # EXP-009 순위 파일을 덮어쓰지 않는다
+  fusion:
+    weights: [2.0, 1.0, 1.0]  # RRF 목록 가중치 [dense, BM25, 조건 목록]. dev-full을 보기 전에 고정(사용자 결정)

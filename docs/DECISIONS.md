@@ -278,3 +278,15 @@
 - 비용: 추가 서버 비용 없음. dev-full 검색 시간 47초 → 51초(같은 PC, 1회 측정). D-26의 운영 채택 판단(비용과 함께)에 따라 비용 부담이 없어 기준으로 올린다
 - 한계: `law` 세트가 같은 법안 라벨로 묶여 multi-doc 상승은 상한에 가깝게 읽는다. 안건은 회의 단위라 같은 회의의 다른 법안 문서도 필드가 맞는다. single-doc에서 법률명이 잡히는 질의 58개는 필터 집합이 바뀌지 않아, 법률명을 잘못 짚은 질의에서 정답이 밀리는 위험은 지금 평가로 잴 수 없다. multi-doc 단계 채택이라 test로 다시 확인할 수 없다
 - 날짜: 2026-10-13
+
+## D-28 임베딩을 snowflake-ko로 바꾼다 (SPEC 판정 규칙의 예외)
+- 결정: 검색 기준을 EXP-009 설정(EXP-008에서 dense 임베딩만 `dragonkue/snowflake-arctic-embed-l-v2.0-ko`로, RRF 가중치 [1, 1, 1])으로 바꾼다. EXP-009(보류)와 EXP-010(보류)의 판정은 그대로 두고, 채택은 SPEC 판정 절의 예외로 한다(사용자 결정 2026-10-13, EXP-010 실행 전). 실행은 `rag.conditions +exp=exp009 [search.queries=multidoc]` 뒤 `rag.search +exp=exp009`
+- 새 기준 순위: single-doc `data/runs/snowflake-ko-fixed-512-64-hybrid-cond-filter-law-dev-full.csv`(SHA-256 `ab695a02b19068dc56b1c31313ed13cd023db36f510ba0da28a414d5d5b4e56e`), multi-doc `…-law-multidoc.csv`(SHA-256 `977fb5432640a82408e888cc47cdf18e76ea499c6ad62a8a23eea12e2faa4e25`)
+- 근거 수치: EXP-009 dense 단독 Recall@5 0.8584 → 0.8810, +2.25%p [+1.42, +3.15]. hybrid Recall@5 0.9164 → 0.9214, +0.50%p [−0.13, +1.14](보류). 늘어난 정답의 79%를 기준 hybrid가 이미 맞혀 hybrid에는 작게 드러났다(`docs/experiments/EXP-009.md`). RRF dense 가중치 2로 이 차이를 키우려던 EXP-010은 보류였고 EXP-009 대비 −0.46%p [−0.82, −0.10]로 오히려 나빴다(`docs/experiments/EXP-010.md`)
+- 이유(사용자)
+  - 두 모델의 차이는 무엇을 먼저 골랐는가에 있다. snowflake-ko를 먼저 골랐다면 KURE-v1로 바꿀 근거가 약했을 것이다. 판정의 일관성 측면에서는 KURE-v1 유지가 의미가 있지만, dense 성능 차이를 보고도 KURE-v1을 고집할 이유가 없다
+  - 청크 변경 등 임베딩 위에서 하는 실험이 남아 있어 더 나은 임베딩을 기준으로 두는 것이 맞다
+  - 임베딩을 이미 마쳐 추가 비용이 없다. 인덱스 크기(404MB)와 질의 임베딩 비용 구조도 KURE-v1과 같다
+- 감수하는 것: single-doc 시스템 개선은 확인되지 않았다(+0.50%p, 구간이 0을 포함). multi-doc 일부 지표가 작게 떨어졌다(`conf` Recall@5 −0.68%p [−1.43, −0.11], Recall@10 −0.40%p [−0.75, −0.11], Complete@10 −1.00%p [−1.83, −0.33])
+- 문서 반영: SPEC 판정 절은 측정·판정 방법이라 고치지 않는다. 이 결정은 판정 결과와 별개인 채택 결정이고, D-25와 같이 DECISIONS에 예외로 남긴다. 이후 EXP의 기준은 이 설정이다
+- 날짜: 2026-10-13
