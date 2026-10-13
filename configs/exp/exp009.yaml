@@ -1,0 +1,12 @@
+# @package _global_
+# EXP-009 임베딩 모델을 snowflake-arctic-embed-l-v2.0-ko로 (H6, docs/experiments/EXP-009.md). 기준 EXP-008 위에 바꾼다.
+# 실행: (Colab) rag.index·rag.search search.mode=embed-queries → (로컬) rag.conditions +exp=exp009 뒤 rag.search +exp=exp009
+defaults:
+  - exp008
+  - _self_
+
+embedding:
+  model_name: dragonkue/snowflake-arctic-embed-l-v2.0-ko
+  revision: 55ec6e9358a56d56af759bc8372e970caf8c305f  # 2025-10-16 커밋
+  slug: snowflake-ko  # 인덱스·질의 임베딩 경로. KURE-v1 산출물을 덮어쓰지 않는다
+  query_prompt: "query: "  # 모델 카드 규약: 질의에만 붙이고 문서에는 붙이지 않는다

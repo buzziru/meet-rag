@@ -25,7 +25,7 @@ S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를
 - [대기] H3 청크 길이·overlap 변경 (효과 중 / 재임베딩)
 - [대기] H4 문장 경계 청킹: Kiwi 문장 분리 후 길이에 맞춰 묶음 (효과 중 / 재임베딩)
 - [대기] H5 [메타데이터] 청크에 메타데이터(회의명·위원회·안건·날짜)를 더한다. BM25 문서에만 더하는 변형은 재임베딩이 없고 dense 접두는 재임베딩이 필요하다. multi-doc 질의는 회의를 날짜·위원회·이름으로 지목하는데 그 표현이 정답 본문에는 드물다(D-18, `notebooks/10_03_EXP001_multidoc진단.ipynb`). 판정은 SPEC "메타데이터 가설의 판정" (효과: multi-doc 큼, single-doc 작음 / BM25 변형은 로컬 약 10분, dense 접두는 재임베딩) → EXP-002 기각(BM25 접두, 첫 EXP. BM25 접두의 다음 변형은 하지 않고 H14로 이어 간다(D-19). dense 접두만 대기. single-doc −2.62%p, multi-doc R@5 +15.32%p, 하락은 긴 안건 접두의 길이 정규화)
-- [대기] H6 임베딩 모델 교체: `BAAI/bge-m3`, `dragonkue/BGE-m3-ko` (효과 불명 / 재임베딩 2회)
+- [진행] H6 임베딩 모델 교체: 후보는 `dragonkue/snowflake-arctic-embed-l-v2.0-ko`(EXP-009). 기존 후보 `BAAI/bge-m3`, `dragonkue/BGE-m3-ko`는 공개 벤치마크에서 모두 KURE-v1보다 낮아 뺐다. EXP-009가 채택이 아니면 다음 변형을 Qwen3 계열(pplx-embed-v1-0.6b, PIXIE-Spell-v1.5-0.6B)에서 고른다. KURE-v2(late-interaction)는 저장 용량·운영 제약으로 아이디어로만 남긴다(사용자 결정 2026-10-13, `docs/research/embedding-candidates.md`) (효과 불명 / 재임베딩)
 - [기각] H7 청크 점수의 문서 집계 방식: 최고점 대신 상위 n개 합 등 (효과 소 / 비용 없음) → EXP-007 기각(첫 EXP. 상위 2개 합은 dev-small에서 청크 1개 정답 문서를 밀어내 dev-full 전에 max + 0.1·2위로 바꿈. dev-full Recall@5 −2.35%p [−3.01, −1.75], 손실의 90%가 청크 1개 정답). H7을 닫는다(사용자 결정 2026-10-13)
 - [대기] H8 질의 재작성·HyDE (dev 질의를 무료 쿼터로 보낼 수 있다(D-10). 질의 전체 재작성은 호출 수·소요 시간을 보고하고 승인 후)
 - [대기] H9 다중 크기 청킹: 한 문서를 여러 크기(예: 256·512·1024)로 나눠 함께 검색하고 문서 순위로 합침. 자료는 S4 `data/runs/chunk_sweep.json`과 dev-small 네 인덱스 (효과 중 / 재임베딩)
