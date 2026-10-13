@@ -1,0 +1,18 @@
+# @package _global_
+# EXP-006 KURE-Reranker-nano(cross-encoder)로 상위 후보 재정렬, Colab GPU(docs/experiments/EXP-006.md).
+# EXP-005의 후보 쌍(RRF 상위 20개, 문서마다 최고점 청크 하나)을 그대로 쓰고 재정렬 모델만 바꾼다.
+# 순서: (VM) rag.rerank 채점·지연 → (로컬) rag.search
+defaults:
+  - exp005
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter-ce  # EXP-005(Jev) 순위 파일을 덮어쓰지 않는다
+  rerank:
+    backend: cross-encoder
+    device: cuda
+    dtype: float16
+
+paths:
+  # EXP-005 Jev 점수 파일을 덮어쓰지 않게 backend를 이름에 넣는다
+  rerank_scores: data/rerank/${search.queries}-${index.scope}-${retriever.rerank.backend}.scores.jsonl
