@@ -1,0 +1,13 @@
+# @package _global_
+# EXP-007 dense 문서 점수에 두 번째 청크 가점 (H7, docs/experiments/EXP-007.md). 기준 EXP-004 위에 더한다.
+# 실행: rag.search +exp=exp007
+defaults:
+  - exp004
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter-agg2  # EXP-004 순위 파일을 덮어쓰지 않는다
+  # dense 문서 점수 = Σ weights[i] × (i+1번째로 높은 청크 점수). 키가 없으면 최고점(기준 동작)
+  # [1.0, 1.0](상위 2개 합)은 dev-small에서 청크 1개 문서를 밀어내 바꿨다(EXP-007 "설계를 정한 경위")
+  doc_agg:
+    weights: [1.0, 0.1]

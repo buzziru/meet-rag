@@ -12,6 +12,8 @@ from rag.search import (
     rank_with_pool,
     rerank_top,
     rrf,
+    top_docs,
+    weighted_doc_scores,
 )
 
 
@@ -105,3 +107,24 @@ def test_rerank_top_reorders_head_only():
 def test_chunks_by_doc():
     got = chunks_by_doc(np.array(["x", "y", "x", "z", "y"]))
     assert {k: v.tolist() for k, v in got.items()} == {"x": [0, 2], "y": [1, 4], "z": [3]}
+
+
+def test_weighted_doc_scores_by_chunk_rank():
+    scores = np.array([0.9, 0.2, 0.5, 0.8, 0.7])
+    chunk_doc = np.array([0, 0, 0, 1, 2])
+    # 문서 0: 0.9 + 0.5 (합) / 0.9 + 0.1·0.5, 문서 1·2는 청크가 하나라 그 점수만
+    np.testing.assert_allclose(weighted_doc_scores(scores, chunk_doc, 3, [1.0, 1.0]),
+                               [1.4, 0.8, 0.7])
+    np.testing.assert_allclose(weighted_doc_scores(scores, chunk_doc, 3, [1.0, 0.1]),
+                               [0.95, 0.8, 0.7])
+
+
+def test_weight_1_matches_max_ranking():
+    rng = np.random.default_rng(0)
+    chunk_doc = np.sort(rng.integers(0, 200, 3000))
+    names = np.unique(chunk_doc).astype(str)
+    _, inv = np.unique(chunk_doc, return_inverse=True)
+    for _ in range(20):
+        scores = rng.standard_normal(3000).astype(np.float32)
+        got = top_docs(weighted_doc_scores(scores, inv, len(names), [1.0]), names, 10)
+        assert got == rank_docs(scores, names[inv], 10)

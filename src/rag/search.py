@@ -55,6 +55,39 @@ def rank_docs(scores: np.ndarray, chunk_doc_ids: np.ndarray, k: int,
     return rank_with_pool(scores, chunk_doc_ids, k, pool)[0]
 
 
+def weighted_doc_scores(scores: np.ndarray, chunk_doc: np.ndarray, n_docs: int,
+                        weights: list[float]) -> np.ndarray:
+    """문서마다 i번째로 높은 청크 점수에 weights[i]를 곱해 더한다(EXP-007).
+
+    [1.0]이면 최고점(max), [1.0, 1.0]이면 상위 2개 합, [1.0, 0.1]이면 max + 0.1·2위다.
+    청크가 len(weights)개보다 적은 문서는 있는 것만 더한다.
+
+    Args:
+        scores: 청크 점수.
+        chunk_doc: 청크의 문서 번호(0..n_docs-1).
+        n_docs: 문서 수.
+        weights: 순위별 가중치.
+
+    Returns:
+        문서 점수 배열(길이 n_docs).
+    """
+    order = np.lexsort((-scores, chunk_doc))  # 문서 번호 순, 문서 안에서 점수 내림차순
+    docs = chunk_doc[order]
+    first = np.r_[0, np.flatnonzero(docs[1:] != docs[:-1]) + 1]
+    rank = np.arange(len(order)) - np.repeat(first, np.diff(np.r_[first, len(order)]))
+    sel = rank < len(weights)
+    keep = order[sel]
+    w = np.asarray(weights, dtype=scores.dtype)[rank[sel]]
+    out = np.zeros(n_docs, dtype=scores.dtype)
+    np.add.at(out, chunk_doc[keep], scores[keep] * w)
+    return out
+
+
+def top_docs(doc_scores: np.ndarray, doc_names: np.ndarray, k: int) -> list[str]:
+    """문서 점수 내림차순 상위 k개 문서. 같은 점수는 문서 번호 순."""
+    return list(doc_names[np.argsort(-doc_scores, kind="stable")[:k]])
+
+
 def rrf(rankings: list[list[str]], k: int, top_k: int | None) -> list[str]:
     """문서 순위 목록들을 RRF(Σ 1/(k + 순위))로 합친다. top_k가 None이면 후보 전체를 낸다.
 
@@ -228,20 +261,31 @@ def search(cfg) -> None:
             for x in map(json.loads, f):
                 rerank_scores.setdefault(x["qid"], {})[x["doc_id"]] = x["score"]
     depth = r.fusion.depth if hybrid else r.top_k
+    agg = r.get("doc_agg")
+    weighted = agg is not None
+    if weighted:
+        agg_names, agg_doc = np.unique(chunk_doc_ids, return_inverse=True)
     rows, fallbacks = [], 0
     for start in range(0, len(qids), r.query_batch):
         scores = q_emb[start : start + r.query_batch] @ chunk_emb.T
         for j, row in enumerate(scores, start):
-            docs, full = rank_with_pool(row, chunk_doc_ids, depth, r.chunk_pool)
-            fallbacks += full
+            if weighted:
+                dense_scores = weighted_doc_scores(row, agg_doc, len(agg_names), list(agg.weights))
+                docs = top_docs(dense_scores, agg_names, depth)
+            else:
+                docs, full = rank_with_pool(row, chunk_doc_ids, depth, r.chunk_pool)
+                fallbacks += full
             if hybrid:
                 lexical = rank_docs(bm25.scores(q_ids[j]), chunk_doc_ids, depth, r.chunk_pool)
                 lists = [docs, lexical]
                 counts = cond_index.match_counts(conds[qids[j]]) if use_cond else {}
                 matched = set()
                 if counts and max(counts.values()) >= r.conditions.min_fields:
-                    doc_scores = np.full(len(doc_names), -np.inf, dtype=row.dtype)
-                    np.maximum.at(doc_scores, chunk_doc, row)
+                    if weighted:  # agg_names와 doc_names는 같은 np.unique 결과다
+                        doc_scores = dense_scores
+                    else:
+                        doc_scores = np.full(len(doc_names), -np.inf, dtype=row.dtype)
+                        np.maximum.at(doc_scores, chunk_doc, row)
                     lists.append(condition_docs(counts, doc_scores, doc_names, depth,
                                                 r.conditions.min_fields))
                     if r.conditions.get("filter") == "best":  # 맞은 필드 수가 가장 많은 문서
