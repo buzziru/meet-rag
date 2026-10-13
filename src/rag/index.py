@@ -94,16 +94,18 @@ def load_model(cfg, max_seq_length: int):
     import torch
     from sentence_transformers import SentenceTransformer
 
-    model = SentenceTransformer(cfg.embedding.model_name, device=cfg.embedding.device)
+    model = SentenceTransformer(cfg.embedding.model_name, device=cfg.embedding.device,
+                                revision=cfg.embedding.get("revision"))
     model.max_seq_length = min(max_seq_length, model.max_seq_length)
     if cfg.embedding.dtype == "float16":
         model = model.to(torch.float16)
     return model
 
 
-def encoder(model, cfg):
+def encoder(model, cfg, prompt: str | None = None):
+    """prompt는 텍스트 앞에 붙이는 접두다(질의 전용 접두 모델, EXP-009)."""
     def encode(texts):
-        return model.encode(texts, batch_size=len(texts), convert_to_numpy=True,
+        return model.encode(texts, batch_size=len(texts), convert_to_numpy=True, prompt=prompt,
                             normalize_embeddings=cfg.embedding.normalize).astype(np.float32)
     return encode
 
