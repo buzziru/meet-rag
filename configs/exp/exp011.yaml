@@ -1,0 +1,12 @@
+# @package _global_
+# EXP-011 다중 크기 청킹: 512 청크에 256 청크를 더해 dense 검색 (H9, docs/experiments/EXP-011.md). 기준 EXP-009 위에 더한다.
+# 실행: (Colab) rag.index +exp=exp009 chunking.chunk_tokens=256 chunking.overlap_tokens=32 → (로컬) rag.search +exp=exp011
+defaults:
+  - exp009
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter-law-ms256  # EXP-009 순위 파일을 덮어쓰지 않는다
+  # dense 목록에 함께 넣는 청크 [크기, overlap]. 같은 임베딩의 인덱스를 읽어 청크를 모으고 문서 점수는 청크 최댓값이다.
+  # BM25는 기본 청크(chunking)만 쓴다
+  extra_chunks: [[256, 32]]
