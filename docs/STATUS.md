@@ -6,7 +6,7 @@
 - 진행 중 EXP: 012 문장 경계 청킹(H4, `exp/exp012-sentence-chunk`), 013 질의 재작성(H8, 초안만, `exp/exp013-query-rewrite`)
 
 ## 실행 중 작업
-- 없음. EXP-012 Colab 세션 `meet-rag-exp012`(L4)는 08:41 UTC에 회수됐다(07:24\~08:41, 약 2.0 CU 요율 환산). full 임베딩을 마친 뒤 다운로드 중 커널 비활성으로 회수된 것으로 추정하고, VM의 full 인덱스를 잃었다(`_workspace/exp012_main_progress.md`)
+- Colab 없음. EXP-012 full 인덱스 두 개를 받아 `data/index/snowflake-ko-sentence-{512-64,256-32}/full/`에 두고 세션을 멈췄다(실행 기록은 EXP-012). worktree `C:\workspace\meet-rag-exp012`에서 dev-full·multi-doc 검색 중(`data/`·`_workspace/`는 원래 폴더 junction)
 
 ## 이번 세션 결정
 - EXP-012: BM25도 문장 경계 청크로, 청킹은 로컬(`index.chunk_only`)에서 하고 VM은 임베딩만
