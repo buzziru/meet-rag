@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
-from rag.chunking import chunk_text
+from rag.chunking import make_chunker
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -131,9 +131,9 @@ def main() -> None:
     chunks_path = index_dir / "chunks.jsonl"
     if not chunks_path.exists():
         rows = []
+        chunker = make_chunker(ch, model.tokenizer)
         for d in scope_docs(cfg):
-            for start, end, n in chunk_text(model.tokenizer, d["context"], ch.chunk_tokens,
-                                            ch.overlap_tokens):
+            for start, end, n in chunker(d["context"]):
                 rows.append({"chunk_id": len(rows), "doc_id": d["doc_id"], "start": start,
                              "end": end, "n_tokens": n, "text": d["context"][start:end]})
         tmp = chunks_path.with_suffix(".tmp")
