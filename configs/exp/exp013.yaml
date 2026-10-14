@@ -1,0 +1,21 @@
+# @package _global_
+# EXP-013 검색 신뢰도가 낮은 질의만 LLM으로 재작성해 RRF 목록을 더함 (H8, docs/experiments/EXP-013.md).
+# 기준 EXP-011 설정(D-29) 위에 더한다. 구현은 다음 세션(코드 없음, 초안)
+defaults:
+  - exp011
+  - /rewriter: gemma_openrouter
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter-law-ms256-rw  # EXP-011 순위 파일을 덮어쓰지 않는다
+  rewrite:
+    enabled: true
+    # 재작성 판단(사용자 결정 2026-10-14, 규칙 ③). 1차 검색 결과로만 계산하고 정답 라벨은 쓰지 않는다
+    gate:
+      overlap_k: 5          # A′: dense 상위 k개와 BM25 상위 k개 문서의 교집합 크기
+      max_overlap: 0        # A′가 이 값 이하면 재작성(교집합 없음)
+      spread_ranks: [1, 10] # B′: dense 문서 점수 1위와 10위의 차
+      max_spread: 0.0588    # B′가 이 값 이하면 재작성(dev-full summary_q 분포의 하위 10%, 라벨 미사용)
+    # 재작성 질의로 만든 dense·BM25 목록을 원 질의의 세 목록 뒤에 RRF로 더한다. 조건은 원 질의에서 뽑는다
+    lists: [dense, bm25]
+    max_chars: 300  # 재작성 출력 상한. 넘거나 비면 재작성 없이 원 질의만 쓴다

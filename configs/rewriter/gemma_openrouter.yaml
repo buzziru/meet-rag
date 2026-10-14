@@ -1,0 +1,11 @@
+# 질의 재작성기: Gemma 4 31B, OpenRouter 유료 API (실험용, EXP-013). 배포는 gemma_google을 쓴다
+base_url: https://openrouter.ai/api/v1
+api_key_env: OPENROUTER_API
+model: google/gemma-4-31b-it
+# 사고 과정. 배포 경로(Google AI Studio)는 끌 수 없어(D-11) 실험도 켜서 같은 조건으로 잰다(결정 1)
+reasoning: true
+params:
+  temperature: 0.0
+  max_tokens: 2048  # 사고 과정 토큰 포함 상한
+timeout: 60  # 호출 하나의 대기 상한(초)
+prompt_version: rw_v1
