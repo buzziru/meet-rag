@@ -2,24 +2,27 @@
 
 ## 현재 위치
 - 검색 기준: EXP-011 설정(D-29). EXP-009(snowflake-ko hybrid + 조건 목록 + 최다 일치 필터 + 법률명 조건)의 dense에 256/32 청크를 더함. dev-full Recall@5 0.9337, Recall@1 0.8369, multi-doc Recall@5 0.9514. 실행 `rag.search +exp=exp011`(조건은 실행 때 추출, S12)
-- 이번 세션: EXP-011 채택(D-29), S12 인덱스 경로·공유 검색기(`rag.retrieve`)·덮어쓰기 방지, D-30(검색 질의당 3초), D-31(재배포 제한은 공개 금지, 외부 API 처리 허용), 하네스 ADR-0038\~0040, colab CLI 공식 main d4f855d로 설치(Windows)
-- 진행 중 EXP: 012 문장 경계 청킹(H4, `exp/exp012-sentence-chunk`), 013 질의 재작성(H8, 초안만, `exp/exp013-query-rewrite`)
+- 이번 세션: EXP-012 문장 경계 청킹(H4) 보류. dev-full Recall@5 0.9350(+0.13%p [−0.23, +0.51]), multi-doc 변화 없음. 순위 이동은 dense가 양쪽으로 움직여 상쇄. 질의당 검색 p50 91.7ms, 콜드 스타트 35.4초. 기준 EXP-011 유지, H4 다음 변형 없음
+- 병합 대기 PR: EXP-012(`exp/exp012-sentence-chunk`, 이 STATUS 포함)
+- 진행 중 EXP: 013 질의 재작성(H8, 초안만, `exp/exp013-query-rewrite`)
 
 ## 실행 중 작업
-- Colab 없음. EXP-012 full 인덱스 두 개를 받아 `data/index/snowflake-ko-sentence-{512-64,256-32}/full/`에 두고 세션을 멈췄다(실행 기록은 EXP-012). worktree `C:\workspace\meet-rag-exp012`에서 dev-full·multi-doc 검색 중(`data/`·`_workspace/`는 원래 폴더 junction)
+- 없음(Colab 세션 없음). EXP-012 Colab은 두 세션 합계 약 165분, 약 4.3 CU(요율 환산). 1차 세션은 다운로드 중 회수돼 인덱스를 잃었다(EXP-012 실행 기록)
+- EXP-012는 worktree `C:\workspace\meet-rag-exp012`에서 했다(`data/`·`_workspace/`는 원래 폴더 junction). PR 병합 뒤 `git worktree remove ../meet-rag-exp012`로 지운다(junction은 원래 폴더를 가리키므로 worktree 폴더만 지워진다)
 
 ## 이번 세션 결정
-- EXP-012: BM25도 문장 경계 청크로, 청킹은 로컬(`index.chunk_only`)에서 하고 VM은 임베딩만
-- EXP-013: 재작성 판단 규칙 ③(dense·BM25 상위 5 교집합 없음 또는 dense 1위−10위 점수 차 ≤ 0.0588, 라벨 미사용), Gemma 4 31B(실험 OpenRouter, 배포 Google, `rewriter` config), 사고 과정 끔, 지시 `rw_v1`, 재작성 1개
-- 하네스: 커널은 PR 전 stop, CU는 요율 환산, 기록된 노트북 보존, 판정과 무관한 원인 분석, 구현 원칙(과거 코드 병용 금지·덮어쓰기 방지·설정 의존 입력은 실행 시점)
+- EXP-012 보류: 성능 근거가 없고 재구축 CPU 청킹이 약 38분 늘어 D-28 예외 채택 근거도 없다고 판단(사용자 확인은 PR에서)
+- PLAN 다음 순서(2026-10-14): H8 → H3 → H5 dense 접두
+- 데이터는 그대로 두고 캐시만 확인(사용자): uv 캐시 7.7GB, HF 2.8GB(snowflake-ko 2.2GB, KURE-Reranker-nano 571MB). 정리는 사용자 결정 대기
 
 ## 다음 행동
-1. [B] EXP-012 재개(`exp/exp012-sentence-chunk`): 새 L4 세션 할당은 사용자 승인 뒤(약 45분, 약 1.2 CU 요율 환산: 준비 3분, 업로드 4분, 임베딩 512·256 각 약 17분, 회수 3\~5분. dev-small은 다시 하지 않는다). 로컬 `data/index/snowflake-ko-sentence-{512-64,256-32}/full/chunks.jsonl` 업로드 → full 512 임베딩 → 바로 회수 → 256 임베딩 → 바로 회수. 다운로드 중에는 짧은 exec를 1\~2분마다 보내 커널을 깨운다. dev-small 인덱스는 로컬에 있고 dev-small 결과는 EXP-011과 같았다(R@5 0.9865). 이어서 dev-full·multi-doc 검색, exp-judge·감사, 원인 분석 노트북(21_xx), PR
-2. [B] EXP-013 구현(`exp/exp013-query-rewrite`, 초안 확정): 사용자 착수 지시를 받은 뒤 시작한다. EXP-012가 채택되면 기준과 B′ 임계값을 라벨 없이 다시 계산해 문서에 적는다. dev-small 작동 확인(Google 경로 10개 지연 포함) → 신호 C 결정 → dev-full(승인)
-3. [F] 하네스 대기 목록 3건: 승인 없이 EXP 구현 착수(B2 규칙 보강), D-31에 맞춘 평가 질의 전송 점검(protocol-guard P6 등), 새 CLI 다운로드 중 세션 회수(`colab_job.py fetch`에 커널 깨우기)
+1. [C] EXP-012 PR 리뷰·병합(사용자). 판단할 곳은 PR 본문 리뷰 가이드. 병합 뒤 worktree 제거
+2. [B] EXP-013 구현(`exp/exp013-query-rewrite`, 초안 확정): 사용자 착수 지시를 받은 뒤 시작한다. 기준은 EXP-011 그대로라 B′ 임계값(0.0588)을 다시 계산하지 않는다. dev-small 작동 확인(Google 경로 10개 지연 포함) → 신호 C 결정 → dev-full(승인)
+3. [F] 하네스 대기 목록: 승인 없이 EXP 구현 착수(B2 규칙 보강), D-31에 맞춘 평가 질의 전송 점검(protocol-guard P6 등), `colab_job.py fetch` 개선(다운로드 중 커널 깨우기, 압축 exec와 깨우기 겹침 회피, 무압축 tar, worktree junction, 로컬에 있는 파일은 받지 않기), 새 세션 직후 setup exec 시간 초과(restart-kernel 뒤 성공)
 4. [C] 원격 브랜치 정리(사용자): `chore/colab-cli-main-windows`, `chore/harness-notebook-impl-rules`
 
 ## 사용자 확인 필요
-- EXP-012 Colab 재할당 승인
+- EXP-012 보류와 기준 유지(PR에서)
+- 캐시 정리 여부: `uv cache prune`, KURE-Reranker-nano HF 캐시
 - EXP-013 신호 C(조건이 문서를 좁히지 못함)를 넣을지: dev-small 작동 확인 뒤
 - BM25 청크 구성(256 추가)을 PLAN 백로그에 올릴지
