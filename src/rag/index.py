@@ -127,11 +127,18 @@ def main() -> None:
     index_dir.mkdir(parents=True, exist_ok=True)
     started = time.time()
 
-    model = load_model(cfg, ch.chunk_tokens + 2)  # 특수 토큰 2개
+    if cfg.index.chunk_only:  # 청크만 만든다. 모델 없이 같은 토크나이저만 불러온다(EXP-012)
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(cfg.embedding.model_name,
+                                                  revision=cfg.embedding.get("revision"))
+    else:
+        model = load_model(cfg, ch.chunk_tokens + 2)  # 특수 토큰 2개
+        tokenizer = model.tokenizer
     chunks_path = index_dir / "chunks.jsonl"
     if not chunks_path.exists():
         rows = []
-        chunker = make_chunker(ch, model.tokenizer)
+        chunker = make_chunker(ch, tokenizer)
         for d in scope_docs(cfg):
             for start, end, n in chunker(d["context"]):
                 rows.append({"chunk_id": len(rows), "doc_id": d["doc_id"], "start": start,
@@ -143,6 +150,10 @@ def main() -> None:
         tmp.replace(chunks_path)
     with chunks_path.open(encoding="utf-8") as f:
         rows = [json.loads(line) for line in f]
+    if cfg.index.chunk_only:
+        took = time.time() - started
+        print(f"{len(rows):,} chunks -> {chunks_path.relative_to(ROOT)} ({took:.0f}s)")
+        return
 
     made = embed_shards([r["text"] for r in rows], [r["n_tokens"] for r in rows],
                         index_dir / "emb", cfg.index.shard_size, encoder(model, cfg),
