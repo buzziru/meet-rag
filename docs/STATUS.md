@@ -14,7 +14,7 @@
 - 하네스: 커널은 PR 전 stop, CU는 요율 환산, 기록된 노트북 보존, 판정과 무관한 원인 분석, 구현 원칙(과거 코드 병용 금지·덮어쓰기 방지·설정 의존 입력은 실행 시점)
 
 ## 다음 행동
-1. [B] EXP-012 재개(`exp/exp012-sentence-chunk`): 새 L4 세션 할당은 사용자 승인 뒤(약 50분, 약 1.3 CU 요율 환산). 로컬 `data/index/snowflake-ko-sentence-{512-64,256-32}/full/chunks.jsonl` 업로드 → full 512 임베딩 → 바로 회수 → 256 임베딩 → 바로 회수. 다운로드 중에는 짧은 exec를 1\~2분마다 보내 커널을 깨운다. dev-small 인덱스는 로컬에 있고 dev-small 결과는 EXP-011과 같았다(R@5 0.9865). 이어서 dev-full·multi-doc 검색, exp-judge·감사, 원인 분석 노트북(21_xx), PR
+1. [B] EXP-012 재개(`exp/exp012-sentence-chunk`): 새 L4 세션 할당은 사용자 승인 뒤(약 45분, 약 1.2 CU 요율 환산: 준비 3분, 업로드 4분, 임베딩 512·256 각 약 17분, 회수 3\~5분. dev-small은 다시 하지 않는다). 로컬 `data/index/snowflake-ko-sentence-{512-64,256-32}/full/chunks.jsonl` 업로드 → full 512 임베딩 → 바로 회수 → 256 임베딩 → 바로 회수. 다운로드 중에는 짧은 exec를 1\~2분마다 보내 커널을 깨운다. dev-small 인덱스는 로컬에 있고 dev-small 결과는 EXP-011과 같았다(R@5 0.9865). 이어서 dev-full·multi-doc 검색, exp-judge·감사, 원인 분석 노트북(21_xx), PR
 2. [B] EXP-013 구현(`exp/exp013-query-rewrite`, 초안 확정): 사용자 착수 지시를 받은 뒤 시작한다. EXP-012가 채택되면 기준과 B′ 임계값을 라벨 없이 다시 계산해 문서에 적는다. dev-small 작동 확인(Google 경로 10개 지연 포함) → 신호 C 결정 → dev-full(승인)
 3. [F] 하네스 대기 목록 3건: 승인 없이 EXP 구현 착수(B2 규칙 보강), D-31에 맞춘 평가 질의 전송 점검(protocol-guard P6 등), 새 CLI 다운로드 중 세션 회수(`colab_job.py fetch`에 커널 깨우기)
 4. [C] 원격 브랜치 정리(사용자): `chore/colab-cli-main-windows`, `chore/harness-notebook-impl-rules`
