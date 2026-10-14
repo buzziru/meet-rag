@@ -1,11 +1,16 @@
 ---
 name: colab-operator
-description: colab CLI(google-colab-cli 0.6.0)로 Google Colab VM을 다루는 명령 사용법. 세션 생성·종료(colab new/stop), 원격 Python·셸 실행(colab exec/run), 파일 업로드·다운로드, 인증 오류 진단, 세션 복구. meet-rag에서 전체 코퍼스 임베딩·인덱스 구축·재임베딩처럼 GPU가 필요한 작업을 할 때 쓴다. meet-rag에서는 이 스킬만으로 VM을 만들지 않는다. 승인·GPU 선택·산출물 취급 규칙은 meet-rag 스킬의 E절(GPU 작업)을 먼저 따른다. 로컬 PC CPU에서 하는 동작 확인, Jupyter 노트북에서 산출물을 확인하는 일, Gemma 4 생성 호출에는 쓰지 않는다. 본문은 `colab skill` 출력을 그대로 옮긴 것이다.
+description: colab CLI(google-colab-cli main d4f855d, 0.7.5.dev6)로 Google Colab VM을 다루는 명령 사용법. 세션 생성·종료(colab new/stop), 원격 Python·셸 실행(colab exec/run), 파일 업로드·다운로드, 인증 오류 진단, 세션 복구. meet-rag에서 전체 코퍼스 임베딩·인덱스 구축·재임베딩처럼 GPU가 필요한 작업을 할 때 쓴다. meet-rag에서는 이 스킬만으로 VM을 만들지 않는다. 승인·GPU 선택·산출물 취급 규칙은 meet-rag 스킬의 E절(GPU 작업)을 먼저 따른다. 로컬 PC CPU에서 하는 동작 확인, Jupyter 노트북에서 산출물을 확인하는 일, Gemma 4 생성 호출에는 쓰지 않는다. 본문은 `colab skill` 출력을 그대로 옮긴 것이다. 설치는 본문 Installation 절이 아니라 meet-rag E2를 따른다(Windows는 공식 저장소 main 고정 커밋).
 ---
 
 # Skill: Colab Session Operator
 
 Operate Google Colab environments via the `colab` CLI: provision GPU/TPU sessions, run Python/shell on the VM, sync files, and capture work as notebooks.
+
+## Installation
+
+If the user does not already have the `colab` tool installed, it can be acquired
+by running `uv tool install google-colab-cli` or `pip install google-colab-cli`.
 
 ## When to activate
 - Creating or managing TPU/GPU sessions.
@@ -15,10 +20,10 @@ Operate Google Colab environments via the `colab` CLI: provision GPU/TPU session
 - Exporting session history as a Jupyter notebook.
 
 ## Mental model (read this first)
-- **A session == a live Jupyter kernel on a rented VM.** `colab new` allocates a billable VM; `colab stop` releases it. Nothing reclaims it automatically except a 24h keep-alive cap, so an unstopped session burns compute units indefinitely.
+- **A session == a live Jupyter kernel on a rented VM.** `colab new` allocates a billable VM; `colab stop` releases it. Sessions stay alive as long as the kernel is active, with the Colab backend automatically maintaining liveness.
 - **Kernel state PERSISTS across `colab exec` / `colab repl` calls in the same session.** Each invocation reattaches to the *same* kernel (the kernel ID is cached in local state) and only closes the websocket on exit — it does **not** shut the kernel down. So imports, variables, and defined functions survive between separate `colab exec` commands. Build up state incrementally; don't re-import everything each call. (`colab stop` and `colab restart-kernel` are what actually reset it.)
 - **Default working directory is `/content`.** Every `exec`/`repl`/`run` `cd`s there first; prefer absolute paths (`/content/...`) for file work. For `colab ls/rm/upload/download`, absolute `/content/...` paths work and the default `ls` path is `content` (VM root).
-- **`colab` is fire-and-forget.** Each command authenticates, does one thing, and exits. A detached background daemon (spawned by `colab new`) handles keep-alive; you don't manage it.
+- **`colab` is fire-and-forget.** Each command authenticates, does one thing, and exits.
 
 ## Authentication (the #1 thing that blocks agents)
 - The global flag is `--auth={adc,oauth2}` and the **default is `adc`** (Application Default Credentials). It must come *before* the subcommand: `colab --auth=adc new -s x`.
@@ -30,10 +35,9 @@ Operate Google Colab environments via the `colab` CLI: provision GPU/TPU session
   https://www.googleapis.com/auth/userinfo.email,\
   https://www.googleapis.com/auth/colaboratory
   ```
-  Why all four: `userinfo.email` (session backend `colab.research.google.com`, else 401), `colaboratory` (RuntimeService `colab.pa.googleapis.com` keep-alive, else 403), `openid`+`cloud-platform` (mandated by gcloud itself; it rejects scope lists missing `cloud-platform`).
+  Why all four: `userinfo.email` (session backend `colab.research.google.com`, else 401), `colaboratory` (Colab features/APIs), `openid`+`cloud-platform` (mandated by gcloud itself; it rejects scope lists missing `cloud-platform`).
 - **oauth2 setup**: `colab --auth=oauth2 <anything>` triggers a browser consent flow on first use (token cached at `~/.config/colab-cli/token.json`). Requires a client config at `~/.colab-cli-oauth-config.json` (or `-c PATH`). The browser step means it usually needs a human; prefer ADC for agents.
-- **Verify auth in one shot**: `colab sessions` (read-only, lists server assignments) or `colab whoami` (hidden debug command: prints the active email, scopes, audience, and expiry). When any call 403s against `colab.pa.googleapis.com`, the cause is almost always a missing scope — `colab whoami` shows it instantly.
-- **`colab new` pre-flights the keep-alive RPC** right after allocating. If your token lacks the `colaboratory` scope it unassigns the fresh VM (so you don't leak a billable assignment) and prints the exact remediation. Follow that message rather than retrying blindly.
+- **Verify auth in one shot**: `colab sessions` (read-only, lists server assignments) or `colab whoami` (hidden debug command: prints the active email, scopes, audience, and expiry). When any call 401s or 403s, the cause is almost always missing credentials or scopes — `colab whoami` shows it instantly.
 - **Do NOT confuse `colab auth` with CLI authentication.** `colab auth` injects *VM-side* GCP credentials into the running kernel (so notebook code can call BigQuery/GCS); it is orthogonal to how the CLI itself authenticates. Never suggest "run `colab auth`" to fix a CLI 401/403 — that's a scope/identity problem fixed via the `gcloud` command above.
 
 ## Workflow
@@ -68,7 +72,7 @@ Operate Google Colab environments via the `colab` CLI: provision GPU/TPU session
 - `colab help` (or `colab help <cmd>`) lists/explains commands; the listing is alphabetical.
 - `colab sessions` lists server-side assignments and auto-prunes stale local entries. Orphans with no local record show as `[?]`.
 - `colab status [-s <name>]` shows hardware, IDLE/BUSY, and last execution.
-- `colab log -s <name> [-n 20] [-t TYPE]` shows recent structured events; invaluable when a task fails (keep-alive errors carry the raw `response_body`).
+- `colab log -s <name> [-n 20] [-t TYPE]` shows recent structured events; invaluable when a task fails.
 - `colab log -s <name> -o summary.ipynb` exports the session as a notebook (also `.md`, `.txt`, `.jsonl` by suffix).
 - `colab url -s <name>` prints a browser URL that attaches the Colab web UI to your existing CLI session instead of allocating a new VM (add `--open` to launch it).
 - `colab skill` / `colab readme` print this skill and the README (handy for self-discovery).
@@ -76,10 +80,9 @@ Operate Google Colab environments via the `colab` CLI: provision GPU/TPU session
 ## Safety
 - **Always `colab stop -s <name>` when done** — idle VMs burn compute units. `colab run` (without `--keep`) self-cleans even if the script errors.
 - Local state lives in `~/.config/colab-cli/sessions.json` (settings in `settings.json`, history in `history/*.jsonl`). Don't edit by hand.
-- **Isolate parallel/agent runs** with the global `--config <path>` flag to point session state at a scratch file (e.g. `colab --config /tmp/agent.json new -s job`). The keep-alive daemon inherits `--auth` and `--config` automatically.
+- **Isolate parallel/agent runs** with the global `--config <path>` flag to point session state at a scratch file (e.g. `colab --config /tmp/agent.json new -s job`).
 
 ## Recovery
 - "Session not found" / 404 / 401 on exec: the backend pruned the VM. `colab exec`/`repl` detect this and clean up local state automatically — run `colab sessions` and re-create with `colab new`.
 - Execution timeout or wedged kernel: `colab restart-kernel -s <name>` (keeps the VM, resets the kernel), or `colab stop` then `colab new`.
-- Keep-alive daemon died (`colab log` shows `keep_alive_stopped reason=consecutive_4xx_errors`): almost always the missing `colaboratory` scope — re-auth per the Authentication section.
 
