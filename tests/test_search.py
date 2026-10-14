@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pytest
 
@@ -6,6 +8,7 @@ from rag.search import (
     chunks_by_doc,
     condition_docs,
     conditions_first,
+    dense_chunks,
     first_docs,
     query_files,
     rank_docs,
@@ -135,3 +138,29 @@ def test_rrf_weights_favor_weighted_list():
     assert rrf([["a", "b"], ["b", "a"]], 60, None, [1.0, 1.0]) == ["a", "b"]
     assert rrf([["b", "a"], ["a", "b"]], 60, None, [2.0, 1.0]) == ["b", "a"]
     assert rrf([["x"], ["y"], ["y"]], 60, None, [2.0, 1.0, 1.0]) == ["x", "y"]  # 2/61 = 1/61 + 1/61
+
+
+def _write_index(d, doc_ids, emb):
+    (d / "emb").mkdir(parents=True)
+    lines = [json.dumps({"doc_id": x}) for x in doc_ids]
+    (d / "chunks.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    np.save(d / "emb" / "part-00000.npy", emb)
+
+
+def test_dense_chunks_appends_extra_index(tmp_path):
+    cfg = load_cfg(["+exp=exp011", "index.scope=dev-small"])
+    base = tmp_path / "snowflake-ko-fixed-512-64" / "dev-small"
+    extra = tmp_path / "snowflake-ko-fixed-256-32" / "dev-small"
+    _write_index(base, ["a", "b"], np.ones((2, 3), dtype=np.float32))
+    _write_index(extra, ["a", "a", "b"], np.zeros((3, 3), dtype=np.float32))
+    ids, emb = dense_chunks(cfg, base, np.array(["a", "b"]))
+    assert ids.tolist() == ["a", "b", "a", "a", "b"]
+    assert emb.shape == (5, 3) and emb[:2].sum() == 6 and emb[2:].sum() == 0
+
+
+def test_dense_chunks_without_extra_is_base(tmp_path):
+    cfg = load_cfg(["+exp=exp009", "index.scope=dev-small"])
+    base = tmp_path / "snowflake-ko-fixed-512-64" / "dev-small"
+    _write_index(base, ["a", "b"], np.ones((2, 3), dtype=np.float32))
+    ids, emb = dense_chunks(cfg, base, np.array(["a", "b"]))
+    assert ids.tolist() == ["a", "b"] and emb.shape == (2, 3)
