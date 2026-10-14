@@ -5,6 +5,7 @@ import pytest
 
 from rag.index import load_cfg
 from rag.retrieve import (
+    Retriever,
     chunks_by_doc,
     condition_docs,
     conditions_first,
@@ -183,3 +184,44 @@ def test_write_run_refuses_different_content(tmp_path, monkeypatch):
         write_run(path, other, overwrite=False)
     assert write_run(path, other, overwrite=True) == "씀"
     assert "d2" in path.read_text(encoding="utf-8")
+
+
+def _write_text_index(d, rows, emb):
+    (d / "emb").mkdir(parents=True)
+    lines = [json.dumps({"doc_id": doc, "text": text}, ensure_ascii=False) for doc, text in rows]
+    (d / "chunks.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    np.save(d / "emb" / "part-00000.npy", np.asarray(emb, dtype=np.float32))
+
+
+def _tmp_cfg(tmp_path, overrides):
+    slug_size = "${embedding.slug}-${chunking.chunk_tokens}"
+    template = (tmp_path / slug_size / "${index.scope}").as_posix()
+    return load_cfg([f"paths.index_dir='{template}'", "index.scope=dev-small",
+                     "retriever.top_k=2", "retriever.chunk_pool=null", *overrides])
+
+
+def test_retriever_dense_ranks_by_max_chunk_across_indexes(tmp_path):
+    cfg = _tmp_cfg(tmp_path, ["+retriever.extra_chunks=[{name: fixed, chunk_tokens: 256, "
+                              "overlap_tokens: 32}]"])
+    _write_text_index(tmp_path / "kure-v1-512" / "dev-small",
+                      [("a", "x"), ("b", "y")], [[0.9, 0.0], [0.5, 0.0]])
+    _write_text_index(tmp_path / "kure-v1-256" / "dev-small",
+                      [("b", "y1"), ("c", "z")], [[1.0, 0.0], [0.1, 0.0]])
+    ret = Retriever(cfg)
+    row = ret.chunk_emb @ np.array([1.0, 0.0], dtype=np.float32)
+    assert ret.rank(row) == ["b", "a"]  # b의 256 청크(1.0)가 a의 512 청크(0.9)보다 높다
+
+
+def test_retriever_hybrid_fuses_dense_and_bm25(tmp_path):
+    cfg = _tmp_cfg(tmp_path, ["+exp=exp001", "retriever.fusion.depth=3",
+                              "retriever.bm25.name=test"])
+    _write_text_index(tmp_path / "kure-v1-512" / "dev-small",
+                      [("a", "예산 심사"), ("b", "국정감사 질의"), ("c", "법안 처리")],
+                      [[0.9, 0.0], [0.5, 0.0], [0.1, 0.0]])
+    ret = Retriever(cfg)
+    row = ret.chunk_emb @ np.array([1.0, 0.0], dtype=np.float32)
+    tokens = ret.query_tokens(["국정감사 질의"])[0]
+    fused, matched, _ = ret.candidates(row, tokens)
+    lexical = rank_docs(ret.bm25.scores(tokens), ret.bm25_ids, 3)
+    assert fused == rrf([["a", "b", "c"], lexical], cfg.retriever.fusion.rrf_k, None)
+    assert matched == set() and ret.rank(row, tokens) == fused[:2]
