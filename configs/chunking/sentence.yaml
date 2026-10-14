@@ -1,0 +1,5 @@
+# 문장 경계 청킹(H4, EXP-012). Kiwi로 문장을 나눈 뒤 토큰 수 상한까지 문장을 묶는다.
+# overlap은 앞 청크 끝의 문장들을 이 토큰 수 안에서 다음 청크 앞에 다시 넣는다. 상한보다 긴 문장은 고정 토큰으로 자른다
+name: sentence
+chunk_tokens: 512
+overlap_tokens: 64
