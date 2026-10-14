@@ -156,6 +156,13 @@ def test_dense_dirs_follow_index_template():
     assert len(dense_dirs(load_cfg(["+exp=exp009"]))) == 1
 
 
+def test_dense_dirs_require_full_chunking_spec():
+    for bad in ["[[256,32]]", "[{chunk_tokens: 256, overlap_tokens: 32}]"]:
+        cfg = load_cfg(["+exp=exp011", f"retriever.extra_chunks={bad}"])
+        with pytest.raises(ValueError):
+            dense_dirs(cfg)
+
+
 def test_load_dense_appends_in_order(tmp_path):
     base, extra = tmp_path / "a", tmp_path / "b"
     _write_index(base, ["a", "b"], np.ones((2, 3), dtype=np.float32))

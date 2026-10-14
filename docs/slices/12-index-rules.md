@@ -59,6 +59,7 @@ kure-v1 설정(exp001\~008)은 KURE 인덱스와 조건 파일이 로컬에 있�
 - `src/rag/index.py`, `src/rag/search.py`, `src/rag/generate.py`, `src/rag/chunk_sweep.py`, 새 `src/rag/retrieve.py`
 - `src/rag/conditions.py`: 추출기 생성(`main` 안의 사전·법률명 준비)을 함수로 떼어 `rag.generate`도 쓰게 한다. 추출 규칙은 바꾸지 않는다
 - `configs/config.yaml`(`search.overwrite` 추가), `configs/exp/exp011.yaml`(형식만)
+- `docs/DECISIONS.md` D-29: `extra_chunks` 표기를 새 형식으로 맞추는 한 줄(결정 내용은 바꾸지 않는다)
 - `tests/`의 해당 테스트
 - `docs/slices/12-index-rules.md`, `docs/slices/06-generate.md`(검색 경로 서술), `CLAUDE.md` "명령" 절(호출법이 바뀌면), `docs/PLAN.md`(S12 줄)
 

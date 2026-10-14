@@ -125,6 +125,10 @@ def read_doc_ids(index_dir: Path) -> np.ndarray:
 def dense_dirs(cfg) -> list[Path]:
     """dense 검색 인덱스 디렉터리. 기본 청킹 뒤에 retriever.extra_chunks를 붙인다(EXP-011)."""
     extra = cfg.retriever.get("extra_chunks") or []
+    keys = set(cfg.chunking)
+    for c in extra:  # 빠진 키를 기본 청킹 값으로 채우면 다른 인덱스를 조용히 고르게 된다
+        if not hasattr(c, "keys") or set(c) != keys:
+            raise ValueError(f"extra_chunks 항목은 {sorted(keys)} 키를 모두 적는다: {c}")
     return [index_path(cfg, c) for c in [cfg.chunking, *extra]]
 
 

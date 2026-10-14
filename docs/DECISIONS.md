@@ -294,7 +294,7 @@
 - 날짜: 2026-10-13
 
 ## D-29 EXP-011 채택: dense 목록에 256 청크를 더한다
-- 결정: 검색 기준을 EXP-011 설정(EXP-009 설정에 `retriever.extra_chunks: [[256, 32]]`)으로 바꾼다(사용자 결정 2026-10-14). 실행은 `rag.conditions +exp=exp009 [search.queries=multidoc]` 뒤 `rag.search +exp=exp011`. 256 인덱스는 `data/index/snowflake-ko-fixed-256-32/`
+- 결정: 검색 기준을 EXP-011 설정(EXP-009 설정에 256/32 청크 인덱스를 더함. `retriever.extra_chunks`는 S12부터 `[{name: fixed, chunk_tokens: 256, overlap_tokens: 32}]` 형식이고, 처음 실행 때는 `[[256, 32]]`였다)으로 바꾼다(사용자 결정 2026-10-14). 실행은 `rag.conditions +exp=exp009 [search.queries=multidoc]` 뒤 `rag.search +exp=exp011`. 256 인덱스는 `data/index/snowflake-ko-fixed-256-32/`
 - 새 기준 순위: single-doc `data/runs/snowflake-ko-fixed-512-64-hybrid-cond-filter-law-ms256-dev-full.csv`(SHA-256 `855e9fbac75221da6963b9ad4d3b34508c6df42c33eb50847fd6b4cd3ed5c21a`), multi-doc `…-ms256-multidoc.csv`(SHA-256 `c51dc1658d2252d0873474fe0a3290984e11fb119ee23e97306822dd1b51b9b2`)
 - 근거: SPEC 판정 절로 채택. dev-full Recall@5 0.9214 → 0.9337, +1.23%p [+0.74, +1.73], Recall@1 +2.65%p [+1.78, +3.56], MRR@10 +2.12%p [+1.56, +2.73]. multi-doc은 변화가 없다(Recall@5 +0.01%p [−0.16, +0.22]). 1위·5위 진입 정답은 98\~100%가 256 청크로 점수를 받았다(`docs/experiments/EXP-011.md`, `notebooks/20_02_EXP011_판정근거.ipynb`)
 - 비용(D-26 운영 채택 기준): 상시 지출과 API 호출은 늘지 않는다. dense 벡터 118,039 → 338,684개(2.87배), `emb/`(float32) 461 → 1,323MiB, `chunks.jsonl` 253 → 519MiB. dev-full 검색 전체 시간 57\~62초 → 125초, 최대 메모리 1,562 → 2,864MiB(같은 PC, 1회). 재구축 때 GPU 임베딩이 인덱스 두 개 분량이다(L4 약 1,099초 + 1,259초)
