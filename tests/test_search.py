@@ -4,20 +4,20 @@ import numpy as np
 import pytest
 
 from rag.index import load_cfg
-from rag.search import (
+from rag.retrieve import (
     chunks_by_doc,
     condition_docs,
     conditions_first,
-    dense_chunks,
+    dense_dirs,
     first_docs,
-    query_files,
+    load_dense,
     rank_docs,
     rank_with_pool,
-    rerank_top,
     rrf,
     top_docs,
     weighted_doc_scores,
 )
+from rag.search import query_files, rerank_top, write_run
 
 
 def test_rank_docs_dedupes_by_first_chunk_rank():
@@ -147,20 +147,32 @@ def _write_index(d, doc_ids, emb):
     np.save(d / "emb" / "part-00000.npy", emb)
 
 
-def test_dense_chunks_appends_extra_index(tmp_path):
+def test_dense_dirs_follow_index_template():
     cfg = load_cfg(["+exp=exp011", "index.scope=dev-small"])
-    base = tmp_path / "snowflake-ko-fixed-512-64" / "dev-small"
-    extra = tmp_path / "snowflake-ko-fixed-256-32" / "dev-small"
+    dirs = dense_dirs(cfg)
+    names = ["snowflake-ko-fixed-512-64", "snowflake-ko-fixed-256-32"]
+    assert [d.parent.name for d in dirs] == names
+    assert all(d.name == "dev-small" for d in dirs)
+    assert len(dense_dirs(load_cfg(["+exp=exp009"]))) == 1
+
+
+def test_load_dense_appends_in_order(tmp_path):
+    base, extra = tmp_path / "a", tmp_path / "b"
     _write_index(base, ["a", "b"], np.ones((2, 3), dtype=np.float32))
     _write_index(extra, ["a", "a", "b"], np.zeros((3, 3), dtype=np.float32))
-    ids, emb = dense_chunks(cfg, base, np.array(["a", "b"]))
+    ids, emb = load_dense([base, extra])
     assert ids.tolist() == ["a", "b", "a", "a", "b"]
     assert emb.shape == (5, 3) and emb[:2].sum() == 6 and emb[2:].sum() == 0
 
 
-def test_dense_chunks_without_extra_is_base(tmp_path):
-    cfg = load_cfg(["+exp=exp009", "index.scope=dev-small"])
-    base = tmp_path / "snowflake-ko-fixed-512-64" / "dev-small"
-    _write_index(base, ["a", "b"], np.ones((2, 3), dtype=np.float32))
-    ids, emb = dense_chunks(cfg, base, np.array(["a", "b"]))
-    assert ids.tolist() == ["a", "b"] and emb.shape == (2, 3)
+def test_write_run_refuses_different_content(tmp_path, monkeypatch):
+    monkeypatch.setattr("rag.search.ROOT", tmp_path)
+    path = tmp_path / "run.csv"
+    rows = [{"qid": "q1", "rank": 1, "doc_id": "d1"}]
+    assert write_run(path, rows, overwrite=False) == "씀"
+    assert write_run(path, rows, overwrite=False) == "같은 내용, 그대로 둠"
+    other = [{"qid": "q1", "rank": 1, "doc_id": "d2"}]
+    with pytest.raises(SystemExit):
+        write_run(path, other, overwrite=False)
+    assert write_run(path, other, overwrite=True) == "씀"
+    assert "d2" in path.read_text(encoding="utf-8")

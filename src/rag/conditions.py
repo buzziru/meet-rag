@@ -168,8 +168,8 @@ def read_queries(cfg) -> list[dict]:
         return [{"qid": q["qid"], "query": q["query"]} for q in map(json.loads, f)]
 
 
-def main() -> None:
-    cfg = load_cfg(sys.argv[1:])
+def build_extractor(cfg) -> Extractor:
+    """config의 값 사전·법률명으로 추출기를 만든다. rag.conditions와 rag.generate가 같이 쓴다."""
     meta_dict = json.loads((ROOT / cfg.paths.meta_dict).read_text(encoding="utf-8"))
     c = cfg.conditions
     laws = set()
@@ -177,8 +177,13 @@ def main() -> None:
         with (ROOT / cfg.paths.corpus).open(encoding="utf-8") as f:
             for doc in map(json.loads, f):
                 laws |= agenda_laws(doc.get("agenda", ""), c.law_min_chars)
-    ex = Extractor(meta_dict, cfg.ingest.name_titles, c.name_suffixes, set(c.name_exclude),
-                   c.committee_aliases, laws)
+    return Extractor(meta_dict, cfg.ingest.name_titles, c.name_suffixes, set(c.name_exclude),
+                     c.committee_aliases, laws)
+
+
+def main() -> None:
+    cfg = load_cfg(sys.argv[1:])
+    ex = build_extractor(cfg)
     out = ROOT / cfg.paths.conditions
     out.parent.mkdir(parents=True, exist_ok=True)
     queries = read_queries(cfg)

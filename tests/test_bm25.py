@@ -7,7 +7,7 @@ from kiwipiepy import Kiwi
 
 from rag.bm25 import BM25Retriever, build, doc_meta, forms
 from rag.index import load_cfg
-from rag.search import rank_docs, rrf
+from rag.retrieve import rank_docs, rrf
 
 
 def test_rrf_sums_reciprocal_ranks():

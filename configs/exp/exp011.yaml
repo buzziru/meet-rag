@@ -7,6 +7,7 @@ defaults:
 
 retriever:
   run_name: hybrid-cond-filter-law-ms256  # EXP-009 순위 파일을 덮어쓰지 않는다
-  # dense 목록에 함께 넣는 청크 [크기, overlap]. 같은 임베딩의 인덱스를 읽어 청크를 모으고 문서 점수는 청크 최댓값이다.
-  # BM25는 기본 청크(chunking)만 쓴다
-  extra_chunks: [[256, 32]]
+  # dense 목록에 함께 넣는 청킹 설정(chunking과 같은 키). 같은 임베딩의 인덱스를 읽어 청크를 모으고
+  # 문서 점수는 청크 최댓값이다. BM25는 기본 청크(chunking)만 쓴다. 경로는 rag.index.index_path(S12)
+  extra_chunks:
+    - {name: fixed, chunk_tokens: 256, overlap_tokens: 32}

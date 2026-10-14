@@ -15,11 +15,11 @@
 
 ### 검색과 근거
 
-- 검색은 S5와 같다(`rag.search.rank_with_pool`, 512/64 전체 인덱스)
+- 검색은 `rag.search`와 같은 검색기(`rag.retrieve.Retriever`)를 쓴다. 검색 설정은 실행 config(`+exp=…`)를 따르고, 지금 기준은 `+exp=exp011`(D-29)이다. 조건 목록을 쓰는 설정이면 질의 조건을 `rag.conditions`의 추출기로 질의 원문에서 뽑는다(S12. 그 전에는 S5 dense 단독, 512/64 인덱스였다)
 - 질의는 두 가지로 받는다
-  - `ask.qid=…`: dev 질의. 원문은 `paths.queries_dev`(dev만 담은 파일)에서, 임베딩은 S5 캐시(`queries-full.npz`)에서 읽는다. KURE를 불러오지 않는다
-  - `ask.query=…`: 자유 질의. 데이터셋에 없는 질의라 KURE로 로컬 CPU에서 임베딩한다(배포 후 사용자 질의와 같은 경로)
-- 근거는 상위 `generator.context_docs`(5)개 문서마다 점수가 가장 높은 청크 하나다(D-05). 5는 주지표 Recall@5에 맞춘 값이고 데이터를 보고 정한 값이 아니다
+  - `ask.qid=…`: dev 질의. 원문은 `paths.queries_dev`(dev만 담은 파일)에서, 임베딩은 질의 임베딩 캐시(`queries-full.npz`)에서 읽는다. 임베딩 모델을 불러오지 않는다
+  - `ask.query=…`: 자유 질의. 데이터셋에 없는 질의라 설정의 임베딩 모델로 로컬 CPU에서 임베딩한다(배포 후 사용자 질의와 같은 경로)
+- 근거는 상위 `generator.context_docs`(5)개 문서마다 dense 점수가 가장 높은 청크 하나다(D-05). 추가 청크(`retriever.extra_chunks`)가 있으면 모든 크기의 청크 중에서 고른다(S12 결정 1). 5는 주지표 Recall@5에 맞춘 값이고 데이터를 보고 정한 값이 아니다
 - 근거마다 번호 `[1]`\~`[5]`, 회의 정보(`date`, `committee_name`, `meeting_number`·`session_number`), 청크 원문을 프롬프트에 넣는다. `original` URL은 프롬프트에 넣지 않고 출력의 근거 목록에만 붙인다(토큰 절약, 모델이 URL을 지어내지 않게)
 
 ### 프롬프트와 호출

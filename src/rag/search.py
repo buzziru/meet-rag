@@ -14,110 +14,26 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from rag.bm25 import BM25Retriever
-from rag.conditions import ConditionIndex
 from rag.eval.metrics import load_gold
 from rag.index import ROOT, encoder, load_cfg, load_model
 
+# first_docs·rank_docs·rank_with_pool은 이전 노트북(04_01·05_01·10_02·11_02)이 rag.search에서
+# 가져다 쓴다(S12에서 rag.retrieve로 옮김)
+from rag.retrieve import (  # noqa: F401
+    Retriever,
+    chunks_by_doc,
+    conditions_first,
+    first_docs,
+    rank_docs,
+    rank_with_pool,
+)
+
 LAYERS = {"dev-small": "dev-small", "full": "dev-full"}  # index.scope → 평가 층
-
-
-def first_docs(order: np.ndarray, chunk_doc_ids: np.ndarray, k: int) -> list[str]:
-    """청크 순서에서 문서가 처음 나온 순서로 최대 k개 문서를 고른다."""
-    seen: list[str] = []
-    for i in order:
-        doc = chunk_doc_ids[i]
-        if doc not in seen:
-            seen.append(doc)
-            if len(seen) == k:
-                break
-    return seen
-
-
-def rank_with_pool(scores: np.ndarray, chunk_doc_ids: np.ndarray, k: int,
-                   pool: int | None) -> tuple[list[str], bool]:
-    """점수 상위 pool개 청크로 문서 k개를 고른다. 모자라면 전체를 정렬한다.
-
-    Returns:
-        (문서 목록, 전체 정렬로 넘어갔는지). 결과는 전체 정렬과 같다(경계의 동점 제외).
-    """
-    if pool is not None and pool < len(scores):
-        top = np.argpartition(-scores, pool - 1)[:pool]
-        docs = first_docs(top[np.lexsort((top, -scores[top]))], chunk_doc_ids, k)
-        if len(docs) == k:
-            return docs, False
-    return first_docs(np.argsort(-scores, kind="stable"), chunk_doc_ids, k), True
-
-
-def rank_docs(scores: np.ndarray, chunk_doc_ids: np.ndarray, k: int,
-              pool: int | None = None) -> list[str]:
-    """청크 점수 내림차순에서 문서가 처음 나온 순서로 상위 k개 문서를 고른다."""
-    return rank_with_pool(scores, chunk_doc_ids, k, pool)[0]
-
-
-def weighted_doc_scores(scores: np.ndarray, chunk_doc: np.ndarray, n_docs: int,
-                        weights: list[float]) -> np.ndarray:
-    """문서마다 i번째로 높은 청크 점수에 weights[i]를 곱해 더한다(EXP-007).
-
-    [1.0]이면 최고점(max), [1.0, 1.0]이면 상위 2개 합, [1.0, 0.1]이면 max + 0.1·2위다.
-    청크가 len(weights)개보다 적은 문서는 있는 것만 더한다.
-
-    Args:
-        scores: 청크 점수.
-        chunk_doc: 청크의 문서 번호(0..n_docs-1).
-        n_docs: 문서 수.
-        weights: 순위별 가중치.
-
-    Returns:
-        문서 점수 배열(길이 n_docs).
-    """
-    order = np.lexsort((-scores, chunk_doc))  # 문서 번호 순, 문서 안에서 점수 내림차순
-    docs = chunk_doc[order]
-    first = np.r_[0, np.flatnonzero(docs[1:] != docs[:-1]) + 1]
-    rank = np.arange(len(order)) - np.repeat(first, np.diff(np.r_[first, len(order)]))
-    sel = rank < len(weights)
-    keep = order[sel]
-    w = np.asarray(weights, dtype=scores.dtype)[rank[sel]]
-    out = np.zeros(n_docs, dtype=scores.dtype)
-    np.add.at(out, chunk_doc[keep], scores[keep] * w)
-    return out
-
-
-def top_docs(doc_scores: np.ndarray, doc_names: np.ndarray, k: int) -> list[str]:
-    """문서 점수 내림차순 상위 k개 문서. 같은 점수는 문서 번호 순."""
-    return list(doc_names[np.argsort(-doc_scores, kind="stable")[:k]])
-
-
-def rrf(rankings: list[list[str]], k: int, top_k: int | None,
-        weights: list[float] | None = None) -> list[str]:
-    """문서 순위 목록들을 RRF(Σ w / (k + 순위))로 합친다. top_k가 None이면 후보 전체를 낸다.
-
-    weights는 목록마다의 가중치(EXP-010)이고 없으면 모두 1이다.
-    동점이면 앞 목록(dense)에 먼저 나온 문서가 앞선다.
-    """
-    score: dict[str, float] = {}
-    for i, docs in enumerate(rankings):
-        w = weights[i] if weights else 1.0
-        for rank, doc in enumerate(docs, 1):
-            score[doc] = score.get(doc, 0.0) + w / (k + rank)
-    return sorted(score, key=score.__getitem__, reverse=True)[:top_k]
-
-
-def conditions_first(docs: list[str], matched: set[str]) -> list[str]:
-    """조건에 맞는 문서(matched)를 순서를 유지한 채 앞으로 옮긴다(EXP-004 필터링)."""
-    return sorted(docs, key=lambda d: d not in matched)
 
 
 def rerank_top(docs: list[str], scores: dict[str, float], depth: int) -> list[str]:
     """상위 depth개를 reranker 점수 내림차순으로 바꾸고 나머지는 그대로 둔다(EXP-005)."""
     return sorted(docs[:depth], key=lambda d: -scores[d]) + docs[depth:]
-
-
-def chunks_by_doc(chunk_doc_ids: np.ndarray) -> dict[str, np.ndarray]:
-    """문서마다 청크 번호 배열."""
-    names, inv = np.unique(chunk_doc_ids, return_inverse=True)
-    groups = np.split(np.argsort(inv, kind="stable"), np.cumsum(np.bincount(inv))[:-1])
-    return dict(zip(names, groups, strict=True))
 
 
 def write_pairs(cfg, index_dir: Path, picks: list[tuple[str, str, int]], texts: dict) -> None:
@@ -135,46 +51,6 @@ def write_pairs(cfg, index_dir: Path, picks: list[tuple[str, str, int]], texts: 
             row = {"qid": qid, "doc_id": doc, "query": texts[qid], "text": chunk_text[c]}
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     print(f"{len(picks):,} pairs -> {cfg.paths.rerank_pairs}")
-
-
-def condition_docs(counts: dict[int, int], doc_scores: np.ndarray, doc_names: np.ndarray,
-                   depth: int, min_fields: int) -> list[str]:
-    """조건 필드가 min_fields개 이상 맞은 문서를 맞은 필드 수, dense 문서 점수 내림차순으로
-    depth개 고른다."""
-    keep = [i for i, c in counts.items() if c >= min_fields]
-    order = sorted(keep, key=lambda i: (-counts[i], -doc_scores[i], i))
-    return [doc_names[i] for i in order[:depth]]
-
-
-def condition_setup(cfg, chunk_doc_ids: np.ndarray):
-    """조건 목록(EXP-003)에 쓰는 문서 이름, 청크의 문서 번호, 역색인, 질의 조건."""
-    doc_names, chunk_doc = np.unique(chunk_doc_ids, return_inverse=True)
-    pos = {d: i for i, d in enumerate(doc_names)}
-    docs = [None] * len(doc_names)
-    with (ROOT / cfg.paths.corpus).open(encoding="utf-8") as f:
-        for doc in map(json.loads, f):
-            if doc["doc_id"] in pos:
-                docs[pos[doc["doc_id"]]] = doc
-    c = cfg.conditions
-    law_min = c.law_min_chars if c.get("agenda_law") else None
-    index = ConditionIndex(docs, cfg.retriever.conditions.year_ref_offsets, law_min)
-    with (ROOT / cfg.paths.conditions).open(encoding="utf-8") as f:
-        conds = {r["qid"]: r["conditions"] for r in map(json.loads, f)}
-    return doc_names, chunk_doc, index, conds
-
-
-def dense_chunks(cfg, index_dir: Path, chunk_doc_ids: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """dense 검색 청크의 문서 id와 임베딩. retriever.extra_chunks의 [크기, overlap] 인덱스를
-    기본 인덱스 뒤에 붙인다(EXP-011 다중 크기 청킹). 경로는 paths.index_dir 규칙을 따른다."""
-    extra = cfg.retriever.get("extra_chunks") or []
-    dirs = [index_dir.parent.parent / f"{cfg.embedding.slug}-{cfg.chunking.name}-{size}-{overlap}"
-            / index_dir.name for size, overlap in extra]
-    ids = [chunk_doc_ids]
-    for d in dirs:
-        with (d / "chunks.jsonl").open(encoding="utf-8") as f:
-            ids.append(np.array([json.loads(line)["doc_id"] for line in f]))
-    parts = [p for d in [index_dir, *dirs] for p in sorted((d / "emb").glob("part-*.npy"))]
-    return np.concatenate(ids), np.concatenate([np.load(p) for p in parts])
 
 
 def embed_queries(cfg, texts: list[str]) -> np.ndarray:
@@ -251,29 +127,40 @@ def embed_vm_queries(cfg) -> None:
     print(f"{len(qids)} queries -> {files['emb'].relative_to(ROOT)}")
 
 
+def write_run(path: Path, rows: list[dict], overwrite: bool) -> str:
+    """순위 파일을 쓴다. 같은 경로에 내용이 다른 파일이 있으면 overwrite가 아닐 때 멈춘다(S12).
+
+    run_name을 빠뜨린 실행이 다른 설정의 순위 파일(판정 기준)을 덮어쓰지 않게 한다.
+    """
+    text = pd.DataFrame(rows).to_csv(index=False, lineterminator="\n")
+    if path.exists() and not overwrite:
+        old = path.read_text(encoding="utf-8")
+        if old == text:
+            return "같은 내용, 그대로 둠"
+        raise SystemExit(f"{path.relative_to(ROOT)}에 내용이 다른 순위 파일이 있다. "
+                         "retriever.run_name을 확인하고, 바꾸려면 search.overwrite=true")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+    return "씀"
+
+
 def search(cfg) -> None:
     files = query_files(cfg)
-    index_dir = ROOT / cfg.paths.index_dir
-    with (index_dir / "chunks.jsonl").open(encoding="utf-8") as f:
-        chunk_doc_ids = np.array([json.loads(line)["doc_id"] for line in f])  # BM25 청크
-    dense_ids, chunk_emb = dense_chunks(cfg, index_dir, chunk_doc_ids)
-
+    ret = Retriever(cfg)
     qids, text_path = query_list(cfg)
     q_emb = query_embeddings(cfg, qids, text_path, files["emb"])
     r = cfg.retriever
-    hybrid = r.type == "hybrid"
-    if hybrid:
-        bm25 = BM25Retriever(cfg, index_dir)
-        q_ids = bm25.query_ids(read_texts(text_path, qids))
-    use_cond = hybrid and r.get("conditions") and r.conditions.enabled
-    if use_cond:
-        doc_names, chunk_doc, cond_index, conds = condition_setup(cfg, dense_ids)
+    tokens = ret.query_tokens(read_texts(text_path, qids))
+    conds = {}
+    if ret.use_cond:
+        with (ROOT / cfg.paths.conditions).open(encoding="utf-8") as f:
+            conds = {x["qid"]: x["conditions"] for x in map(json.loads, f)}
     export_pairs = cfg.search.mode == "rerank-pairs"
     if export_pairs and r.get("extra_chunks"):
         raise SystemExit("rerank-pairs는 기본 청크 텍스트만 쓰므로 extra_chunks와 함께 쓰지 않는다")
-    use_rerank = hybrid and r.get("rerank") and r.rerank.enabled and not export_pairs
+    use_rerank = ret.hybrid and r.get("rerank") and r.rerank.enabled and not export_pairs
     if export_pairs:
-        doc_chunks = chunks_by_doc(dense_ids)
+        doc_chunks = chunks_by_doc(ret.dense_ids)
         texts = dict(zip(qids, read_texts(text_path, qids), strict=True))
         picks = []
     if use_rerank:
@@ -281,57 +168,31 @@ def search(cfg) -> None:
         with (ROOT / cfg.paths.rerank_scores).open(encoding="utf-8") as f:
             for x in map(json.loads, f):
                 rerank_scores.setdefault(x["qid"], {})[x["doc_id"]] = x["score"]
-    depth = r.fusion.depth if hybrid else r.top_k
-    agg = r.get("doc_agg")
-    weighted = agg is not None
-    if weighted:
-        agg_names, agg_doc = np.unique(dense_ids, return_inverse=True)
     rows, fallbacks = [], 0
     for start in range(0, len(qids), r.query_batch):
-        scores = q_emb[start : start + r.query_batch] @ chunk_emb.T
+        scores = q_emb[start : start + r.query_batch] @ ret.chunk_emb.T
         for j, row in enumerate(scores, start):
-            if weighted:
-                dense_scores = weighted_doc_scores(row, agg_doc, len(agg_names), list(agg.weights))
-                docs = top_docs(dense_scores, agg_names, depth)
-            else:
-                docs, full = rank_with_pool(row, dense_ids, depth, r.chunk_pool)
-                fallbacks += full
-            if hybrid:
-                lexical = rank_docs(bm25.scores(q_ids[j]), chunk_doc_ids, depth, r.chunk_pool)
-                lists = [docs, lexical]
-                counts = cond_index.match_counts(conds[qids[j]]) if use_cond else {}
-                matched = set()
-                if counts and max(counts.values()) >= r.conditions.min_fields:
-                    if weighted:  # agg_names와 doc_names는 같은 np.unique 결과다
-                        doc_scores = dense_scores
-                    else:
-                        doc_scores = np.full(len(doc_names), -np.inf, dtype=row.dtype)
-                        np.maximum.at(doc_scores, chunk_doc, row)
-                    lists.append(condition_docs(counts, doc_scores, doc_names, depth,
-                                                r.conditions.min_fields))
-                    if r.conditions.get("filter") == "best":  # 맞은 필드 수가 가장 많은 문서
-                        top = max(counts.values())
-                        matched = {doc_names[i] for i, c in counts.items() if c == top}
-                weights = r.fusion.get("weights")  # [dense, BM25, 조건 목록]
-                fused = rrf(lists, r.fusion.rrf_k, None, list(weights) if weights else None)
+            docs, matched, full = ret.candidates(row, tokens[j] if tokens else None,
+                                                 conds.get(qids[j]))
+            fallbacks += full
+            if ret.hybrid:
                 if export_pairs:
                     picks += [(qids[j], d, int(doc_chunks[d][np.argmax(row[doc_chunks[d]])]))
-                              for d in fused[: r.rerank.depth]]
+                              for d in docs[: r.rerank.depth]]
                     continue
                 if use_rerank:
-                    fused = rerank_top(fused, rerank_scores[qids[j]], r.rerank.depth)
-                docs = conditions_first(fused, matched)[: r.top_k]
+                    docs = rerank_top(docs, rerank_scores[qids[j]], r.rerank.depth)
+                docs = conditions_first(docs, matched)[: r.top_k]
             rows += [{"qid": qids[j], "rank": i, "doc_id": d} for i, d in enumerate(docs, 1)]
     if export_pairs:
-        write_pairs(cfg, index_dir, picks, texts)
+        write_pairs(cfg, ret.index_dir, picks, texts)
         return
     # dense는 기존 이름을 유지해 기준 순위 파일과 같은 경로를 쓴다. run_name이 있으면 그 이름을 쓴다
     name = r.get("run_name") or r.type
     kind = "" if name == "dense" else f"-{name}"
-    out = ROOT / cfg.paths.runs_dir / f"{index_dir.parent.name}{kind}-{files['name']}.csv"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(rows).to_csv(out, index=False, lineterminator="\n")
-    print(f"{len(qids)} queries -> {out.relative_to(ROOT)} (전체 정렬 {fallbacks}건)")
+    out = ROOT / cfg.paths.runs_dir / f"{ret.index_dir.parent.name}{kind}-{files['name']}.csv"
+    state = write_run(out, rows, cfg.search.overwrite)
+    print(f"{len(qids)} queries -> {out.relative_to(ROOT)} ({state}, 전체 정렬 {fallbacks}건)")
 
 
 def main() -> None:

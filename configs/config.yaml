@@ -140,6 +140,7 @@ index:
 search:
   mode: run  # run | rerank-pairs(재정렬 후보 쌍, EXP-005) | export-queries(로컬) | embed-queries(VM)
   queries: summary_q  # summary_q | multidoc(G3 동결 세트, index.scope=full만)
+  overwrite: false  # 같은 경로에 내용이 다른 순위 파일이 있으면 멈춘다. true면 덮어쓴다(S12)
 
 # 생성 질의 (rag.generate). dev 질의는 qid, 자유 질의는 query 하나만 준다
 ask:

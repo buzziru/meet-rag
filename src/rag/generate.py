@@ -20,8 +20,9 @@ from langsmith.wrappers import wrap_openai
 from omegaconf import OmegaConf
 from openai import OpenAI
 
-from rag.index import ROOT, encoder, load_cfg, load_embeddings, load_model
-from rag.search import rank_with_pool
+from rag.conditions import build_extractor
+from rag.index import ROOT, encoder, load_cfg, load_model
+from rag.retrieve import Retriever, chunks_by_doc
 
 CONTEXT_META = ["date", "committee_name", "meeting_number", "session_number", "original"]
 # Gemma 4는 이 엔드포인트에서 사고 과정을 끌 수 없어 답변 앞에 붙여 낸다
@@ -46,14 +47,40 @@ def answer_start(text: str) -> int | None:
     return None if end < 0 else end + len(THOUGHT_END)
 
 
-def best_chunks(scores: np.ndarray, chunk_doc_ids: np.ndarray, k: int, pool: int) -> list[int]:
-    """상위 k개 문서마다 점수가 가장 높은 청크 번호를 문서 순위대로 돌려준다(D-05)."""
-    docs, _ = rank_with_pool(scores, chunk_doc_ids, k, pool)
-    out = []
-    for doc in docs:
-        idx = np.flatnonzero(chunk_doc_ids == doc)
-        out.append(int(idx[np.argmax(scores[idx])]))
-    return out
+def best_chunks(scores: np.ndarray, doc_chunks: dict[str, np.ndarray],
+                docs: list[str]) -> list[int]:
+    """문서마다 dense 점수가 가장 높은 청크 번호를 문서 순서대로 돌려준다(D-05).
+
+    추가 청크(retriever.extra_chunks)가 있으면 모든 크기의 청크 중에서 고른다(S12 결정 1).
+    """
+    return [int(doc_chunks[d][np.argmax(scores[doc_chunks[d]])]) for d in docs]
+
+
+class ChunkStore:
+    """dense 청크 번호(Retriever.dense_ids 순서)로 청크 행을 읽는다.
+
+    청크 텍스트를 모두 메모리에 올리지 않고 파일마다 줄 시작 위치만 들고 있다.
+    """
+
+    def __init__(self, dirs):
+        self.paths, starts, sizes = [], [], []
+        for d in dirs:
+            offs = [0]
+            with (d / "chunks.jsonl").open("rb") as f:
+                for line in f:
+                    offs.append(offs[-1] + len(line))
+            self.paths.append(d / "chunks.jsonl")
+            starts.append(np.array(offs[:-1]))
+            sizes.append(len(offs) - 1)
+        self.starts = starts
+        self.bounds = np.cumsum([0, *sizes])
+        self.names = [d.parent.name for d in dirs]
+
+    def get(self, i: int) -> dict:
+        k = int(np.searchsorted(self.bounds, i, side="right")) - 1
+        with self.paths[k].open("rb") as f:
+            f.seek(int(self.starts[k][i - self.bounds[k]]))
+            return {**json.loads(f.readline()), "index": self.names[k]}
 
 
 def build_messages(prompt, contexts: list[dict], query: str) -> list[dict]:
@@ -80,8 +107,10 @@ def recipe(cfg, index_meta: dict, stream: bool) -> dict:
     return {
         "git_commit": commit, "git_dirty": dirty,
         "embedding_model": cfg.embedding.model_name,
-        "index": f"{index_meta['name']}/{cfg.index.scope}", "n_chunks": index_meta["n_chunks"],
-        "chunk_pool": cfg.retriever.chunk_pool, "context_docs": g.context_docs,
+        "index": [f"{n}/{cfg.index.scope}" for n in index_meta["names"]],
+        "n_chunks": index_meta["n_chunks"],
+        "retriever": OmegaConf.to_container(cfg.retriever, resolve=True),
+        "context_docs": g.context_docs,
         "prompt_version": prompt["version"],
         "prompt_sha256": hashlib.sha256(
             json.dumps(prompt, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest(),
@@ -94,13 +123,11 @@ class Pipeline:
 
     def __init__(self, cfg):
         self.cfg = cfg
-        index_dir = ROOT / cfg.paths.index_dir
-        with (index_dir / "chunks.jsonl").open(encoding="utf-8") as f:
-            self.chunks = [json.loads(line) for line in f]
-        self.chunk_doc_ids = np.array([c["doc_id"] for c in self.chunks])
-        self.chunk_emb = load_embeddings(index_dir)
-        meta = json.loads((index_dir / "meta.json").read_text(encoding="utf-8"))
-        self.index_meta = {"name": index_dir.parent.name, "n_chunks": meta["n_chunks"]}
+        self.retriever = Retriever(cfg)
+        self.doc_chunks = chunks_by_doc(self.retriever.dense_ids)
+        self.store = ChunkStore(self.retriever.dirs)
+        self.extractor = build_extractor(cfg) if self.retriever.use_cond else None
+        self.index_meta = {"names": self.store.names, "n_chunks": int(self.store.bounds[-1])}
         self.client = wrap_openai(OpenAI(base_url=cfg.generator.base_url,
                                          api_key=os.environ[cfg.generator.api_key_env]))
         self._model = None
@@ -119,15 +146,22 @@ class Pipeline:
             self._model = load_model(self.cfg, self.cfg.embedding.query_max_tokens)
         return encoder(self._model, self.cfg, self.cfg.embedding.get("query_prompt"))([query])[0]
 
+    def rank(self, query: str, q_emb: np.ndarray) -> tuple[np.ndarray, list[str]]:
+        """dense 청크 점수와 문서 순위. 검색 설정은 rag.search와 같은 Retriever를 쓴다(S12)."""
+        scores = self.retriever.chunk_emb @ q_emb
+        tokens = self.retriever.query_tokens([query])
+        conds = self.extractor.extract(query) if self.extractor else None
+        return scores, self.retriever.rank(scores, tokens[0] if tokens else None, conds)
+
     @traceable(name="retrieve", process_inputs=lambda i: {"k": i["k"]})
-    def retrieve(self, q_emb: np.ndarray, k: int) -> list[dict]:
-        scores = self.chunk_emb @ q_emb
-        picked = best_chunks(scores, self.chunk_doc_ids, k, self.cfg.retriever.chunk_pool)
-        meta = self._doc_meta({self.chunk_doc_ids[i] for i in picked})
-        return [{"n": n, "doc_id": self.chunks[i]["doc_id"], "chunk_id": self.chunks[i]["chunk_id"],
-                 "score": float(scores[i]), "text": self.chunks[i]["text"],
-                 **meta[self.chunks[i]["doc_id"]]}
-                for n, i in enumerate(picked, 1)]
+    def retrieve(self, query: str, q_emb: np.ndarray, k: int) -> list[dict]:
+        scores, docs = self.rank(query, q_emb)
+        picked = best_chunks(scores, self.doc_chunks, docs[:k])
+        rows = [self.store.get(i) for i in picked]
+        meta = self._doc_meta({r["doc_id"] for r in rows})
+        return [{"n": n, "doc_id": r["doc_id"], "index": r["index"], "chunk_id": r["chunk_id"],
+                 "score": float(scores[i]), "text": r["text"], **meta[r["doc_id"]]}
+                for n, (i, r) in enumerate(zip(picked, rows, strict=True), 1)]
 
     def _doc_meta(self, doc_ids: set[str]) -> dict[str, dict]:
         out = {}
@@ -180,7 +214,7 @@ class Pipeline:
 
     @traceable(name="rag", process_inputs=lambda i: {"query": i["query"]})
     def _traced(self, query: str, q_emb: np.ndarray, stream: bool) -> dict:
-        contexts = self.retrieve(q_emb, self.cfg.generator.context_docs)
+        contexts = self.retrieve(query, q_emb, self.cfg.generator.context_docs)
         result = self.generate(self.messages(contexts, query), stream)
         return {"contexts": contexts, **result}
 

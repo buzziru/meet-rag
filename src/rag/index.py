@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 from dotenv import load_dotenv
 from hydra import compose, initialize_config_dir
+from omegaconf import OmegaConf
 
 from rag.chunking import chunk_text
 
@@ -27,6 +28,15 @@ if os.environ.get("HF_HOME") and not Path(os.environ["HF_HOME"]).is_absolute():
 def load_cfg(overrides=()):
     with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
         return compose(config_name="config", overrides=list(overrides))
+
+
+def index_path(cfg, chunking) -> Path:
+    """청킹 설정 하나(name, chunk_tokens, overlap_tokens)로 paths.index_dir 템플릿을 푼 경로.
+
+    인덱스 경로는 이 함수에서만 만든다(S12). 추가 청크 인덱스(retriever.extra_chunks)도 같다.
+    """
+    merged = OmegaConf.merge(cfg, {"chunking": OmegaConf.to_container(OmegaConf.create(chunking))})
+    return ROOT / merged.paths.index_dir
 
 
 def scope_docs(cfg) -> list[dict]:
@@ -113,7 +123,7 @@ def encoder(model, cfg, prompt: str | None = None):
 def main() -> None:
     cfg = load_cfg(sys.argv[1:])
     ch = cfg.chunking
-    index_dir = ROOT / cfg.paths.index_dir
+    index_dir = index_path(cfg, ch)
     index_dir.mkdir(parents=True, exist_ok=True)
     started = time.time()
 
