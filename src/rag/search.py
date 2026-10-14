@@ -17,7 +17,7 @@ import pandas as pd
 from rag.bm25 import BM25Retriever
 from rag.conditions import ConditionIndex
 from rag.eval.metrics import load_gold
-from rag.index import ROOT, encoder, load_cfg, load_embeddings, load_model
+from rag.index import ROOT, encoder, load_cfg, load_model
 
 LAYERS = {"dev-small": "dev-small", "full": "dev-full"}  # index.scope → 평가 층
 
@@ -163,6 +163,20 @@ def condition_setup(cfg, chunk_doc_ids: np.ndarray):
     return doc_names, chunk_doc, index, conds
 
 
+def dense_chunks(cfg, index_dir: Path, chunk_doc_ids: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """dense 검색 청크의 문서 id와 임베딩. retriever.extra_chunks의 [크기, overlap] 인덱스를
+    기본 인덱스 뒤에 붙인다(EXP-011 다중 크기 청킹). 경로는 paths.index_dir 규칙을 따른다."""
+    extra = cfg.retriever.get("extra_chunks") or []
+    dirs = [index_dir.parent.parent / f"{cfg.embedding.slug}-{cfg.chunking.name}-{size}-{overlap}"
+            / index_dir.name for size, overlap in extra]
+    ids = [chunk_doc_ids]
+    for d in dirs:
+        with (d / "chunks.jsonl").open(encoding="utf-8") as f:
+            ids.append(np.array([json.loads(line)["doc_id"] for line in f]))
+    parts = [p for d in [index_dir, *dirs] for p in sorted((d / "emb").glob("part-*.npy"))]
+    return np.concatenate(ids), np.concatenate([np.load(p) for p in parts])
+
+
 def embed_queries(cfg, texts: list[str]) -> np.ndarray:
     model = load_model(cfg, cfg.embedding.query_max_tokens)
     encode = encoder(model, cfg, cfg.embedding.get("query_prompt"))
@@ -241,8 +255,8 @@ def search(cfg) -> None:
     files = query_files(cfg)
     index_dir = ROOT / cfg.paths.index_dir
     with (index_dir / "chunks.jsonl").open(encoding="utf-8") as f:
-        chunk_doc_ids = np.array([json.loads(line)["doc_id"] for line in f])
-    chunk_emb = load_embeddings(index_dir)
+        chunk_doc_ids = np.array([json.loads(line)["doc_id"] for line in f])  # BM25 청크
+    dense_ids, chunk_emb = dense_chunks(cfg, index_dir, chunk_doc_ids)
 
     qids, text_path = query_list(cfg)
     q_emb = query_embeddings(cfg, qids, text_path, files["emb"])
@@ -253,11 +267,13 @@ def search(cfg) -> None:
         q_ids = bm25.query_ids(read_texts(text_path, qids))
     use_cond = hybrid and r.get("conditions") and r.conditions.enabled
     if use_cond:
-        doc_names, chunk_doc, cond_index, conds = condition_setup(cfg, chunk_doc_ids)
+        doc_names, chunk_doc, cond_index, conds = condition_setup(cfg, dense_ids)
     export_pairs = cfg.search.mode == "rerank-pairs"
+    if export_pairs and r.get("extra_chunks"):
+        raise SystemExit("rerank-pairs는 기본 청크 텍스트만 쓰므로 extra_chunks와 함께 쓰지 않는다")
     use_rerank = hybrid and r.get("rerank") and r.rerank.enabled and not export_pairs
     if export_pairs:
-        doc_chunks = chunks_by_doc(chunk_doc_ids)
+        doc_chunks = chunks_by_doc(dense_ids)
         texts = dict(zip(qids, read_texts(text_path, qids), strict=True))
         picks = []
     if use_rerank:
@@ -269,7 +285,7 @@ def search(cfg) -> None:
     agg = r.get("doc_agg")
     weighted = agg is not None
     if weighted:
-        agg_names, agg_doc = np.unique(chunk_doc_ids, return_inverse=True)
+        agg_names, agg_doc = np.unique(dense_ids, return_inverse=True)
     rows, fallbacks = [], 0
     for start in range(0, len(qids), r.query_batch):
         scores = q_emb[start : start + r.query_batch] @ chunk_emb.T
@@ -278,7 +294,7 @@ def search(cfg) -> None:
                 dense_scores = weighted_doc_scores(row, agg_doc, len(agg_names), list(agg.weights))
                 docs = top_docs(dense_scores, agg_names, depth)
             else:
-                docs, full = rank_with_pool(row, chunk_doc_ids, depth, r.chunk_pool)
+                docs, full = rank_with_pool(row, dense_ids, depth, r.chunk_pool)
                 fallbacks += full
             if hybrid:
                 lexical = rank_docs(bm25.scores(q_ids[j]), chunk_doc_ids, depth, r.chunk_pool)

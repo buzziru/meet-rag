@@ -292,3 +292,11 @@
 - 문서 반영: SPEC 판정 절은 측정·판정 방법이라 고치지 않는다. 이 결정은 판정 결과와 별개인 채택 결정이고, D-25와 같이 DECISIONS에 예외로 남긴다. 이후 EXP의 기준은 이 설정이다
 - 예외의 범위(사용자, PR #65 코멘트): 이후 판정도 SPEC 판정 절을 따른다. 예외 채택은 보류 판정에만 둘 수 있고, 이 결정처럼 합당한 근거를 적어야 한다. 기각 판정의 실험은 채택하지 않는다
 - 날짜: 2026-10-13
+
+## D-29 EXP-011 채택: dense 목록에 256 청크를 더한다
+- 결정: 검색 기준을 EXP-011 설정(EXP-009 설정에 `retriever.extra_chunks: [[256, 32]]`)으로 바꾼다(사용자 결정 2026-10-14). 실행은 `rag.conditions +exp=exp009 [search.queries=multidoc]` 뒤 `rag.search +exp=exp011`. 256 인덱스는 `data/index/snowflake-ko-fixed-256-32/`
+- 새 기준 순위: single-doc `data/runs/snowflake-ko-fixed-512-64-hybrid-cond-filter-law-ms256-dev-full.csv`(SHA-256 `855e9fbac75221da6963b9ad4d3b34508c6df42c33eb50847fd6b4cd3ed5c21a`), multi-doc `…-ms256-multidoc.csv`(SHA-256 `c51dc1658d2252d0873474fe0a3290984e11fb119ee23e97306822dd1b51b9b2`)
+- 근거: SPEC 판정 절로 채택. dev-full Recall@5 0.9214 → 0.9337, +1.23%p [+0.74, +1.73], Recall@1 +2.65%p [+1.78, +3.56], MRR@10 +2.12%p [+1.56, +2.73]. multi-doc은 변화가 없다(Recall@5 +0.01%p [−0.16, +0.22]). 1위·5위 진입 정답은 98\~100%가 256 청크로 점수를 받았다(`docs/experiments/EXP-011.md`, `notebooks/20_02_EXP011_판정근거.ipynb`)
+- 비용(D-26 운영 채택 기준): 상시 지출과 API 호출은 늘지 않는다. dense 벡터 118,039 → 338,684개(2.87배), `emb/`(float32) 461 → 1,323MiB, `chunks.jsonl` 253 → 519MiB. dev-full 검색 전체 시간 57\~62초 → 125초, 최대 메모리 1,562 → 2,864MiB(같은 PC, 1회). 재구축 때 GPU 임베딩이 인덱스 두 개 분량이다(L4 약 1,099초 + 1,259초)
+- 한계: 지연·메모리는 로컬 PC 측정이고 배포 대상(HF Spaces 무료 CPU)에서 재지 않았다. 배포 지연 상한(SPEC 미결 3)은 아직 정하지 않았다. 256 쪽 `chunks.jsonl` 경량화와 float16 저장은 하지 않았다
+- 날짜: 2026-10-14
