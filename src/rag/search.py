@@ -14,19 +14,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from rag.conditions import build_extractor
 from rag.eval.metrics import load_gold
 from rag.index import ROOT, encoder, load_cfg, load_model
-
-# first_docs·rank_docs·rank_with_pool은 이전 노트북(04_01·05_01·10_02·11_02)이 rag.search에서
-# 가져다 쓴다(S12에서 rag.retrieve로 옮김)
-from rag.retrieve import (  # noqa: F401
-    Retriever,
-    chunks_by_doc,
-    conditions_first,
-    first_docs,
-    rank_docs,
-    rank_with_pool,
-)
+from rag.retrieve import Retriever, chunks_by_doc, conditions_first
 
 LAYERS = {"dev-small": "dev-small", "full": "dev-full"}  # index.scope → 평가 층
 
@@ -44,13 +35,12 @@ def write_pairs(cfg, index_dir: Path, picks: list[tuple[str, str, int]], texts: 
         for i, line in enumerate(f):
             if i in need:
                 chunk_text[i] = json.loads(line)["text"]
-    out = ROOT / cfg.paths.rerank_pairs
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with out.open("w", encoding="utf-8", newline="\n") as f:
-        for qid, doc, c in picks:
-            row = {"qid": qid, "doc_id": doc, "query": texts[qid], "text": chunk_text[c]}
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    print(f"{len(picks):,} pairs -> {cfg.paths.rerank_pairs}")
+    rows = [{"qid": qid, "doc_id": doc, "query": texts[qid], "text": chunk_text[c]}
+            for qid, doc, c in picks]
+    text = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
+    # 재정렬 점수 파일은 이 후보 쌍으로 계산한다. 덮어쓰면 점수 파일과 쌍이 어긋난다
+    state = write_guarded(ROOT / cfg.paths.rerank_pairs, text, cfg.search.overwrite)
+    print(f"{len(picks):,} pairs -> {cfg.paths.rerank_pairs} ({state})")
 
 
 def embed_queries(cfg, texts: list[str]) -> np.ndarray:
@@ -127,21 +117,26 @@ def embed_vm_queries(cfg) -> None:
     print(f"{len(qids)} queries -> {files['emb'].relative_to(ROOT)}")
 
 
-def write_run(path: Path, rows: list[dict], overwrite: bool) -> str:
-    """순위 파일을 쓴다. 같은 경로에 내용이 다른 파일이 있으면 overwrite가 아닐 때 멈춘다(S12).
+def write_guarded(path: Path, text: str, overwrite: bool) -> str:
+    """실험 산출물(순위 파일, 재정렬 후보 쌍)을 쓴다. 같은 경로에 내용이 다른 파일이 있으면
+    overwrite가 아닐 때 멈춘다(S12).
 
-    run_name을 빠뜨린 실행이 다른 설정의 순위 파일(판정 기준)을 덮어쓰지 않게 한다.
+    run_name을 빠뜨린 실행이 과거 실험 기록(판정 기준 등)을 되돌릴 수 없게 덮어쓰지 않게 한다.
     """
-    text = pd.DataFrame(rows).to_csv(index=False, lineterminator="\n")
     if path.exists() and not overwrite:
-        old = path.read_text(encoding="utf-8")
-        if old == text:
+        if path.read_text(encoding="utf-8") == text:
             return "같은 내용, 그대로 둠"
-        raise SystemExit(f"{path.relative_to(ROOT)}에 내용이 다른 순위 파일이 있다. "
-                         "retriever.run_name을 확인하고, 바꾸려면 search.overwrite=true")
+        raise SystemExit(f"{path.relative_to(ROOT)}에 내용이 다른 파일이 있다. "
+                         "retriever.run_name·경로를 확인하고, 바꾸려면 search.overwrite=true")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8", newline="\n")
     return "씀"
+
+
+def write_run(path: Path, rows: list[dict], overwrite: bool) -> str:
+    """순위 파일(qid, rank, doc_id)을 쓴다."""
+    return write_guarded(path, pd.DataFrame(rows).to_csv(index=False, lineterminator="\n"),
+                         overwrite)
 
 
 def search(cfg) -> None:
@@ -150,18 +145,21 @@ def search(cfg) -> None:
     qids, text_path = query_list(cfg)
     q_emb = query_embeddings(cfg, qids, text_path, files["emb"])
     r = cfg.retriever
-    tokens = ret.query_tokens(read_texts(text_path, qids))
+    query_texts = read_texts(text_path, qids)
+    tokens = ret.query_tokens(query_texts)
     conds = {}
     if ret.use_cond:
-        with (ROOT / cfg.paths.conditions).open(encoding="utf-8") as f:
-            conds = {x["qid"]: x["conditions"] for x in map(json.loads, f)}
+        # 생성과 같이 실행 config의 추출기로 질의 원문에서 뽑는다. 미리 만든 조건 파일을 읽으면
+        # 추출 설정·값 사전이 바뀐 뒤 옛 파일이 조용히 쓰일 수 있다(S12, PR #71 코멘트)
+        ex = build_extractor(cfg)
+        conds = {q: ex.extract(t) for q, t in zip(qids, query_texts, strict=True)}
     export_pairs = cfg.search.mode == "rerank-pairs"
     if export_pairs and r.get("extra_chunks"):
         raise SystemExit("rerank-pairs는 기본 청크 텍스트만 쓰므로 extra_chunks와 함께 쓰지 않는다")
     use_rerank = ret.hybrid and r.get("rerank") and r.rerank.enabled and not export_pairs
     if export_pairs:
         doc_chunks = chunks_by_doc(ret.dense_ids)
-        texts = dict(zip(qids, read_texts(text_path, qids), strict=True))
+        texts = dict(zip(qids, query_texts, strict=True))
         picks = []
     if use_rerank:
         rerank_scores: dict[str, dict[str, float]] = {}

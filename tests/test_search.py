@@ -225,3 +225,18 @@ def test_retriever_hybrid_fuses_dense_and_bm25(tmp_path):
     lexical = rank_docs(ret.bm25.scores(tokens), ret.bm25_ids, 3)
     assert fused == rrf([["a", "b", "c"], lexical], cfg.retriever.fusion.rrf_k, None)
     assert matched == set() and ret.rank(row, tokens) == fused[:2]
+
+
+def test_retriever_explain_records_stage_ranks(tmp_path):
+    cfg = _tmp_cfg(tmp_path, ["+exp=exp001", "retriever.fusion.depth=3",
+                              "retriever.bm25.name=test"])
+    _write_text_index(tmp_path / "kure-v1-512" / "dev-small",
+                      [("a", "예산 심사"), ("b", "국정감사 질의"), ("c", "법안 처리")],
+                      [[0.9, 0.0], [0.5, 0.0], [0.1, 0.0]])
+    ret = Retriever(cfg)
+    row = ret.chunk_emb @ np.array([1.0, 0.0], dtype=np.float32)
+    tokens = ret.query_tokens(["국정감사 질의"])[0]
+    docs, stages = ret.explain(row, tokens)
+    assert docs == ret.candidates(row, tokens)[0][:2]
+    assert [s["dense_rank"] for s in stages] == [{"a": 1, "b": 2, "c": 3}[d] for d in docs]
+    assert stages[0]["rrf_score"] >= stages[1]["rrf_score"] and "bm25_rank" in stages[0]

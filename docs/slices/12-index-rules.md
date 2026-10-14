@@ -15,7 +15,9 @@
 - `src/rag/retrieve.py` `Retriever`: 인덱스(기본 + 추가 청크), BM25, 조건 색인을 한 번 읽고, 질의 하나의 dense 점수 행·BM25 토큰·조건을 받아 문서 순위를 낸다. `rag.search`의 질의별 처리(dense 문서 순위, 가중 집계, BM25, 조건 목록, RRF, 최다 일치 필터)를 옮긴 것이다. 재정렬 점수 파일과 후보 쌍 내보내기(EXP-005·006)는 평가 전용이라 `rag.search`에 남긴다
 - `rag.search`: 질의 배치 내적과 순위 파일 쓰기만 하고, 질의별 순위는 `Retriever`에 맡긴다
 - `rag.generate`: `Retriever`로 문서 순위를 내고 상위 `generator.context_docs`개 문서를 근거로 쓴다. 조건은 `rag.conditions`의 추출기로 질의 원문에서 뽑는다(dev 질의와 자유 질의가 같은 경로). 생성 기록에 검색 설정(`retriever` 전체)을 남긴다
-- 순위 파일 덮어쓰기 방지: 같은 경로에 내용이 다른 순위 파일이 있으면 멈춘다. 덮어쓰려면 `search.overwrite=true`를 준다. 내용이 같으면 그대로 둔다
+- 실험 산출물 덮어쓰기 방지: 순위 파일과 재정렬 후보 쌍 파일(`search.mode=rerank-pairs`)은 같은 경로에 내용이 다른 파일이 있으면 멈춘다. 덮어쓰려면 `search.overwrite=true`를 준다. 내용이 같으면 그대로 둔다. `data/`는 커밋하지 않아 덮어쓴 파일은 되돌릴 사본이 없고, 다시 만들려면 그 커밋의 코드로 재실행(재정렬 점수는 Colab GPU)해야 한다. 리랭커는 운영 보류(D-26)라 다시 판단할 때 EXP-005·006 기록을 쓴다(PR #71 코멘트)
+- 질의 조건: 평가(`rag.search`)도 생성처럼 실행 config의 추출기로 질의 원문에서 뽑는다. 추출기의 값 사전·법률명은 실행 때 코퍼스를 한 번 읽어 만든다. 미리 만든 조건 파일(`paths.conditions`)·값 사전(`paths.meta_dict`)을 읽으면 추출 설정이나 코퍼스가 바뀐 뒤 옛 파일이 조용히 쓰인다(PR #71 코멘트). 두 파일은 확인용으로 남는다
+- 단계별 기록: 생성 근거마다 최종 점수(`score`, hybrid는 RRF), 근거 청크의 dense 점수, 목록별 순위·최다 일치 여부(`stages`)를 남긴다(`Retriever.explain`, PR #71 코멘트)
 - 테스트: `index_path`, `Retriever`(dense 단독과 hybrid의 작은 합성 입력), 덮어쓰기 방지
 
 ## 규칙
@@ -57,7 +59,7 @@ kure-v1 설정(exp001\~008)은 KURE 인덱스와 조건 파일이 로컬에 있�
 ## 수정 허용 파일
 
 - `src/rag/index.py`, `src/rag/search.py`, `src/rag/generate.py`, `src/rag/chunk_sweep.py`, 새 `src/rag/retrieve.py`
-- `src/rag/conditions.py`: 추출기 생성(`main` 안의 사전·법률명 준비)을 함수로 떼어 `rag.generate`도 쓰게 한다. 추출 규칙은 바꾸지 않는다
+- `src/rag/conditions.py`: 추출기 생성(`main` 안의 사전·법률명 준비)을 함수로 떼어 `rag.search`·`rag.generate`도 쓰게 하고, 값 사전을 코퍼스에서 바로 만든다(`rag.meta_dict.build`). 추출 규칙은 바꾸지 않는다
 - `configs/config.yaml`(`search.overwrite` 추가), `configs/exp/exp011.yaml`(형식만)
 - `docs/DECISIONS.md` D-29: `extra_chunks` 표기를 새 형식으로 맞추는 한 줄(결정 내용은 바꾸지 않는다)
 - `tests/`의 해당 테스트

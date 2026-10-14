@@ -81,6 +81,17 @@ def top_docs(doc_scores: np.ndarray, doc_names: np.ndarray, k: int) -> list[str]
     return list(doc_names[np.argsort(-doc_scores, kind="stable")[:k]])
 
 
+def rrf_scores(rankings: list[list[str]], k: int,
+               weights: list[float] | None = None) -> dict[str, float]:
+    """문서마다 RRF 점수 Σ w / (k + 순위). 문서는 처음 나온 순서로 담는다(동점 순서의 기준)."""
+    score: dict[str, float] = {}
+    for i, docs in enumerate(rankings):
+        w = weights[i] if weights else 1.0
+        for rank, doc in enumerate(docs, 1):
+            score[doc] = score.get(doc, 0.0) + w / (k + rank)
+    return score
+
+
 def rrf(rankings: list[list[str]], k: int, top_k: int | None,
         weights: list[float] | None = None) -> list[str]:
     """문서 순위 목록들을 RRF(Σ w / (k + 순위))로 합친다. top_k가 None이면 후보 전체를 낸다.
@@ -88,11 +99,7 @@ def rrf(rankings: list[list[str]], k: int, top_k: int | None,
     weights는 목록마다의 가중치(EXP-010)이고 없으면 모두 1이다.
     동점이면 앞 목록(dense)에 먼저 나온 문서가 앞선다.
     """
-    score: dict[str, float] = {}
-    for i, docs in enumerate(rankings):
-        w = weights[i] if weights else 1.0
-        for rank, doc in enumerate(docs, 1):
-            score[doc] = score.get(doc, 0.0) + w / (k + rank)
+    score = rrf_scores(rankings, k, weights)
     return sorted(score, key=score.__getitem__, reverse=True)[:top_k]
 
 
@@ -175,11 +182,11 @@ class Retriever:
         """BM25 질의 토큰. hybrid가 아니면 None."""
         return self.bm25.query_ids(texts) if self.hybrid else None
 
-    def candidates(self, row: np.ndarray, tokens: list[int] | None = None,
-                   conditions: dict | None = None) -> tuple[list[str], set[str], bool]:
-        """재정렬 전 후보 순위, 최다 일치 문서, dense 전체 정렬 여부.
+    def lists(self, row: np.ndarray, tokens: list[int] | None = None,
+              conditions: dict | None = None) -> tuple[dict[str, list[str]], set[str], bool]:
+        """RRF에 넣는 목록(dense, bm25, conditions 순), 최다 일치 문서, dense 전체 정렬 여부.
 
-        dense 단독이면 상위 top_k 문서, hybrid면 RRF로 합친 후보 전체다.
+        dense 단독이면 dense 목록 하나다.
 
         Args:
             row: 질의와 dense 청크(dense_ids 순서)의 점수.
@@ -194,29 +201,60 @@ class Retriever:
             docs = top_docs(dense_scores, self.doc_names, self.depth)
         else:
             docs, full = rank_with_pool(row, self.dense_ids, self.depth, r.chunk_pool)
-        if not self.hybrid:
-            return docs, set(), full
-        lexical = rank_docs(self.bm25.scores(tokens), self.bm25_ids, self.depth, r.chunk_pool)
-        lists = [docs, lexical]
-        counts = self.cond_index.match_counts(conditions) if self.use_cond else {}
+        named = {"dense": docs}
         matched: set[str] = set()
+        if not self.hybrid:
+            return named, matched, full
+        named["bm25"] = rank_docs(self.bm25.scores(tokens), self.bm25_ids, self.depth,
+                                  r.chunk_pool)
+        counts = self.cond_index.match_counts(conditions) if self.use_cond else {}
         if counts and max(counts.values()) >= r.conditions.min_fields:
             if self.weighted:  # doc_names는 dense_ids의 np.unique 결과다
                 doc_scores = dense_scores
             else:
                 doc_scores = np.full(len(self.doc_names), -np.inf, dtype=row.dtype)
                 np.maximum.at(doc_scores, self.chunk_doc, row)
-            lists.append(condition_docs(counts, doc_scores, self.doc_names, self.depth,
-                                        r.conditions.min_fields))
+            named["conditions"] = condition_docs(counts, doc_scores, self.doc_names, self.depth,
+                                                 r.conditions.min_fields)
             if r.conditions.get("filter") == "best":  # 맞은 필드 수가 가장 많은 문서
                 top = max(counts.values())
                 matched = {self.doc_names[i] for i, c in counts.items() if c == top}
-        weights = r.fusion.get("weights")  # [dense, BM25, 조건 목록]
-        fused = rrf(lists, r.fusion.rrf_k, None, list(weights) if weights else None)
-        return fused, matched, full
+        return named, matched, full
+
+    def _rrf_scores(self, named: dict[str, list[str]]) -> dict[str, float]:
+        weights = self.r.fusion.get("weights")  # [dense, BM25, 조건 목록]
+        return rrf_scores(list(named.values()), self.r.fusion.rrf_k,
+                          list(weights) if weights else None)
+
+    def candidates(self, row: np.ndarray, tokens: list[int] | None = None,
+                   conditions: dict | None = None) -> tuple[list[str], set[str], bool]:
+        """재정렬 전 후보 순위, 최다 일치 문서, dense 전체 정렬 여부.
+
+        dense 단독이면 상위 top_k 문서, hybrid면 RRF로 합친 후보 전체다.
+        """
+        named, matched, full = self.lists(row, tokens, conditions)
+        if not self.hybrid:
+            return named["dense"], matched, full
+        score = self._rrf_scores(named)
+        return sorted(score, key=score.__getitem__, reverse=True), matched, full
+
+    def explain(self, row: np.ndarray, tokens: list[int] | None = None,
+                conditions: dict | None = None) -> tuple[list[str], list[dict]]:
+        """상위 top_k 문서와 문서마다 단계별 기록(목록별 순위, RRF 점수, 최다 일치 여부).
+
+        순위는 rank와 같다. 실패·성공 원인을 나중에 나눠 보려고 단계별 값을 남긴다(PR #71 코멘트).
+        """
+        named, matched, _ = self.lists(row, tokens, conditions)
+        if not self.hybrid:
+            return named["dense"], [{"dense_rank": i} for i in range(1, len(named["dense"]) + 1)]
+        score = self._rrf_scores(named)
+        fused = sorted(score, key=score.__getitem__, reverse=True)
+        docs = conditions_first(fused, matched)[: self.r.top_k]
+        pos = {n: {d: i for i, d in enumerate(lst, 1)} for n, lst in named.items()}
+        return docs, [{"rrf_score": score[d], **{f"{n}_rank": pos[n].get(d) for n in named},
+                       "best_match": d in matched} for d in docs]
 
     def rank(self, row: np.ndarray, tokens: list[int] | None = None,
              conditions: dict | None = None) -> list[str]:
         """상위 top_k 문서. hybrid면 최다 일치 문서를 앞으로 옮긴 뒤 자른다."""
-        fused, matched, _ = self.candidates(row, tokens, conditions)
-        return conditions_first(fused, matched)[: self.r.top_k] if self.hybrid else fused
+        return self.explain(row, tokens, conditions)[0]

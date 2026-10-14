@@ -128,6 +128,10 @@ class Pipeline:
         self.store = ChunkStore(self.retriever.dirs)
         self.extractor = build_extractor(cfg) if self.retriever.use_cond else None
         self.index_meta = {"names": self.store.names, "n_chunks": int(self.store.bounds[-1])}
+        # 근거에 붙일 회의 정보. 시작할 때 한 번 읽는다(질의마다 코퍼스를 읽지 않는다, PR #71)
+        with (ROOT / cfg.paths.corpus).open(encoding="utf-8") as f:
+            self.doc_meta = {d["doc_id"]: {k: d[k] for k in CONTEXT_META}
+                             for d in map(json.loads, f)}
         self.client = wrap_openai(OpenAI(base_url=cfg.generator.base_url,
                                          api_key=os.environ[cfg.generator.api_key_env]))
         self._model = None
@@ -146,30 +150,28 @@ class Pipeline:
             self._model = load_model(self.cfg, self.cfg.embedding.query_max_tokens)
         return encoder(self._model, self.cfg, self.cfg.embedding.get("query_prompt"))([query])[0]
 
-    def rank(self, query: str, q_emb: np.ndarray) -> tuple[np.ndarray, list[str]]:
-        """dense 청크 점수와 문서 순위. 검색 설정은 rag.search와 같은 Retriever를 쓴다(S12)."""
+    def rank(self, query: str, q_emb: np.ndarray) -> tuple[np.ndarray, list[str], list[dict]]:
+        """dense 청크 점수, 문서 순위, 문서별 단계 기록. rag.search와 같은 Retriever를 쓴다(S12)."""
         scores = self.retriever.chunk_emb @ q_emb
         tokens = self.retriever.query_tokens([query])
         conds = self.extractor.extract(query) if self.extractor else None
-        return scores, self.retriever.rank(scores, tokens[0] if tokens else None, conds)
+        docs, stages = self.retriever.explain(scores, tokens[0] if tokens else None, conds)
+        return scores, docs, stages
 
     @traceable(name="retrieve", process_inputs=lambda i: {"k": i["k"]})
     def retrieve(self, query: str, q_emb: np.ndarray, k: int) -> list[dict]:
-        scores, docs = self.rank(query, q_emb)
+        """상위 k개 문서의 근거. score는 문서 순위를 정한 최종 점수(hybrid면 RRF, dense면 청크
+        점수)이고, 근거 청크의 dense 점수와 단계별 순위를 함께 남긴다(PR #71 코멘트)."""
+        scores, docs, stages = self.rank(query, q_emb)
         picked = best_chunks(scores, self.doc_chunks, docs[:k])
         rows = [self.store.get(i) for i in picked]
-        meta = self._doc_meta({r["doc_id"] for r in rows})
-        return [{"n": n, "doc_id": r["doc_id"], "index": r["index"], "chunk_id": r["chunk_id"],
-                 "score": float(scores[i]), "text": r["text"], **meta[r["doc_id"]]}
-                for n, (i, r) in enumerate(zip(picked, rows, strict=True), 1)]
-
-    def _doc_meta(self, doc_ids: set[str]) -> dict[str, dict]:
-        out = {}
-        with (ROOT / self.cfg.paths.corpus).open(encoding="utf-8") as f:
-            for line in f:
-                d = json.loads(line)
-                if d["doc_id"] in doc_ids:
-                    out[d["doc_id"]] = {k: d[k] for k in CONTEXT_META}
+        out = []
+        for n, (i, r, st) in enumerate(zip(picked, rows, stages[:k], strict=True), 1):
+            dense = float(scores[i])
+            out.append({"n": n, "doc_id": r["doc_id"], "index": r["index"],
+                        "chunk_id": r["chunk_id"], "score": st.get("rrf_score", dense),
+                        "dense_score": dense, "stages": st, "text": r["text"],
+                        **self.doc_meta[r["doc_id"]]})
         return out
 
     @traceable(name="build_messages", process_inputs=lambda i: {"query": i["query"]})

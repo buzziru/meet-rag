@@ -11,6 +11,7 @@ import sys
 from collections import Counter
 
 from rag.index import ROOT, load_cfg
+from rag.meta_dict import build as build_meta_dict
 
 # `YYYY년도`는 회계연도라 회의 날짜가 아니다(D-21). 두 자리 연도는 `'YY년`만 날짜로 본다(D-22)
 DATE = re.compile(
@@ -169,14 +170,22 @@ def read_queries(cfg) -> list[dict]:
 
 
 def build_extractor(cfg) -> Extractor:
-    """config의 값 사전·법률명으로 추출기를 만든다. rag.conditions와 rag.generate가 같이 쓴다."""
-    meta_dict = json.loads((ROOT / cfg.paths.meta_dict).read_text(encoding="utf-8"))
+    """config와 코퍼스로 추출기를 만든다. rag.conditions·rag.search·rag.generate가 같이 쓴다.
+
+    값 사전(rag.meta_dict와 같은 규칙)과 법률명은 실행할 때 코퍼스를 한 번 읽어 만든다.
+    미리 만든 파일(paths.meta_dict)을 읽으면 코퍼스를 다시 적재한 뒤 옛 사전이 조용히 쓰인다(S12).
+    """
     c = cfg.conditions
     laws = set()
-    if c.get("agenda_law"):  # 법률명 사전은 코퍼스 안건에서만 만든다(EXP-008)
+
+    def docs():
         with (ROOT / cfg.paths.corpus).open(encoding="utf-8") as f:
             for doc in map(json.loads, f):
-                laws |= agenda_laws(doc.get("agenda", ""), c.law_min_chars)
+                if c.get("agenda_law"):  # 법률명 사전은 코퍼스 안건에서만 만든다(EXP-008)
+                    laws.update(agenda_laws(doc.get("agenda", ""), c.law_min_chars))
+                yield doc
+
+    meta_dict = build_meta_dict(docs())
     return Extractor(meta_dict, cfg.ingest.name_titles, c.name_suffixes, set(c.name_exclude),
                      c.committee_aliases, laws)
 
