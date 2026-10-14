@@ -2,8 +2,8 @@
 base_url: https://openrouter.ai/api/v1
 api_key_env: OPENROUTER_API
 model: google/gemma-4-31b-it
-# 사고 과정. 배포 경로(Google AI Studio)는 끌 수 없어(D-11) 실험도 켜서 같은 조건으로 잰다(결정 1)
-reasoning: true
+# 사고 과정. 실험에서는 끈다(사용자 결정 2026-10-14). 배포 경로(Google)는 끌 수 없어(D-11) 품질·지연이 다를 수 있다
+reasoning: false
 params:
   temperature: 0.0
   max_tokens: 2048  # 사고 과정 토큰 포함 상한
