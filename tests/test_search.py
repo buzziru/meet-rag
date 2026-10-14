@@ -4,20 +4,21 @@ import numpy as np
 import pytest
 
 from rag.index import load_cfg
-from rag.search import (
+from rag.retrieve import (
+    Retriever,
     chunks_by_doc,
     condition_docs,
     conditions_first,
-    dense_chunks,
+    dense_dirs,
     first_docs,
-    query_files,
+    load_dense,
     rank_docs,
     rank_with_pool,
-    rerank_top,
     rrf,
     top_docs,
     weighted_doc_scores,
 )
+from rag.search import query_files, rerank_top, write_run
 
 
 def test_rank_docs_dedupes_by_first_chunk_rank():
@@ -147,20 +148,95 @@ def _write_index(d, doc_ids, emb):
     np.save(d / "emb" / "part-00000.npy", emb)
 
 
-def test_dense_chunks_appends_extra_index(tmp_path):
+def test_dense_dirs_follow_index_template():
     cfg = load_cfg(["+exp=exp011", "index.scope=dev-small"])
-    base = tmp_path / "snowflake-ko-fixed-512-64" / "dev-small"
-    extra = tmp_path / "snowflake-ko-fixed-256-32" / "dev-small"
+    dirs = dense_dirs(cfg)
+    names = ["snowflake-ko-fixed-512-64", "snowflake-ko-fixed-256-32"]
+    assert [d.parent.name for d in dirs] == names
+    assert all(d.name == "dev-small" for d in dirs)
+    assert len(dense_dirs(load_cfg(["+exp=exp009"]))) == 1
+
+
+def test_dense_dirs_require_full_chunking_spec():
+    for bad in ["[[256,32]]", "[{chunk_tokens: 256, overlap_tokens: 32}]"]:
+        cfg = load_cfg(["+exp=exp011", f"retriever.extra_chunks={bad}"])
+        with pytest.raises(ValueError):
+            dense_dirs(cfg)
+
+
+def test_load_dense_appends_in_order(tmp_path):
+    base, extra = tmp_path / "a", tmp_path / "b"
     _write_index(base, ["a", "b"], np.ones((2, 3), dtype=np.float32))
     _write_index(extra, ["a", "a", "b"], np.zeros((3, 3), dtype=np.float32))
-    ids, emb = dense_chunks(cfg, base, np.array(["a", "b"]))
+    ids, emb = load_dense([base, extra])
     assert ids.tolist() == ["a", "b", "a", "a", "b"]
     assert emb.shape == (5, 3) and emb[:2].sum() == 6 and emb[2:].sum() == 0
 
 
-def test_dense_chunks_without_extra_is_base(tmp_path):
-    cfg = load_cfg(["+exp=exp009", "index.scope=dev-small"])
-    base = tmp_path / "snowflake-ko-fixed-512-64" / "dev-small"
-    _write_index(base, ["a", "b"], np.ones((2, 3), dtype=np.float32))
-    ids, emb = dense_chunks(cfg, base, np.array(["a", "b"]))
-    assert ids.tolist() == ["a", "b"] and emb.shape == (2, 3)
+def test_write_run_refuses_different_content(tmp_path, monkeypatch):
+    monkeypatch.setattr("rag.search.ROOT", tmp_path)
+    path = tmp_path / "run.csv"
+    rows = [{"qid": "q1", "rank": 1, "doc_id": "d1"}]
+    assert write_run(path, rows, overwrite=False) == "씀"
+    assert write_run(path, rows, overwrite=False) == "같은 내용, 그대로 둠"
+    other = [{"qid": "q1", "rank": 1, "doc_id": "d2"}]
+    with pytest.raises(SystemExit):
+        write_run(path, other, overwrite=False)
+    assert write_run(path, other, overwrite=True) == "씀"
+    assert "d2" in path.read_text(encoding="utf-8")
+
+
+def _write_text_index(d, rows, emb):
+    (d / "emb").mkdir(parents=True)
+    lines = [json.dumps({"doc_id": doc, "text": text}, ensure_ascii=False) for doc, text in rows]
+    (d / "chunks.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    np.save(d / "emb" / "part-00000.npy", np.asarray(emb, dtype=np.float32))
+
+
+def _tmp_cfg(tmp_path, overrides):
+    slug_size = "${embedding.slug}-${chunking.chunk_tokens}"
+    template = (tmp_path / slug_size / "${index.scope}").as_posix()
+    return load_cfg([f"paths.index_dir='{template}'", "index.scope=dev-small",
+                     "retriever.top_k=2", "retriever.chunk_pool=null", *overrides])
+
+
+def test_retriever_dense_ranks_by_max_chunk_across_indexes(tmp_path):
+    cfg = _tmp_cfg(tmp_path, ["+retriever.extra_chunks=[{name: fixed, chunk_tokens: 256, "
+                              "overlap_tokens: 32}]"])
+    _write_text_index(tmp_path / "kure-v1-512" / "dev-small",
+                      [("a", "x"), ("b", "y")], [[0.9, 0.0], [0.5, 0.0]])
+    _write_text_index(tmp_path / "kure-v1-256" / "dev-small",
+                      [("b", "y1"), ("c", "z")], [[1.0, 0.0], [0.1, 0.0]])
+    ret = Retriever(cfg)
+    row = ret.chunk_emb @ np.array([1.0, 0.0], dtype=np.float32)
+    assert ret.rank(row) == ["b", "a"]  # b의 256 청크(1.0)가 a의 512 청크(0.9)보다 높다
+
+
+def test_retriever_hybrid_fuses_dense_and_bm25(tmp_path):
+    cfg = _tmp_cfg(tmp_path, ["+exp=exp001", "retriever.fusion.depth=3",
+                              "retriever.bm25.name=test"])
+    _write_text_index(tmp_path / "kure-v1-512" / "dev-small",
+                      [("a", "예산 심사"), ("b", "국정감사 질의"), ("c", "법안 처리")],
+                      [[0.9, 0.0], [0.5, 0.0], [0.1, 0.0]])
+    ret = Retriever(cfg)
+    row = ret.chunk_emb @ np.array([1.0, 0.0], dtype=np.float32)
+    tokens = ret.query_tokens(["국정감사 질의"])[0]
+    fused, matched, _ = ret.candidates(row, tokens)
+    lexical = rank_docs(ret.bm25.scores(tokens), ret.bm25_ids, 3)
+    assert fused == rrf([["a", "b", "c"], lexical], cfg.retriever.fusion.rrf_k, None)
+    assert matched == set() and ret.rank(row, tokens) == fused[:2]
+
+
+def test_retriever_explain_records_stage_ranks(tmp_path):
+    cfg = _tmp_cfg(tmp_path, ["+exp=exp001", "retriever.fusion.depth=3",
+                              "retriever.bm25.name=test"])
+    _write_text_index(tmp_path / "kure-v1-512" / "dev-small",
+                      [("a", "예산 심사"), ("b", "국정감사 질의"), ("c", "법안 처리")],
+                      [[0.9, 0.0], [0.5, 0.0], [0.1, 0.0]])
+    ret = Retriever(cfg)
+    row = ret.chunk_emb @ np.array([1.0, 0.0], dtype=np.float32)
+    tokens = ret.query_tokens(["국정감사 질의"])[0]
+    docs, stages = ret.explain(row, tokens)
+    assert docs == ret.candidates(row, tokens)[0][:2]
+    assert [s["dense_rank"] for s in stages] == [{"a": 1, "b": 2, "c": 3}[d] for d in docs]
+    assert stages[0]["rrf_score"] >= stages[1]["rrf_score"] and "bm25_rank" in stages[0]

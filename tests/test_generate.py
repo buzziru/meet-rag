@@ -1,7 +1,16 @@
+import json
+
 import numpy as np
 from omegaconf import OmegaConf
 
-from rag.generate import answer_start, best_chunks, build_messages, recipe, split_thought
+from rag.generate import (
+    ChunkStore,
+    answer_start,
+    best_chunks,
+    build_messages,
+    recipe,
+    split_thought,
+)
 from rag.index import load_cfg
 
 
@@ -10,11 +19,24 @@ def context(n, text, url="http://example/1"):
             "meeting_number": "제1회", "session_number": "제2차", "original": url}
 
 
-def test_best_chunks_picks_top_chunk_per_doc_in_rank_order():
+def test_best_chunks_picks_top_chunk_per_doc_in_given_order():
     scores = np.array([0.1, 0.9, 0.5, 0.8, 0.7])
-    doc_ids = np.array(["a", "a", "b", "c", "b"])
-    assert best_chunks(scores, doc_ids, 2, pool=10) == [1, 3]
-    assert best_chunks(scores, doc_ids, 3, pool=2) == [1, 3, 4]  # pool이 모자라면 전체 정렬
+    doc_chunks = {"a": np.array([0, 1]), "b": np.array([2, 4]), "c": np.array([3])}
+    assert best_chunks(scores, doc_chunks, ["c", "b", "a"]) == [3, 4, 1]
+
+
+def test_chunk_store_reads_rows_across_indexes(tmp_path):
+    dirs = []
+    for name, rows in [("idx-512", ["a0", "a1"]), ("idx-256", ["b0", "b1", "b2"])]:
+        d = tmp_path / name / "full"
+        d.mkdir(parents=True)
+        lines = [json.dumps({"chunk_id": i, "doc_id": "d", "text": s}, ensure_ascii=False)
+                 for i, s in enumerate(rows)]
+        (d / "chunks.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        dirs.append(d)
+    store = ChunkStore(dirs)
+    assert [store.get(i)["text"] for i in range(5)] == ["a0", "a1", "b0", "b1", "b2"]
+    assert store.get(3)["index"] == "idx-256" and store.get(3)["chunk_id"] == 1
 
 
 def test_messages_number_contexts_without_urls():
@@ -33,9 +55,9 @@ def test_prompt_version_file_loads():
 
 def test_recipe_tracks_prompt_content():
     cfg = load_cfg(["index.scope=full"])
-    meta = {"name": "idx", "n_chunks": 3}
+    meta = {"names": ["idx"], "n_chunks": 3}
     base = recipe(cfg, meta, stream=False)
-    assert {"git_commit", "git_dirty", "embedding_model", "index", "chunk_pool", "context_docs",
+    assert {"git_commit", "git_dirty", "embedding_model", "index", "retriever", "context_docs",
             "prompt_version", "prompt_sha256", "model", "params", "stream"} <= set(base)
     assert base["params"]["temperature"] == 0.0
 

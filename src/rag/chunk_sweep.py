@@ -10,7 +10,7 @@ import pandas as pd
 
 from rag.eval.bootstrap import paired_bootstrap
 from rag.eval.metrics import gold_ranks, load_gold, min_docs, per_query, read_run, to_markdown
-from rag.index import ROOT, load_cfg
+from rag.index import ROOT, index_path, load_cfg
 
 LAYER = "dev-small"
 PRIMARY = "recall@5"
@@ -32,7 +32,7 @@ def main() -> None:
     scores, ranks, info = {}, {}, {}
     for ct, ov in sw.candidates:
         cfg = load_cfg([f"chunking.chunk_tokens={ct}", f"chunking.overlap_tokens={ov}"])
-        index_dir = ROOT / cfg.paths.index_dir
+        index_dir = index_path(cfg, cfg.chunking)
         name = str(ct)
         run = ROOT / cfg.paths.runs_dir / f"{index_dir.parent.name}-{LAYER}.csv"
         ranks[name] = gold_ranks(read_run(run), gold, n_min)
