@@ -1,0 +1,15 @@
+# @package _global_
+# EXP-015 dense·BM25 점수 기반 결합 (H16, docs/experiments/EXP-015.md). 기준 EXP-014(D-32) 위에 바꾼다.
+# 실행: rag.search +exp=exp015 (구현 전 초안)
+defaults:
+  - exp014
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter-law-ms256-cc  # EXP-014 순위 파일을 덮어쓰지 않는다
+  fusion:
+    method: score  # rrf(기본) | score. score는 dense·BM25 정규화 점수의 가중 합
+    alpha: 0.5  # dense 몫. BM25는 1 − alpha (결정 사항 1)
+    normalize: minmax  # 목록별 상위 depth개의 1위·마지막 점수로 정규화, 목록 밖 문서는 0 (결정 사항 3)
+    # 결합 목록과 조건 목록을 RRF(rrf_k)로 합칠 때의 가중치 [결합, 조건] (결정 사항 2)
+    weights: [2, 1]
