@@ -2,7 +2,7 @@
 
 질의 하나의 dense 점수 행, BM25 토큰, 질의 조건을 받아 문서 순위를 낸다. 설정은 cfg.retriever다.
 재정렬 점수 파일과 후보 쌍 내보내기(EXP-005·006)는 평가 전용이라 rag.search에 있다.
-규칙은 docs/slices/05-retrieve.md(dense), EXP-001·003·004·007·008·010·011·013 문서.
+규칙은 docs/slices/05-retrieve.md(dense), EXP-001·003·004·007·008·010·011·013·015 문서.
 """
 
 import json
@@ -103,6 +103,24 @@ def rrf(rankings: list[list[str]], k: int, top_k: int | None,
     return sorted(score, key=score.__getitem__, reverse=True)[:top_k]
 
 
+def minmax(docs: list[str], scores: list[float]) -> dict[str, float]:
+    """순위 목록의 점수를 1위 1, 마지막 0으로 정규화한다(EXP-015). 점수가 모두 같으면 모두 0."""
+    hi, lo = scores[0], scores[-1]
+    if hi == lo:
+        return dict.fromkeys(docs, 0.0)
+    return {d: (s - lo) / (hi - lo) for d, s in zip(docs, scores, strict=True)}
+
+
+def convex(dense: dict[str, float], bm25: dict[str, float], alpha: float) -> list[str]:
+    """정규화 점수의 가중 합 alpha·dense + (1 − alpha)·BM25로 줄 세운다. 목록 밖 문서는 0.
+
+    동점이면 dense 목록, BM25 목록 순으로 먼저 나온 문서가 앞선다.
+    """
+    docs = list(dict.fromkeys([*dense, *bm25]))
+    score = {d: alpha * dense.get(d, 0.0) + (1 - alpha) * bm25.get(d, 0.0) for d in docs}
+    return sorted(docs, key=score.__getitem__, reverse=True)
+
+
 def conditions_first(docs: list[str], matched: set[str]) -> list[str]:
     """조건에 맞는 문서(matched)를 순서를 유지한 채 앞으로 옮긴다(EXP-004 필터링)."""
     return sorted(docs, key=lambda d: d not in matched)
@@ -162,8 +180,11 @@ class Retriever:
             self.bm25 = BM25Retriever(cfg, self.index_dir)
         self.use_cond = bool(self.hybrid and r.get("conditions") and r.conditions.enabled)
         self.weighted = r.get("doc_agg") is not None
-        if self.use_cond or self.weighted:
+        self.score_fusion = self.hybrid and r.fusion.get("method", "rrf") == "score"
+        if self.use_cond or self.weighted or self.score_fusion:
             self.doc_names, self.chunk_doc = np.unique(self.dense_ids, return_inverse=True)
+        if self.score_fusion:  # BM25 청크의 문서 번호(doc_names 순서)
+            self.bm25_doc = np.searchsorted(self.doc_names, self.bm25_ids)
         if self.use_cond:
             self.cond_index = self._condition_index()
 
@@ -198,7 +219,8 @@ class Retriever:
         """RRF에 넣는 목록(dense, bm25, conditions, dense_rw, bm25_rw 순), 최다 일치 문서,
         dense 전체 정렬 여부.
 
-        dense 단독이면 dense 목록 하나다.
+        dense 단독이면 dense 목록 하나다. fusion.method가 score면 dense·BM25 두 목록 대신
+        정규화 점수로 합친 cc 목록 하나를 둔다(EXP-015).
 
         Args:
             row: 질의와 dense 청크(dense_ids 순서)의 점수.
@@ -213,8 +235,10 @@ class Retriever:
         matched: set[str] = set()
         if not self.hybrid:
             return named, matched, full
-        named["bm25"] = rank_docs(self.bm25.scores(tokens), self.bm25_ids, self.depth,
-                                  r.chunk_pool)
+        bm25_chunk = self.bm25.scores(tokens)
+        named["bm25"] = rank_docs(bm25_chunk, self.bm25_ids, self.depth, r.chunk_pool)
+        if self.score_fusion:
+            named = {"cc": self._convex(named, row, bm25_chunk, dense_scores)}
         counts = self.cond_index.match_counts(conditions) if self.use_cond else {}
         if counts and max(counts.values()) >= r.conditions.min_fields:
             if self.weighted:  # doc_names는 dense_ids의 np.unique 결과다
@@ -235,6 +259,21 @@ class Retriever:
                 named["bm25_rw"] = rank_docs(self.bm25.scores(rw_tokens), self.bm25_ids,
                                              self.depth, r.chunk_pool)
         return named, matched, full
+
+    def _convex(self, named: dict[str, list[str]], row: np.ndarray, bm25_chunk: np.ndarray,
+                dense_scores: np.ndarray | None) -> list[str]:
+        """dense·BM25 목록의 문서 점수(청크 최댓값)를 목록마다 min-max로 정규화해 합친다."""
+        n = len(self.doc_names)
+        if dense_scores is None:
+            dense_scores = np.full(n, -np.inf, dtype=row.dtype)
+            np.maximum.at(dense_scores, self.chunk_doc, row)
+        bm25_scores = np.full(n, -np.inf, dtype=bm25_chunk.dtype)
+        np.maximum.at(bm25_scores, self.bm25_doc, bm25_chunk)
+        pos = np.searchsorted(self.doc_names, named["dense"] + named["bm25"])
+        k = len(named["dense"])
+        dense = minmax(named["dense"], dense_scores[pos[:k]].tolist())
+        bm25 = minmax(named["bm25"], bm25_scores[pos[k:]].tolist())
+        return convex(dense, bm25, self.r.fusion.alpha)
 
     def _rrf_scores(self, named: dict[str, list[str]]) -> dict[str, float]:
         weights = self.r.fusion.get("weights")  # [dense, BM25, 조건 목록]
