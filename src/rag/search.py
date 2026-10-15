@@ -18,6 +18,7 @@ from rag.conditions import build_extractor
 from rag.eval.metrics import load_gold
 from rag.index import ROOT, encoder, load_cfg, load_model
 from rag.retrieve import Retriever, chunks_by_doc, conditions_first
+from rag.rewrite import needs_rewrite, rewrite_queries, signals
 
 LAYERS = {"dev-small": "dev-small", "full": "dev-full"}  # index.scope → 평가 층
 
@@ -139,6 +140,26 @@ def write_run(path: Path, rows: list[dict], overwrite: bool) -> str:
                          overwrite)
 
 
+def rewrite_ranks(cfg, ret, ranked, gated, qids, query_texts, q_emb, tokens, conds,
+                  finish) -> None:
+    """판단 규칙에 걸린 질의(gated, qids 위치)를 재작성하고, 재작성 질의의 목록을 더한 순위로
+    ranked를 바꾼다(EXP-013). 재작성이 비거나 형식이 틀린 질의는 원 순위를 둔다."""
+    rewrites = rewrite_queries(cfg, {qids[j]: query_texts[j] for j in gated})
+    ok = [j for j in gated if rewrites[qids[j]] is not None]
+    print(f"재작성 대상 {len(gated)}/{len(qids)}건({len(gated) / len(qids):.1%}), "
+          f"형식 통과 {len(ok)}건")
+    if not ok:
+        return
+    rw_texts = [rewrites[qids[j]] for j in ok]
+    rw_emb = embed_queries(cfg, rw_texts)
+    rw_tokens = ret.query_tokens(rw_texts)
+    for k, j in enumerate(ok):
+        row = ret.chunk_emb @ q_emb[j]
+        docs, matched, _ = ret.candidates(row, tokens[j], conds.get(qids[j]),
+                                          rewrite=(ret.chunk_emb @ rw_emb[k], rw_tokens[k]))
+        ranked[qids[j]] = finish(qids[j], docs, matched)
+
+
 def search(cfg) -> None:
     files = query_files(cfg)
     ret = Retriever(cfg)
@@ -166,25 +187,41 @@ def search(cfg) -> None:
         with (ROOT / cfg.paths.rerank_scores).open(encoding="utf-8") as f:
             for x in map(json.loads, f):
                 rerank_scores.setdefault(x["qid"], {})[x["doc_id"]] = x["score"]
-    rows, fallbacks = [], 0
+    use_rewrite = bool(r.get("rewrite") and r.rewrite.enabled)
+    if use_rewrite and (export_pairs or use_rerank):
+        raise SystemExit("retriever.rewrite는 재정렬(rerank-pairs, rerank)과 함께 쓰지 않는다")
+
+    def finish(qid: str, docs: list[str], matched: set[str]) -> list[str]:
+        if ret.hybrid:
+            if use_rerank:
+                docs = rerank_top(docs, rerank_scores[qid], r.rerank.depth)
+            docs = conditions_first(docs, matched)[: r.top_k]
+        return docs
+
+    ranked, gated, fallbacks = {}, [], 0
     for start in range(0, len(qids), r.query_batch):
         scores = q_emb[start : start + r.query_batch] @ ret.chunk_emb.T
         for j, row in enumerate(scores, start):
-            docs, matched, full = ret.candidates(row, tokens[j] if tokens else None,
-                                                 conds.get(qids[j]))
+            named, matched, full = ret.lists(row, tokens[j] if tokens else None,
+                                             conds.get(qids[j]))
             fallbacks += full
-            if ret.hybrid:
-                if export_pairs:
-                    picks += [(qids[j], d, int(doc_chunks[d][np.argmax(row[doc_chunks[d]])]))
-                              for d in docs[: r.rerank.depth]]
-                    continue
-                if use_rerank:
-                    docs = rerank_top(docs, rerank_scores[qids[j]], r.rerank.depth)
-                docs = conditions_first(docs, matched)[: r.top_k]
-            rows += [{"qid": qids[j], "rank": i, "doc_id": d} for i, d in enumerate(docs, 1)]
+            docs = ret.fuse(named)
+            if ret.hybrid and export_pairs:
+                picks += [(qids[j], d, int(doc_chunks[d][np.argmax(row[doc_chunks[d]])]))
+                          for d in docs[: r.rerank.depth]]
+                continue
+            if use_rewrite and needs_rewrite(
+                    signals(named, row, ret.chunk_doc, len(ret.doc_names), r.rewrite.gate),
+                    r.rewrite.gate):
+                gated.append(j)
+            ranked[qids[j]] = finish(qids[j], docs, matched)
     if export_pairs:
         write_pairs(cfg, ret.index_dir, picks, texts)
         return
+    if use_rewrite:
+        rewrite_ranks(cfg, ret, ranked, gated, qids, query_texts, q_emb, tokens, conds, finish)
+    rows = [{"qid": q, "rank": i, "doc_id": d}
+            for q in qids for i, d in enumerate(ranked[q], 1)]
     # dense는 기존 이름을 유지해 기준 순위 파일과 같은 경로를 쓴다. run_name이 있으면 그 이름을 쓴다
     name = r.get("run_name") or r.type
     kind = "" if name == "dense" else f"-{name}"

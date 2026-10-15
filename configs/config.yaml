@@ -47,6 +47,8 @@ paths:
   query_emb_multidoc: data/index/${embedding.slug}/queries-multidoc.npz
   queries_multidoc_vm: data/multidoc/queries_g3.vm.jsonl
   runs_dir: data/runs
+  # 질의 재작성 응답(EXP-013). 만든 기준을 함께 적고 읽을 때 대조한다. 재작성기·지시마다 파일 하나
+  rewrites: data/rewrites/${rewriter.name}-${rewriter.prompt.version}.json
   # 생성 호출 기록. 호출마다 JSON 하나
   generate_dir: data/runs/generate
   # multi-doc 후보 집합과 시작 묶음 (docs/slices/07-bundles.md)
