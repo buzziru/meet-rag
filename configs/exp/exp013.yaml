@@ -1,6 +1,6 @@
 # @package _global_
 # EXP-013 검색 신뢰도가 낮은 질의만 LLM으로 재작성해 RRF 목록을 더함 (H8, docs/experiments/EXP-013.md).
-# 기준 EXP-011 설정(D-29) 위에 더한다. 구현은 다음 세션(코드 없음, 초안)
+# 기준 EXP-011 설정(D-29) 위에 더한다. 재작성기는 rewriter=gemma_google로 바꾼다
 defaults:
   - exp011
   - /rewriter: gemma_openrouter

@@ -1,4 +1,9 @@
 # 질의 재작성기: Gemma 4 31B, Google AI Studio 무료 쿼터 (배포용, EXP-013). 모델·경로만 다르고 지시는 같다
+defaults:
+  - prompt: rw_v1
+  - _self_
+
+name: google  # 재작성 파일 이름(paths.rewrites)
 base_url: https://generativelanguage.googleapis.com/v1beta/openai/
 api_key_env: GOOGLE_API_KEY
 model: models/gemma-4-31b-it
@@ -7,4 +12,4 @@ params:
   temperature: 0.0
   max_tokens: 2048
 timeout: 60
-prompt_version: rw_v1
+concurrency: 1  # 무료 쿼터 TPM이 병목이라 하나씩 보낸다

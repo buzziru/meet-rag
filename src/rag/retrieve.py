@@ -2,7 +2,7 @@
 
 질의 하나의 dense 점수 행, BM25 토큰, 질의 조건을 받아 문서 순위를 낸다. 설정은 cfg.retriever다.
 재정렬 점수 파일과 후보 쌍 내보내기(EXP-005·006)는 평가 전용이라 rag.search에 있다.
-규칙은 docs/slices/05-retrieve.md(dense), EXP-001·003·004·007·008·010·011 문서.
+규칙은 docs/slices/05-retrieve.md(dense), EXP-001·003·004·007·008·010·011·013 문서.
 """
 
 import json
@@ -182,9 +182,21 @@ class Retriever:
         """BM25 질의 토큰. hybrid가 아니면 None."""
         return self.bm25.query_ids(texts) if self.hybrid else None
 
+    def _dense(self, row: np.ndarray) -> tuple[list[str], bool, np.ndarray | None]:
+        """dense 문서 목록, 전체 정렬 여부, 가중 집계 문서 점수(doc_agg가 없으면 None)."""
+        if self.weighted:
+            scores = weighted_doc_scores(row, self.chunk_doc, len(self.doc_names),
+                                         list(self.r.doc_agg.weights))
+            return top_docs(scores, self.doc_names, self.depth), False, scores
+        docs, full = rank_with_pool(row, self.dense_ids, self.depth, self.r.chunk_pool)
+        return docs, full, None
+
     def lists(self, row: np.ndarray, tokens: list[int] | None = None,
-              conditions: dict | None = None) -> tuple[dict[str, list[str]], set[str], bool]:
-        """RRF에 넣는 목록(dense, bm25, conditions 순), 최다 일치 문서, dense 전체 정렬 여부.
+              conditions: dict | None = None,
+              rewrite: tuple[np.ndarray, list[int]] | None = None,
+              ) -> tuple[dict[str, list[str]], set[str], bool]:
+        """RRF에 넣는 목록(dense, bm25, conditions, dense_rw, bm25_rw 순), 최다 일치 문서,
+        dense 전체 정렬 여부.
 
         dense 단독이면 dense 목록 하나다.
 
@@ -192,15 +204,11 @@ class Retriever:
             row: 질의와 dense 청크(dense_ids 순서)의 점수.
             tokens: BM25 질의 토큰(hybrid).
             conditions: 질의 조건(조건 목록을 쓸 때).
+            rewrite: 재작성 질의의 (dense 점수 행, BM25 토큰). retriever.rewrite.lists의 목록을
+                원 질의 목록 뒤에 더한다(EXP-013). 조건은 원 질의 것만 쓴다.
         """
         r = self.r
-        full = False
-        if self.weighted:
-            dense_scores = weighted_doc_scores(row, self.chunk_doc, len(self.doc_names),
-                                               list(r.doc_agg.weights))
-            docs = top_docs(dense_scores, self.doc_names, self.depth)
-        else:
-            docs, full = rank_with_pool(row, self.dense_ids, self.depth, r.chunk_pool)
+        docs, full, dense_scores = self._dense(row)
         named = {"dense": docs}
         matched: set[str] = set()
         if not self.hybrid:
@@ -219,6 +227,13 @@ class Retriever:
             if r.conditions.get("filter") == "best":  # 맞은 필드 수가 가장 많은 문서
                 top = max(counts.values())
                 matched = {self.doc_names[i] for i, c in counts.items() if c == top}
+        if rewrite is not None:
+            rw_row, rw_tokens = rewrite
+            if "dense" in r.rewrite.lists:
+                named["dense_rw"] = self._dense(rw_row)[0]
+            if "bm25" in r.rewrite.lists:
+                named["bm25_rw"] = rank_docs(self.bm25.scores(rw_tokens), self.bm25_ids,
+                                             self.depth, r.chunk_pool)
         return named, matched, full
 
     def _rrf_scores(self, named: dict[str, list[str]]) -> dict[str, float]:
@@ -226,25 +241,30 @@ class Retriever:
         return rrf_scores(list(named.values()), self.r.fusion.rrf_k,
                           list(weights) if weights else None)
 
-    def candidates(self, row: np.ndarray, tokens: list[int] | None = None,
-                   conditions: dict | None = None) -> tuple[list[str], set[str], bool]:
-        """재정렬 전 후보 순위, 최다 일치 문서, dense 전체 정렬 여부.
-
-        dense 단독이면 상위 top_k 문서, hybrid면 RRF로 합친 후보 전체다.
-        """
-        named, matched, full = self.lists(row, tokens, conditions)
+    def fuse(self, named: dict[str, list[str]]) -> list[str]:
+        """lists의 목록을 합친 후보 순위. dense 단독이면 dense 목록, hybrid면 RRF 후보 전체다."""
         if not self.hybrid:
-            return named["dense"], matched, full
+            return named["dense"]
         score = self._rrf_scores(named)
-        return sorted(score, key=score.__getitem__, reverse=True), matched, full
+        return sorted(score, key=score.__getitem__, reverse=True)
+
+    def candidates(self, row: np.ndarray, tokens: list[int] | None = None,
+                   conditions: dict | None = None,
+                   rewrite: tuple[np.ndarray, list[int]] | None = None,
+                   ) -> tuple[list[str], set[str], bool]:
+        """재정렬 전 후보 순위(fuse), 최다 일치 문서, dense 전체 정렬 여부."""
+        named, matched, full = self.lists(row, tokens, conditions, rewrite)
+        return self.fuse(named), matched, full
 
     def explain(self, row: np.ndarray, tokens: list[int] | None = None,
-                conditions: dict | None = None) -> tuple[list[str], list[dict]]:
+                conditions: dict | None = None,
+                rewrite: tuple[np.ndarray, list[int]] | None = None,
+                ) -> tuple[list[str], list[dict]]:
         """상위 top_k 문서와 문서마다 단계별 기록(목록별 순위, RRF 점수, 최다 일치 여부).
 
         순위는 rank와 같다. 실패·성공 원인을 나중에 나눠 보려고 단계별 값을 남긴다(PR #71 코멘트).
         """
-        named, matched, _ = self.lists(row, tokens, conditions)
+        named, matched, _ = self.lists(row, tokens, conditions, rewrite)
         if not self.hybrid:
             return named["dense"], [{"dense_rank": i} for i in range(1, len(named["dense"]) + 1)]
         score = self._rrf_scores(named)
