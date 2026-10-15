@@ -24,15 +24,14 @@ from rag.retrieve import Retriever, chunks_by_doc
 from rag.search import query_embeddings, query_files, query_list, read_texts
 
 META = ["date", "committee_name", "meeting_name", "meeting_number", "session_number", "agenda"]
-WIDTH = 2000  # 작업자가 한 번에 읽는 줄 길이 상한(multidoc.check.max_line_chars와 같은 이유)
 
 
-def rank_type(ranks: dict[str, int | None], top: int) -> str:
-    """결합 전 목록별 정답 순위로 실패를 나눈다(24_01과 같은 기준)."""
+def rank_type(ranks: dict[str, int | None], top: int, near: int) -> str:
+    """결합 전 목록별 정답 순위로 실패를 나눈다(24_01과 같은 기준: top·20)."""
     best = min((r for r in ranks.values() if r), default=None)
     if best is not None and best <= top:
         return "결합 손실"
-    if best is not None and best <= 20:
+    if best is not None and best <= near:
         return "근접"
     return "전 목록 실패"
 
@@ -56,8 +55,8 @@ def prompt(name: str):
     return OmegaConf.load(ROOT / "configs" / "g2" / "prompt" / f"{name}.yaml")
 
 
-def doc_block(doc: dict, chunk: str, agenda_chars: int) -> str:
-    return f"{meta_text(doc, agenda_chars)}\n\n{wrap_lines(chunk, WIDTH)}"
+def doc_block(doc: dict, chunk: str, g) -> str:
+    return f"{meta_text(doc, g.agenda_chars)}\n\n{wrap_lines(chunk, g.max_line_chars)}"
 
 
 def write_input(path, p, **fields) -> None:
@@ -121,7 +120,7 @@ def prepare(cfg) -> None:
         picks[q] = {d: int(by_doc[d][np.argmax(row[by_doc[d]])]) for d in shown}
         rows[q] = {"qid": q, "gold": g_doc, "final_rank": final, "list_ranks": ranks,
                    "fused_rank": fused.index(g_doc) + 1 if g_doc in fused else None,
-                   "rank_type": rank_type(ranks, g.top),
+                   "rank_type": rank_type(ranks, g.top, g.near),
                    "same_meeting_top1": docs[top[q][0]]["conference_number"]
                    == docs[g_doc]["conference_number"],
                    "top": top[q][: g.top]}
@@ -134,14 +133,14 @@ def prepare(cfg) -> None:
     for q in miss:
         r, gd = rows[q], docs[rows[q]["gold"]]
         write_input(out / "in1" / f"{q}.md", p1, qid=q, query=texts[q],
-                    question_comment=wrap_lines(labels[q], WIDTH),
+                    question_comment=wrap_lines(labels[q], g.max_line_chars),
                     document=f"{meta_text(gd, g.agenda_chars)}\n\n"
-                             f"{wrap_lines(gd['context'], WIDTH)}")
+                             f"{wrap_lines(gd['context'], g.max_line_chars)}")
         top_text = "\n\n".join(
-            f"### {i}위\n{doc_block(docs[d], chunks[picks[q][d]], g.agenda_chars)}"
+            f"### {i}위\n{doc_block(docs[d], chunks[picks[q][d]], g)}"
             for i, d in enumerate(r["top"], 1))
         write_input(out / "in2" / f"{q}.md", p2, qid=q, query=texts[q],
-                    gold=doc_block(gd, chunks[picks[q][r["gold"]]], g.agenda_chars),
+                    gold=doc_block(gd, chunks[picks[q][r["gold"]]], g),
                     gold_rank=r["final_rank"] or f"{rcfg.retriever.top_k}위 밖", top=top_text)
     (out / "ids.txt").write_text("\n".join(miss) + "\n", encoding="utf-8")
     with (out / "rows.jsonl").open("w", encoding="utf-8", newline="\n") as f:

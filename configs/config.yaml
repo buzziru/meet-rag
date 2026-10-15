@@ -29,6 +29,8 @@ g3_judge:
 g2:
   exp: exp014  # 오답을 정하는 기준 설정(D-32)
   top: 5
+  near: 20  # 결합 전 목록의 최선 순위가 top 밖 near 안이면 근접(24_01과 같은 경계)
+  max_line_chars: 2000  # 작업자 입력의 줄 길이 상한(multidoc.check.max_line_chars와 같은 이유)
   agenda_chars: 300  # 작업자 입력의 안건 글자 수 상한. 안건이 수만 자인 문서가 있다
   stage1: s1_v1  # configs/g2/prompt/의 지시 파일 이름
   stage2: s2_v1

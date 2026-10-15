@@ -10,7 +10,7 @@ from rag.g2 import final_class, rank_type
     ({"dense": None, "bm25": None}, "전 목록 실패"),
 ])
 def test_rank_type_uses_best_list_rank(ranks, expected):
-    assert rank_type(ranks, 5) == expected
+    assert rank_type(ranks, 5, 20) == expected
 
 
 @pytest.mark.parametrize("identifiable, other, expected", [
