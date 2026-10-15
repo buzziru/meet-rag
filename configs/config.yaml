@@ -24,6 +24,14 @@ g3_judge:
   prompt_version: scope_v2
   max_chars: 60000
   max_queries: 10
+# G2 기준 오답 질의 검토(PLAN G2, 사용자 결정 2026-10-15). 기준 설정의 dev-full 상위 top개 실패 전부를
+# 에이전트가 두 단계(1: 질의와 정답 문서만, 2: 검색 상위 top개와 대조)로 판단하고 사람이 확인한다
+g2:
+  exp: exp014  # 오답을 정하는 기준 설정(D-32)
+  top: 5
+  agenda_chars: 300  # 작업자 입력의 안건 글자 수 상한. 안건이 수만 자인 문서가 있다
+  stage1: s1_v1  # configs/g2/prompt/의 지시 파일 이름
+  stage2: s2_v1
 
 # 저장소 루트 기준 상대경로. 쓰는 쪽에서 루트와 결합한다
 paths:
@@ -68,6 +76,8 @@ paths:
   multidoc_judge_in: data/multidoc/judge_in  # G3 재판정 입력(서브에이전트가 읽는다)
   multidoc_judge_out: data/multidoc/judge_out  # G3 재판정 출력(서브에이전트가 쓴다)
   multidoc_judge_jobs: data/multidoc/judge_jobs.jsonl
+  # G2 입력(in1·in2), 작업자 출력(out1·out2), 검수 파일(rag.g2)
+  g2_dir: data/review/g2
 
 # 화자 이름 정규화(S10, D-20). 공백으로 나뉜 이름의 마지막 토막이 이 직함으로 끝나면 첫 토막을 이름으로 둔다
 ingest:
