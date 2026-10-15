@@ -1,6 +1,6 @@
 import pytest
 
-from rag.chunking import chunk_spans
+from rag.chunking import chunk_spans, pack_units, sentence_units
 
 
 def offsets(n, width=3):
@@ -36,3 +36,20 @@ def test_exact_fit_has_no_trailing_chunk():
 def test_overlap_must_be_smaller_than_chunk():
     with pytest.raises(ValueError):
         chunk_spans(offsets(5), 4, 4)
+
+
+def test_sentence_units_split_at_sentence_starts_and_long_sentences():
+    offs = offsets(10)  # 토큰 i는 문자 4i에서 시작
+    assert sentence_units(offs, [0, 8, 16], 8) == [(0, 2), (2, 4), (4, 10)]
+    assert sentence_units(offs, [0, 8], 3) == [(0, 2), (2, 5), (5, 8), (8, 10)]
+    # 문장 밖 공백에서 시작한 토큰은 앞 문장에 붙는다
+    assert sentence_units(offs, [0, 9], 8) == [(0, 3), (3, 10)]
+
+
+def test_pack_units_respects_limit_and_sentence_overlap():
+    units = [(0, 3), (3, 5), (5, 9), (9, 10), (10, 14)]  # 길이 3, 2, 4, 1, 4
+    spans = pack_units(units, 6, 2)
+    assert spans == [(0, 5), (3, 9), (9, 14)]  # 두 번째는 앞 청크 끝 문장(길이 2)을 다시 넣는다
+    assert all(b - a <= 6 for a, b in spans)
+    assert pack_units(units, 6, 0) == [(0, 5), (5, 10), (10, 14)]
+    assert pack_units([(0, 4)], 6, 2) == [(0, 4)]

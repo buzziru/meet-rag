@@ -1,0 +1,11 @@
+# @package _global_
+# EXP-012 문장 경계 청킹 (H4, docs/experiments/EXP-012.md). 기준 EXP-011 위에 512·256 청킹을 문장 경계로 바꾼다.
+# 실행: (Colab) rag.index +exp=exp012 [chunking.chunk_tokens=256 chunking.overlap_tokens=32] → (로컬) rag.search +exp=exp012
+defaults:
+  - exp011
+  - override /chunking: sentence
+  - _self_
+
+retriever:
+  extra_chunks:
+    - {name: sentence, chunk_tokens: 256, overlap_tokens: 32}
