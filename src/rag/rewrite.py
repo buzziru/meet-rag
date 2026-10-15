@@ -62,7 +62,7 @@ def basis(cfg) -> dict:
 
 
 class Rewriter:
-    """질의 하나를 재작성 지시로 한 번 호출한다. 검색 결과는 넘기지 않는다."""
+    """질의 하나를 재작성 지시로 한 번 호출한다. 지시 틀이 요구하면 발췌 같은 값을 함께 넘긴다."""
 
     def __init__(self, cfg):
         w = self.w = cfg.rewriter
@@ -73,15 +73,19 @@ class Rewriter:
         self.meta = {"rewriter": w.name, "model": w.model, "reasoning": w.reasoning,
                      "prompt_version": w.prompt.version}
 
-    def call(self, query: str, qid: str | None = None) -> dict:
-        """재작성 응답 원문, 호출 시간(초), 토큰 사용량. 추적에는 qid와 재작성기 설정을 붙인다."""
-        return self._traced(query, langsmith_extra={"metadata": {**self.meta, "qid": qid}})
+    def call(self, query: str, qid: str | None = None, **fields: str) -> dict:
+        """재작성 응답 원문, 호출 시간(초), 토큰 사용량. 추적에는 qid와 재작성기 설정을 붙인다.
+
+        fields는 지시의 user 틀에 질의와 함께 넣는 값이다(예: H8 사전 확인의 검색 발췌 passages).
+        """
+        return self._traced(query, langsmith_extra={"metadata": {**self.meta, "qid": qid}},
+                            **fields)
 
     @traceable(name="rewrite")
-    def _traced(self, query: str) -> dict:
+    def _traced(self, query: str, **fields: str) -> dict:
         p = self.w.prompt
         messages = [{"role": "system", "content": p.system},
-                    {"role": "user", "content": p.user.format(query=query)}]
+                    {"role": "user", "content": p.user.format(query=query, **fields)}]
         start = time.perf_counter()
         r = self.client.chat.completions.create(
             model=self.w.model, messages=messages, extra_body=self.extra,

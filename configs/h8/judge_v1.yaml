@@ -1,0 +1,14 @@
+# H8 사전 확인 판단기(notebooks/28_01). Jev Decisions API에 noul 질문 하나를 보내, 1차 검색 상위 5개 문서의
+# 발췌(문서마다 질의와 dense 점수가 가장 높은 청크)로 질의에 답할 수 있을 확률을 받는다. 정답 라벨은 보지 않는다.
+# 확률이 rewrite_below 미만이면 재작성 대상이다(사용자 결정 2026-10-15, 라벨을 보기 전에 정함)
+version: judge_v1
+url: https://openrouter.ai/api/alpha/decisions
+model: typesafe/jev-1.13
+api_key_env: OPENROUTER_API
+timeout: 60
+workers: 8
+rewrite_below: 0.5
+instructions: 검색 발췌에 질의가 묻는 것에 답할 근거가 있는가?
+criteria:
+  "true": 발췌 하나 이상이 질의가 묻는 대상(법안, 사업, 기관, 인물, 회의)을 다루고, 질의의 핵심 물음에 답할 내용을 담고 있다.
+  "false": 어느 발췌도 질의의 핵심 물음에 답하지 않는다. 다른 대상을 다루거나, 주제만 같고 묻는 내용이 없다.
