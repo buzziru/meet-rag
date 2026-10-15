@@ -2,7 +2,8 @@
 
 재작성 여부는 1차 검색 결과(dense·BM25 목록, dense 점수)로만 정하고 정답 라벨은 쓰지 않는다.
 재작성 응답은 만든 기준(모델, 경로, 사고 과정, 지시, 판단 규칙)과 함께 paths.rewrites에
-남겨 다시 쓰고, 읽을 때 지금 config와 다르면 멈춘다. 명세는 docs/experiments/EXP-013.md.
+남겨 다시 쓰고, 읽을 때 지금 config와 다르면 멈춘다. 호출은 LangSmith로 추적한다(입력 메시지,
+출력 원문, 토큰, 지연). 명세는 docs/experiments/EXP-013.md.
 """
 
 import hashlib
@@ -12,6 +13,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
+from langsmith import traceable
+from langsmith.run_trees import get_cached_client
+from langsmith.wrappers import wrap_openai
 from omegaconf import OmegaConf
 from openai import OpenAI
 
@@ -62,12 +66,19 @@ class Rewriter:
 
     def __init__(self, cfg):
         w = self.w = cfg.rewriter
-        self.client = OpenAI(base_url=w.base_url, api_key=os.environ[w.api_key_env],
-                             timeout=w.timeout)
+        self.client = wrap_openai(OpenAI(base_url=w.base_url, api_key=os.environ[w.api_key_env],
+                                         timeout=w.timeout))
         # OpenRouter는 reasoning으로 사고 과정을 끈다. Google 경로는 끌 수 없어 보내지 않는다(D-11)
         self.extra = None if w.reasoning else {"reasoning": {"enabled": False}}
+        self.meta = {"rewriter": w.name, "model": w.model, "reasoning": w.reasoning,
+                     "prompt_version": w.prompt.version}
 
-    def call(self, query: str) -> dict:
+    def call(self, query: str, qid: str | None = None) -> dict:
+        """재작성 응답 원문, 호출 시간(초), 토큰 사용량. 추적에는 qid와 재작성기 설정을 붙인다."""
+        return self._traced(query, langsmith_extra={"metadata": {**self.meta, "qid": qid}})
+
+    @traceable(name="rewrite")
+    def _traced(self, query: str) -> dict:
         p = self.w.prompt
         messages = [{"role": "system", "content": p.system},
                     {"role": "user", "content": p.user.format(query=query)}]
@@ -104,10 +115,11 @@ def rewrite_queries(cfg, queries: dict[str, str]) -> dict[str, str | None]:
         rw = Rewriter(cfg)
         try:
             with ThreadPoolExecutor(cfg.rewriter.concurrency) as pool:
-                futures = {pool.submit(rw.call, queries[q]): q for q in todo}
+                futures = {pool.submit(rw.call, queries[q], q): q for q in todo}
                 for f in as_completed(futures):
                     items[futures[f]] = f.result()
         finally:  # 호출이 중간에 실패해도 받은 응답은 남긴다
+            get_cached_client().flush()
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps({"basis": basis(cfg), "items": items},
                                        ensure_ascii=False, indent=1), encoding="utf-8")

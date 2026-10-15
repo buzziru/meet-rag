@@ -52,7 +52,7 @@ def test_rewrite_queries_calls_only_missing(tmp_path, monkeypatch):
         def __init__(self, cfg):
             pass
 
-        def call(self, query):
+        def call(self, query, qid=None):
             calls.append(query)
             return {"raw": f"{query} 재작성", "seconds": 0.0, "usage": None}
 
