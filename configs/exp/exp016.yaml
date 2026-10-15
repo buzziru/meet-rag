@@ -1,0 +1,13 @@
+# @package _global_
+# EXP-016 점수 기반 결합에서 조건 목록을 빼고 최다 일치 필터만 둠 (H16 B안, docs/experiments/EXP-016.md).
+# 기준 EXP-014(D-32), EXP-015 설정 위에 바꾼다.
+# 실행: rag.search +exp=exp016
+defaults:
+  - exp015
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter-law-ms256-cc-nocl  # EXP-015 순위 파일을 덮어쓰지 않는다
+  conditions:
+    fuse: false  # 조건 목록을 결합에 넣지 않는다. 최다 일치 필터(filter: best)는 그대로 둔다
+    # fusion.weights([결합, 조건])는 조건 목록이 없어 쓰이지 않는다
