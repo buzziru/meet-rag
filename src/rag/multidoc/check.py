@@ -3,7 +3,7 @@
 명세는 docs/slices/08-multidoc-queries.md, 08c-checker-agent.md. 검사 입력에는 질의와 후보 집합
 전체 원문만 넣고 생성 쪽 시작 묶음·기대 답·근거는 넣지 않는다. 검사는 multidoc-checker
 에이전트가 check_in 파일을 읽고 check_out에 쓴다. 진행 상태는 파일 존재로 정해져 중단 뒤
-같은 명령으로 이어 간다.
+같은 명령으로 이어 간다. 인용 의미 판정(Jev) 요청은 LangSmith로 추적한다.
 
     uv run python -m rag.multidoc.check [--prepare | --dry-run] [hydra override...]
 """
@@ -22,6 +22,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from hydra import compose, initialize_config_dir
+from langsmith import traceable
+from langsmith.run_trees import get_cached_client
 from omegaconf import OmegaConf
 from rapidfuzz import fuzz, process
 
@@ -89,8 +91,11 @@ def fill_quote_checks(rec: dict, contexts: dict[str, str], s, ask) -> int:
     return len(todo)
 
 
+@traceable(run_type="llm", name="jev_quote",
+           process_inputs=lambda i: {"quote": i["quote"], "passages": i["passages"]})
 def ask_jev(s, prompt, api_key: str, quote: str, passages: list[str]) -> dict:
-    """Jev Decisions API에 noul 질문 하나를 보내 같은 의미일 확률을 받는다."""
+    """Jev Decisions API에 noul 질문 하나를 보내 같은 의미일 확률을 받는다. 추적 입력에는 인용과
+    후보 대목만 남긴다(API 키를 남기지 않는다)."""
     body = {"model": s.model, "state": {"인용": quote, "후보 대목": passages},
             "questions": {"q": {"type": "noul", "instructions": prompt.instructions,
                                 "criteria": OmegaConf.to_container(prompt.criteria)}}}
@@ -337,8 +342,11 @@ def main() -> None:
     load_dotenv(ROOT / ".env")
     quote_prompt = load_prompt(s.prompt_version)[0]
 
-    def ask(quote, passages):
-        return ask_jev(s, quote_prompt, os.environ[c.api_key_env], quote, passages)
+    def asker(pool_id):
+        """후보 집합 하나의 ask. 추적 메타데이터에 pool_id와 판정 설정을 붙인다."""
+        meta = {"pool_id": pool_id, "model": s.model, "prompt_version": s.prompt_version}
+        return lambda quote, passages: ask_jev(s, quote_prompt, os.environ[c.api_key_env], quote,
+                                               passages, langsmith_extra={"metadata": meta})
 
     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
                             text=True).stdout.strip()
@@ -369,7 +377,7 @@ def main() -> None:
             rec["response"] = json.dumps(out, ensure_ascii=False)
             rec["elements"] = to_doc_ids(out["elements"], p["doc_ids"])
             save(rec)  # Jev 판정 전에 남겨, Jev가 실패해도 다음 실행 재판정에서 이어 간다
-            fill_quote_checks(rec, contexts, s, ask)
+            fill_quote_checks(rec, contexts, s, asker(p["pool_id"]))
             rec["verdict"] = judge(gen, rec["elements"], out["answerable"], p["doc_ids"],
                                    contexts, max_gold, p["seed_doc_ids"],
                                    probs=quote_probs(rec, s), min_prob=s.min_prob)
@@ -388,13 +396,14 @@ def main() -> None:
     records = [read_json(f) for f in sorted(check_dir.glob("*.json"))]
     for r in records:
         if r["gen"]["status"] == "ok":
-            added = fill_quote_checks(r, contexts, s, ask)
+            added = fill_quote_checks(r, contexts, s, asker(r["pool_id"]))
             verdict = judge(r["gen"], r["elements"], json.loads(r["response"])["answerable"],
                             r["pool_doc_ids"], contexts, max_gold, seeds[r["pool_id"]],
                             probs=quote_probs(r, s), min_prob=s.min_prob)
             if added or verdict != r.get("verdict"):
                 r["verdict"] = verdict
                 save(r)
+    get_cached_client().flush()
     with (ROOT / paths.multidoc_queries).open("w", encoding="utf-8", newline="\n") as f:
         for r in records:
             if r["verdict"]["passed"]:
