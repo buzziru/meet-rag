@@ -62,7 +62,7 @@ def basis(cfg) -> dict:
 
 
 class Rewriter:
-    """질의 하나를 재작성 지시로 한 번 호출한다. 검색 결과는 넘기지 않는다."""
+    """질의 하나를 재작성 지시로 한 번 호출한다. 지시 틀이 요구하면 발췌 같은 추가 값을 함께 넘긴다."""
 
     def __init__(self, cfg):
         w = self.w = cfg.rewriter
