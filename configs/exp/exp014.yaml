@@ -1,0 +1,11 @@
+# @package _global_
+# EXP-014 RRF k를 줄여 목록 상위 순위의 비중을 높임 (H16, docs/experiments/EXP-014.md). 기준 EXP-011 위에 바꾼다.
+# 실행: rag.search +exp=exp014
+defaults:
+  - exp011
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter-law-ms256-k20  # EXP-011 순위 파일을 덮어쓰지 않는다
+  fusion:
+    rrf_k: 20  # 60 → 20. 한 목록 1위만 받은 문서가 두 목록 모두 22위 밖인 문서를 이긴다(결정 사항 1)

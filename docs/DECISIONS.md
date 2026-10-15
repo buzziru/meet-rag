@@ -316,3 +316,11 @@
 - 영향: D-07·D-10의 전송 범위 제한을 대신한다. D-07의 "test 질의는 1회 실행 때도 로컬에서 임베딩한다"는 노출 우려에서 나온 조항이라 함께 효력을 잃고, test 1회 실행의 처리 위치는 그 실행 때 사용자 지시를 따른다. H8(질의 재작성)은 dev 질의를 OpenRouter로 보내 실행할 수 있다. 하네스(protocol-guard P6, meet-rag E6의 업로드 검사 서술, protocol-auditor)의 평가 질의 전송 점검은 test 질의 전송만 보도록 F 흐름에서 맞춘다
 - 날짜: 2026-10-14
 
+
+## D-32 RRF k를 20으로 바꾼다 (EXP-014 보류, SPEC 판정 규칙의 예외)
+- 결정: 검색 기준을 EXP-014 설정(EXP-011 설정에서 `retriever.fusion.rrf_k` 60 → 20)으로 바꾼다(사용자 결정 2026-10-15). SPEC 판정은 보류 그대로 두고 D-28의 범위로 예외 채택한다. 실행은 `rag.search +exp=exp014`, 생성은 `rag.generate +exp=exp014`
+- 새 기준 순위: single-doc `data/runs/snowflake-ko-fixed-512-64-hybrid-cond-filter-law-ms256-k20-dev-full.csv`(SHA-256 `084bc83e39a59ddc70b8cc1303c3d64b8169269ccaef0484976741fa123edc30`), multi-doc `…-ms256-k20-multidoc.csv`(SHA-256 `951e68bf810e1dfbc8ffd487b35abc4f91c694cefe16369f787c02ea784d03d6`)
+- 판정: dev-full Recall@5 0.9337 → 0.9413, +0.76%p [+0.38, +1.16]. 점 추정이 +1.0%p에 못 미쳐 보류다(`docs/experiments/EXP-014.md`)
+- 이유(사용자): 95% 구간 하한이 0보다 커서 개선이 우연이 아니다. 회의구분·`qna_type` 모든 층에서 Recall@5가 같거나 올랐고 떨어진 층이 없다(multi-doc도 떨어진 지표 없음). RRF 상수 하나만 바뀌어 지연·메모리·API 비용 변화가 없다
+- 감수하는 것: 20은 "k를 줄이는 방향"을 시험한 값이고 최적이라는 근거가 없다(EXP-014 결정 사항 2). 가설의 근거(결합 손실 81개, `notebooks/24_01_EXP011_오차분석.ipynb`)를 판정과 같은 dev-full에서 얻어 효과가 낙관적으로 나왔을 수 있다. 합의로 들어오던 정답 5개를 잃는다(`notebooks/25_02_EXP014_원인분석.ipynb`)
+- 날짜: 2026-10-15
