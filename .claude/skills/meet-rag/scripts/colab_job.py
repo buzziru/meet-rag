@@ -206,7 +206,8 @@ def keep_awake(session: str, interval: int = WAKE_INTERVAL):
 
     def wake():
         while not stop.wait(interval):
-            vm_sh(session, "true", check=False, retries=0)
+            # 한 번 실패해도 스레드가 끝나지 않게 colab을 check=False로 부른다
+            colab("exec", "-s", session, stdin="pass", check=False, retries=0)
 
     t = threading.Thread(target=wake, daemon=True)
     t.start()

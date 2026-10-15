@@ -91,13 +91,14 @@ def test_start_bg_is_not_retried(monkeypatch):
 
 
 def test_keep_awake_wakes_only_inside(monkeypatch):
-    calls = []
-    monkeypatch.setattr(colab_job, "vm_sh", lambda *a, **k: calls.append(a[1]))
+    # 첫 깨우기가 실패해도 다음 주기에 계속 깨운다
+    fake = FakeRun([(1, "error")] + [(0, "")] * 100)
+    monkeypatch.setattr(colab_job.subprocess, "run", fake)
     with colab_job.keep_awake("x", interval=0.01):
         time.sleep(0.1)
-    n = len(calls)
+    n = fake.calls
     time.sleep(0.05)
-    assert n >= 2 and len(calls) == n
+    assert n >= 2 and fake.calls == n
 
 
 def fake_fetch(monkeypatch, tmp_path):
