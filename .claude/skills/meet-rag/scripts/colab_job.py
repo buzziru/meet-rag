@@ -21,7 +21,8 @@
   ... upload -s 세션 로컬파일 VM경로(저장소 기준)      # 큰 파일은 gzip으로 보내 VM에서 푼다
   ... launch -s 세션 -- uv-run-인자...   # 예: -- python -m rag.index index.scope=full
   ... poll   -s 세션 [--interval 180] [--max-polls 40]
-  ... fetch  -s 세션 VM경로(저장소 기준) [--to .]
+  ... fetch  -s 세션 VM경로(저장소 기준) [--to .] [--exclude 패턴 ...]
+                                       # 로컬에서 다시 만들 수 있는 파일은 뺀다
   ... finish -s 세션
 """
 
@@ -36,7 +37,9 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
@@ -54,6 +57,7 @@ NOISE = re.compile(
 
 TIMEOUT = 120  # colab 호출 하나의 시간 제한(초), 재시도까지 최악 6분
 TRANSFER_TIMEOUT = 1800
+WAKE_INTERVAL = 60  # download 중 커널을 깨우는 간격(초)
 RETRIES = 2  # 시간 초과·연결 끊김일 때 다시 시도하는 횟수
 LOST = "Connection was lost"
 
@@ -193,18 +197,44 @@ def poll(session: str, interval: int, max_polls: int) -> None:
     sys.exit("최대 확인 횟수를 넘었다. 작업은 VM에서 계속될 수 있다")
 
 
-def fetch(session: str, remote: str, dest: Path) -> None:
+@contextmanager
+def keep_awake(session: str, interval: int = WAKE_INTERVAL):
+    """download는 커널을 거치지 않아, 받는 동안 커널이 놀면 세션이 회수된다
+    (EXP-012에서 24분 뒤 회수). 받는 동안만 짧은 exec로 커널을 깨운다.
+    압축 exec와 겹치면 응답 대기가 끊겨 그때는 깨우지 않는다."""
+    stop = threading.Event()
+
+    def wake():
+        while not stop.wait(interval):
+            vm_sh(session, "true", check=False, retries=0)
+
+    t = threading.Thread(target=wake, daemon=True)
+    t.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        t.join()
+
+
+def fetch(session: str, remote: str, dest: Path, exclude: list[str]) -> None:
     if not remote.startswith("data/"):
         sys.exit("산출물은 data/ 아래 경로만 받는다. 추적 파일을 VM 결과로 덮어쓰지 않기 위해서다")
-    tgz = "/content/fetch.tgz"
-    vm_sh(session, f"cd {VM_REPO} && tar czf {tgz} {shlex.quote(remote)} && ls -l {tgz}",
-          retries=0, timeout=TRANSFER_TIMEOUT)  # 전체 인덱스 압축은 수 분 걸린다
+    tar = "/content/fetch.tar"
+    ex = "".join(f" --exclude={shlex.quote(x)}" for x in exclude)
+    # 인덱스는 gzip 이득이 거의 없고 압축만 오래 걸린다(EXP-012 무압축 918MB 14초)
+    vm_sh(session, f"cd {VM_REPO} && tar cf {tar}{ex} {shlex.quote(remote)} && ls -l {tar}",
+          retries=0, timeout=TRANSFER_TIMEOUT)
+    # worktree의 data/가 원래 폴더 junction이면 filter='data'가 대상 밖 쓰기로 막으므로
+    # 실제 위치에 푼다
+    root = (dest / "data").resolve().parent
     with tempfile.TemporaryDirectory() as tmp:
-        local = Path(tmp) / "fetch.tgz"
-        print(colab("download", "-s", session, tgz, str(local), timeout=TRANSFER_TIMEOUT))
+        local = Path(tmp) / "fetch.tar"
+        with keep_awake(session):
+            print(colab("download", "-s", session, tar, str(local), timeout=TRANSFER_TIMEOUT))
         with tarfile.open(local) as t:
-            t.extractall(dest, filter="data")
-    print(f"extracted {remote} -> {dest / remote}")
+            t.extractall(root, filter="data")
+    print(f"extracted {remote} -> {root / remote}")
 
 
 def finish(session: str) -> None:
@@ -238,6 +268,7 @@ def main() -> None:
         elif name == "fetch":
             sp.add_argument("remote")
             sp.add_argument("--to", type=Path, default=ROOT)
+            sp.add_argument("--exclude", action="append", default=[])
     a = p.parse_args()
 
     if a.cmd == "preflight":
@@ -251,7 +282,7 @@ def main() -> None:
     elif a.cmd == "poll":
         poll(a.session, a.interval, a.max_polls)
     elif a.cmd == "fetch":
-        fetch(a.session, a.remote, a.to)
+        fetch(a.session, a.remote, a.to, a.exclude)
     else:
         finish(a.session)
 

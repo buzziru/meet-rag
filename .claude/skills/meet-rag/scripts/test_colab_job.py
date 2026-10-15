@@ -1,7 +1,12 @@
 import importlib.util
 import json
 import subprocess
+import sys
+import tarfile
+import time
 from pathlib import Path
+
+import pytest
 
 # 하네스 테스트는 PR 병합 조건(uv run pytest -q)에 들지 않게 스크립트 옆에 둔다
 SCRIPT = Path(__file__).resolve().parent / "colab_job.py"
@@ -83,3 +88,50 @@ def test_start_bg_is_not_retried(monkeypatch):
     except SystemExit:
         pass
     assert fake.calls == 1
+
+
+def test_keep_awake_wakes_only_inside(monkeypatch):
+    calls = []
+    monkeypatch.setattr(colab_job, "vm_sh", lambda *a, **k: calls.append(a[1]))
+    with colab_job.keep_awake("x", interval=0.01):
+        time.sleep(0.1)
+    n = len(calls)
+    time.sleep(0.05)
+    assert n >= 2 and len(calls) == n
+
+
+def fake_fetch(monkeypatch, tmp_path):
+    """VM 쪽 tar 명령을 기록하고, download는 data/run.csv를 담은 tar를 쓴다."""
+    cmds = []
+    monkeypatch.setattr(colab_job, "vm_sh", lambda s, cmd, **k: cmds.append(cmd) or "")
+    src = tmp_path / "src/data/run.csv"
+    src.parent.mkdir(parents=True)
+    src.write_text("a", encoding="utf-8")
+
+    def download(*args, **kwargs):
+        with tarfile.open(args[-1], "w") as t:
+            t.add(src, arcname="data/run.csv")
+        return ""
+
+    monkeypatch.setattr(colab_job, "colab", download)
+    return cmds
+
+
+def test_fetch_plain_tar_with_exclude(tmp_path, monkeypatch):
+    cmds = fake_fetch(monkeypatch, tmp_path)
+    dest = tmp_path / "repo"
+    colab_job.fetch("x", "data/runs", dest, ["chunks.jsonl"])
+    assert "tar cf /content/fetch.tar --exclude=chunks.jsonl data/runs" in cmds[0]
+    assert (dest / "data/run.csv").read_text(encoding="utf-8") == "a"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="junction은 Windows 전용")
+def test_fetch_through_data_junction(tmp_path, monkeypatch):
+    fake_fetch(monkeypatch, tmp_path)
+    real, wt = tmp_path / "main", tmp_path / "wt"
+    (real / "data").mkdir(parents=True)
+    wt.mkdir()
+    subprocess.run(["cmd", "/c", "mklink", "/J", str(wt / "data"), str(real / "data")],
+                   check=True, capture_output=True)
+    colab_job.fetch("x", "data/runs", wt, [])
+    assert (real / "data/run.csv").exists()
