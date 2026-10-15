@@ -2,7 +2,8 @@
 
 후보 쌍 파일(`rag.search search.mode=rerank-pairs`)을 읽어 점수 파일을 쓴다.
 - backend jev: 질의 하나의 후보를 한 요청에 묶어 Jev(OpenRouter Decisions API)의 score 질문으로
-  채점한다. 응답은 요청 본문 해시로 저장해 다시 실행할 때 쓴다. 질의당 지연·비용도 남긴다
+  채점한다. 응답은 요청 본문 해시로 저장해 다시 실행할 때 쓴다. 질의당 지연·비용도 남긴다.
+  캐시에 없어 실제로 보낸 요청은 LangSmith로 추적한다(요청 본문, 응답, 지연, 오류)
 - backend cross-encoder: 쌍마다 점수(score), 질의당 재정렬 시간(latency). KURE-Reranker-nano
   CPU 지연 측정에 썼다(EXP-005 실행 기록)
 인자는 Hydra override.
@@ -20,6 +21,8 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from langsmith import traceable
+from langsmith.run_trees import get_cached_client
 from sentence_transformers import CrossEncoder
 
 from rag.index import ROOT, load_cfg  # .env를 읽는다
@@ -84,17 +87,23 @@ def jev_body(group: list[dict], jv) -> dict:
     return {"model": jv.model, "state": state, "questions": questions}
 
 
-def jev_call(body: dict, jv, cache: Path) -> dict:
+@traceable(run_type="llm", name="jev_rerank", process_inputs=lambda i: {"body": i["body"]})
+def jev_post(body: dict, raw: str, jv) -> dict:
+    """요청 본문 raw(body를 직렬화한 것)를 보내 응답을 받는다. 추적 입력에는 body만 남긴다."""
+    headers = {"Authorization": f"Bearer {os.environ[jv.api_key_env]}",
+               "Content-Type": "application/json"}
+    req = urllib.request.Request(jv.url, data=raw.encode(), headers=headers)
+    with urllib.request.urlopen(req, timeout=jv.timeout) as r:
+        return json.loads(r.read().decode())
+
+
+def jev_call(body: dict, jv, cache: Path, qid: str) -> dict:
     raw = json.dumps(body, ensure_ascii=False, sort_keys=True)
     path = cache / f"{hashlib.sha1(raw.encode()).hexdigest()[:16]}.json"
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8"))
-    headers = {"Authorization": f"Bearer {os.environ[jv.api_key_env]}",
-               "Content-Type": "application/json"}
-    req = urllib.request.Request(jv.url, data=raw.encode(), headers=headers)
     start = time.perf_counter()
-    with urllib.request.urlopen(req, timeout=jv.timeout) as r:
-        resp = json.loads(r.read().decode())
+    resp = jev_post(body, raw, jv, langsmith_extra={"metadata": {"qid": qid, "model": jv.model}})
     rec = {"latency": time.perf_counter() - start, "response": resp}
     path.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
     return rec
@@ -106,8 +115,12 @@ def jev_score(cfg) -> None:
                                           key=lambda p: p["qid"])]
     cache = ROOT / cfg.paths.rerank_jev_cache
     cache.mkdir(parents=True, exist_ok=True)
-    with ThreadPoolExecutor(jv.workers) as ex:
-        recs = list(ex.map(lambda g: jev_call(jev_body(g, jv), jv, cache), groups))
+    try:
+        with ThreadPoolExecutor(jv.workers) as ex:
+            recs = list(ex.map(lambda g: jev_call(jev_body(g, jv), jv, cache, g[0]["qid"]),
+                               groups))
+    finally:  # 호출이 중간에 실패해도 보낸 요청의 추적은 남긴다
+        get_cached_client().flush()
     out = ROOT / cfg.paths.rerank_scores
     with out.open("w", encoding="utf-8", newline="\n") as f:
         for g, rec in zip(groups, recs, strict=True):
