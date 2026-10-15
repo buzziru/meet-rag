@@ -10,6 +10,6 @@ retriever:
   fusion:
     method: score  # rrf(기본) | score. score는 dense·BM25 정규화 점수의 가중 합
     alpha: 0.5  # dense 몫. BM25는 1 − alpha (결정 사항 1)
-    normalize: minmax  # 목록별 상위 depth개의 1위·마지막 점수로 정규화, 목록 밖 문서는 0 (결정 사항 3)
+    # 정규화는 목록별 상위 depth개의 min-max로 고정(코드 rag.retrieve.minmax, 결정 사항 3). 목록 밖 문서는 0
     # 결합 목록과 조건 목록을 RRF(rrf_k)로 합칠 때의 가중치 [결합, 조건] (결정 사항 2)
     weights: [2, 1]
