@@ -2,7 +2,7 @@
 
 질의 하나의 dense 점수 행, BM25 토큰, 질의 조건을 받아 문서 순위를 낸다. 설정은 cfg.retriever다.
 재정렬 점수 파일과 후보 쌍 내보내기(EXP-005·006)는 평가 전용이라 rag.search에 있다.
-규칙은 docs/slices/05-retrieve.md(dense), EXP-001·003·004·007·008·010·011·013·015 문서.
+규칙은 docs/slices/05-retrieve.md(dense), EXP-001·003·004·007·008·010·011·013·015·016 문서.
 """
 
 import json
@@ -220,7 +220,8 @@ class Retriever:
         dense 전체 정렬 여부.
 
         dense 단독이면 dense 목록 하나다. fusion.method가 score면 dense·BM25 두 목록 대신
-        정규화 점수로 합친 cc 목록 하나를 둔다(EXP-015).
+        정규화 점수로 합친 cc 목록 하나를 둔다(EXP-015). conditions.fuse가 false면 조건 목록을
+        두지 않고, 조건 목록에 든 최다 일치 문서 중 cc에 없는 것을 cc 뒤에 붙인다(EXP-016).
 
         Args:
             row: 질의와 dense 청크(dense_ids 순서)의 점수.
@@ -246,11 +247,16 @@ class Retriever:
             else:
                 doc_scores = np.full(len(self.doc_names), -np.inf, dtype=row.dtype)
                 np.maximum.at(doc_scores, self.chunk_doc, row)
-            named["conditions"] = condition_docs(counts, doc_scores, self.doc_names, self.depth,
-                                                 r.conditions.min_fields)
+            cond = condition_docs(counts, doc_scores, self.doc_names, self.depth,
+                                  r.conditions.min_fields)
             if r.conditions.get("filter") == "best":  # 맞은 필드 수가 가장 많은 문서
                 top = max(counts.values())
                 matched = {self.doc_names[i] for i, c in counts.items() if c == top}
+            if r.conditions.get("fuse", True):
+                named["conditions"] = cond
+            else:  # 조건 목록 대신 결합 목록 밖 최다 일치 문서를 결합 목록 뒤에 붙인다(EXP-016)
+                have = set(named["cc"])
+                named["cc"] = named["cc"] + [d for d in cond if d in matched and d not in have]
         if rewrite is not None:
             rw_row, rw_tokens = rewrite
             if "dense" in r.rewrite.lists:
