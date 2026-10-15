@@ -159,6 +159,9 @@ def review(cfg) -> None:
     if missing:
         missing = sorted(set(missing))
         raise SystemExit(f"작업자 출력이 없는 질의 {len(missing)}개: {missing[:5]}")
+    rcfg = load_cfg([f"+exp={cfg.g2.exp}", "index.scope=full"])
+    qids, path = query_list(rcfg)
+    texts = dict(zip(qids, read_texts(path, qids), strict=True))
     lines, tally = [], Counter()
     for r in rows:
         q = r["qid"]
@@ -166,7 +169,9 @@ def review(cfg) -> None:
         s2 = json.loads((out / "out2" / f"{q}.json").read_text(encoding="utf-8"))
         cls = final_class(s1, s2)
         tally[(cls, r["rank_type"] if cls == "개선 가능" else s1["reason"] or "다른 정답")] += 1
-        lines += [f"## {q}", "",
+        lines += [f"## {q}", "", f"- 질의: {texts[q]}",
+                  f"- 입력: `{cfg.paths.g2_dir}/in1/{q}.md`(정답 문서 전체), "
+                  f"`in2/{q}.md`(상위 5개)",
                   f"- 순위: 최종 {r['final_rank']}, 목록별 {r['list_ranks']}, "
                   f"유형 {r['rank_type']}, 1위가 같은 회의 {r['same_meeting_top1']}",
                   f"- 1단계(특정 가능성): {s1['identifiable']}, {s1['reason']} / {s1['evidence']}",
@@ -176,7 +181,9 @@ def review(cfg) -> None:
                   "- 사람: [ ] 동의  [ ] 수정 →", "- 메모:", ""]
     head = ["# G2 기준 오답 질의 검토", "",
             f"입력 `{cfg.paths.g2_dir}/in1·in2`, 지시 {cfg.g2.stage1}·{cfg.g2.stage2}. "
-            "분류 규칙: 1단계 특정 불가이거나 2단계 다른 정답 있음이면 좁힐 수 없음.", "",
+            "분류 규칙: 1단계 특정 불가이거나 2단계 다른 정답 있음이면 좁힐 수 없음. "
+            "2단계 입력의 정답 문서는 질의와 dense 점수가 가장 가까운 청크 하나라, 답이 문서의 "
+            "다른 곳에 있으면 정답을 약하게 볼 수 있다.", "",
             "| 분류 | 세부 | 수 |", "| --- | --- | ---: |",
             *[f"| {c} | {k} | {n} |" for (c, k), n in sorted(tally.items())], ""]
     path = out.parent / "g2_failures.md"
