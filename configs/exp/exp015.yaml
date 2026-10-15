@@ -1,6 +1,6 @@
 # @package _global_
 # EXP-015 dense·BM25 점수 기반 결합 (H16, docs/experiments/EXP-015.md). 기준 EXP-014(D-32) 위에 바꾼다.
-# 실행: rag.search +exp=exp015 (구현 전 초안)
+# 실행: rag.search +exp=exp015
 defaults:
   - exp014
   - _self_
