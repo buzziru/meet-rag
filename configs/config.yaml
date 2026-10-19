@@ -4,6 +4,7 @@ defaults:
   - retriever: dense
   - generator: openrouter
   - prompt: v1
+  - judge: deepseek_go
   - _self_
 
 # 분할·표본 추출용. 값은 docs/SPEC.md와 같다
@@ -62,6 +63,10 @@ paths:
   rewrites: data/rewrites/${rewriter.name}-${rewriter.prompt.version}.json
   # 생성 호출 기록. 호출마다 JSON 하나
   generate_dir: data/runs/generate
+  # 생성 평가(S14). 일괄 생성 기록(질의마다 한 줄), judge 결과, judge 응답 저장(요청 본문 해시마다 파일 하나)
+  gen_runs: data/gen_eval/runs/${retriever.run_name}-${prompt.version}-${gen_eval.queries}.jsonl
+  gen_judge: data/gen_eval/judge/${retriever.run_name}-${prompt.version}-${gen_eval.queries}-${judge.name}-${judge.prompt.version}.jsonl
+  gen_judge_cache: data/gen_eval/judge_cache
   # multi-doc 후보 집합과 시작 묶음 (docs/slices/07-bundles.md)
   multidoc_pools: data/multidoc/pools.jsonl
   # S8 생성 입력·문서 원문·생성 출력·검사 기록(후보 집합마다 파일 하나), 통과 질의 (docs/slices/08-multidoc-queries.md)
@@ -212,3 +217,13 @@ multidoc:
       window_sentences: 3
       min_prob: 0.9
       timeout: 60  # Jev 호출 하나의 대기 상한(초)
+
+# 생성 평가(docs/slices/14-gen-eval.md). 질의는 평가 층(dev-small | dev-full)의 dev 질의만 쓴다
+gen_eval:
+  queries: dev-small
+  n: 20  # seed로 섞은 순서의 앞에서 자른다. n을 늘려도 앞 표본이 유지된다
+  seed: ${seed}
+  refusal: 제공된 회의록에서 답을 찾지 못했습니다  # 프롬프트 v1의 거부 문구(코드 판정)
+  # 정답 문서의 근거 청크가 answer.comment를 담았다고 보는 최소 비율(가장 긴 공통 부분 문자열 / comment
+  # 길이, 공백 제거 뒤). S14 결정 5, 값은 dev-small 분포를 보고 정한다
+  answer_overlap: 0.5

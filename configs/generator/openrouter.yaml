@@ -19,3 +19,7 @@ extra_body:
     allow_fallbacks: false
   reasoning:
     effort: none
+# 100만 토큰당 가격(USD). 집계에서 비용을 추정한다. OpenRouter 엔드포인트 API의 CoreWeave 값(D-37, 2026-10-19)
+price_per_mtok:
+  input: 0.10
+  output: 0.34

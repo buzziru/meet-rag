@@ -1,0 +1,19 @@
+# 생성 평가 judge: DeepSeek V4.1 Flash, opencode Go 구독 경로 (D-38, docs/slices/14-gen-eval.md)
+# Console 종량제 경로(/inference/openai/v1)는 잔액에서 차감해 쓰지 않는다
+defaults:
+  - prompt: j_v1
+  - _self_
+
+name: deepseek_go  # judge 결과 파일 이름(paths.gen_judge)
+base_url: https://opencode.ai/inference/go/openai/v1
+api_key_env: OPENCODE_API_KEY
+model: deepseek-v4.1-flash
+# Go 문서는 클라이언트가 자기 User-Agent와 대화마다 고정한 x-opencode-session을 보내라고 한다(2026-10-19)
+user_agent: meet-rag-judge/0.1
+params:
+  temperature: 0.0
+  max_tokens: 4096  # 사고 과정 토큰 포함 상한
+# 요청 본문에 더하는 값. 사고 과정은 모델 기본값(켜짐)을 그대로 쓴다. 끄는 값을 정하면 여기에 둔다
+extra_body: null
+timeout: 120  # 호출 하나의 대기 상한(초)
+concurrency: 4  # 동시에 채점하는 생성 기록 수
