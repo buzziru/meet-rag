@@ -18,7 +18,7 @@ from rag.retrieve import (
     top_docs,
     weighted_doc_scores,
 )
-from rag.search import query_files, read_chunk_texts, rerank_top, write_run
+from rag.search import query_files, query_list, read_chunk_texts, rerank_top, write_run
 
 
 def test_rank_docs_dedupes_by_first_chunk_rank():
@@ -77,6 +77,25 @@ def test_multidoc_queries_need_full_scope():
 def test_summary_q_files_unchanged():
     files = query_files(load_cfg(["index.scope=full"]))
     assert files["name"] == "dev-full" and files["emb"].name == "queries-full.npz"
+
+
+def test_test_queries_need_explicit_allow():
+    for over in (["index.scope=full"], ["index.scope=dev-small", "search.allow_test=true"],
+                 ["index.scope=full", "search.allow_test=true", "search.mode=export-queries"]):
+        cfg = load_cfg(["search.queries=test", *over])
+        with pytest.raises(SystemExit):
+            query_files(cfg)
+        with pytest.raises(SystemExit):
+            query_list(cfg)
+
+
+def test_test_queries_use_own_paths():
+    cfg = load_cfg(["search.queries=test", "index.scope=full", "search.allow_test=true",
+                    "+exp=exp017"])
+    files = query_files(cfg)
+    assert files["name"] == "test" and files["emb"].name == "queries-test.npz"
+    assert files["emb"] != query_files(load_cfg(["index.scope=full", "+exp=exp017"]))["emb"]
+    assert "test-full" in cfg.paths.rerank_pairs and "test-full" in cfg.paths.rerank_scores
 
 
 def test_condition_docs_orders_by_count_then_dense():

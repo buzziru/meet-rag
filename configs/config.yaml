@@ -55,6 +55,7 @@ paths:
   query_emb: data/index/${embedding.slug}/queries-${index.scope}.npz
   # multi-doc 동결 세트 질의 임베딩과, 그 qid·query만 내보낸 VM 업로드 파일 (docs/slices/09-multidoc-eval.md)
   query_emb_multidoc: data/index/${embedding.slug}/queries-multidoc.npz
+  query_emb_test: data/index/${embedding.slug}/queries-test.npz  # test 질의 임베딩(로컬, S13)
   queries_multidoc_vm: data/multidoc/queries_g3.vm.jsonl
   runs_dir: data/runs
   # 질의 재작성 응답(EXP-013). 만든 기준을 함께 적고 읽을 때 대조한다. 재작성기·지시마다 파일 하나
@@ -154,7 +155,8 @@ index:
 # 검색 실행 방식 (docs/slices/05-retrieve.md)
 search:
   mode: run  # run | rerank-pairs(재정렬 후보 쌍, EXP-005) | export-queries(로컬) | embed-queries(VM)
-  queries: summary_q  # summary_q | multidoc(G3 동결 세트, index.scope=full만)
+  queries: summary_q  # summary_q | multidoc(G3 동결 세트, index.scope=full만) | test(S13, 검색 단계 종료 시 1회)
+  allow_test: false  # search.queries=test는 이 값이 true일 때만 쓴다(SPEC, S13)
   overwrite: false  # 같은 경로에 내용이 다른 순위 파일이 있으면 멈춘다. true면 덮어쓴다(S12)
 
 # 생성 질의 (rag.generate). dev 질의는 qid, 자유 질의는 query 하나만 준다
