@@ -58,6 +58,21 @@ def embed_queries(cfg, texts: list[str]) -> np.ndarray:
     return np.concatenate([encode(texts[i : i + step]) for i in range(0, len(texts), step)])
 
 
+def check_test(cfg) -> None:
+    """test 질의는 검색 단계 종료 시 1회만 쓴다(SPEC).
+
+    명시적으로 허용해야 하고 질의 임베딩은 로컬에서만 한다.
+    """
+    if cfg.index.scope != "full":
+        raise SystemExit("search.queries=test는 index.scope=full에서만 쓴다")
+    if not cfg.search.allow_test:
+        raise SystemExit("search.queries=test는 search.allow_test=true가 있어야 쓴다 "
+                         "(검색 단계 종료 시 1회)")
+    if cfg.search.mode in ("export-queries", "embed-queries"):
+        raise SystemExit("test 질의는 VM 업로드 파일로 내보내지 않는다. "
+                         "질의 임베딩은 로컬에서 한다")
+
+
 def query_files(cfg) -> dict:
     """search.queries에 따른 VM 업로드 파일, 임베딩 캐시, 순위 파일 이름. 파일은 읽지 않는다."""
     if cfg.search.queries == "multidoc":
@@ -65,6 +80,9 @@ def query_files(cfg) -> dict:
             raise SystemExit("search.queries=multidoc은 index.scope=full에서만 쓴다")
         return {"vm": ROOT / cfg.paths.queries_multidoc_vm,
                 "emb": ROOT / cfg.paths.query_emb_multidoc, "name": "multidoc"}
+    if cfg.search.queries == "test":
+        check_test(cfg)
+        return {"vm": None, "emb": ROOT / cfg.paths.query_emb_test, "name": "test"}
     return {"vm": ROOT / cfg.paths.queries_dev, "emb": ROOT / cfg.paths.query_emb,
             "name": LAYERS[cfg.index.scope]}
 
@@ -75,6 +93,9 @@ def query_list(cfg) -> tuple[list[str], Path]:
         path = ROOT / cfg.paths.multidoc_frozen
         with path.open(encoding="utf-8") as f:
             return [json.loads(line)["qid"] for line in f], path
+    if cfg.search.queries == "test":
+        check_test(cfg)
+        return load_gold(cfg, "test", allow_test=True).index.tolist(), ROOT / cfg.paths.queries
     return load_gold(cfg, LAYERS[cfg.index.scope]).index.tolist(), ROOT / cfg.paths.queries
 
 
