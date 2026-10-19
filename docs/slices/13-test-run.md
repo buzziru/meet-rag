@@ -43,6 +43,8 @@
 
 ## 결정 사항 (구현 전에 사용자가 정한다)
 
+결정(사용자 2026-10-19): 1은 (a) 세 개, 2는 (a) Colab T4 1회, 3은 초안대로 이 지시서에 포함한다. test 결과로 기준 설정을 바꾸지 않는다(사용자). 예를 들어 test에서 EXP-014가 EXP-017보다 높아도 기준은 EXP-017(D-36)이다
+
 1. test로 채점할 설정
    - (a) 세 개: S5 베이스라인(KURE-v1 dense), EXP-014(리랭커 없는 구성, 배포 대체 구성 D-36), EXP-017(기준). D-35가 요구하는 "dev 누적 이득의 test 유지"를 베이스라인 대비로 보고, 리랭커 몫을 EXP-014 대비로 본다. 초안은 (a)다
    - (b) EXP-017 하나. 유지 정도는 dev 점수와만 비교한다
@@ -54,7 +56,7 @@
 ## 수정 허용 파일
 
 - `src/rag/search.py`, `configs/config.yaml`(`search`, `paths`), `tests/test_search.py`
-- 결정 사항 2가 (a)면 `.claude/skills/meet-rag/scripts/colab_job.py`와 그 테스트, ADR(F 흐름으로 따로 커밋)
+- `.claude/skills/meet-rag/scripts/colab_job.py`의 test 1회 업로드 옵션은 하네스 변경이라 이 조각과 나눠 `chore/` 브랜치의 F 흐름(ADR 포함)으로 한다
 - 실행 뒤: 결과 노트북, `docs/DECISIONS.md`, `docs/PLAN.md`, `docs/STATUS.md`, 이 문서
 
 ## 범위 밖
