@@ -126,6 +126,29 @@ def conditions_first(docs: list[str], matched: set[str]) -> list[str]:
     return sorted(docs, key=lambda d: d not in matched)
 
 
+def rerank_top(docs: list[str], scores: dict[str, float], depth: int) -> list[str]:
+    """상위 depth개를 reranker 점수 내림차순으로 바꾸고 나머지는 그대로 둔다(EXP-005)."""
+    return sorted(docs[:depth], key=lambda d: -scores[d]) + docs[depth:]
+
+
+def read_rerank_scores(path: Path) -> dict[str, dict[str, float]]:
+    """재정렬 점수 파일(rag.rerank)을 qid → 문서별 점수로 읽는다."""
+    scores: dict[str, dict[str, float]] = {}
+    with path.open(encoding="utf-8") as f:
+        for x in map(json.loads, f):
+            scores.setdefault(x["qid"], {})[x["doc_id"]] = x["score"]
+    return scores
+
+
+def final_order(fused: list[str], matched: set[str], rerank: dict[str, float] | None = None,
+                depth: int = 0) -> list[str]:
+    """결합 후보 → 재정렬(점수가 있을 때) → 최다 일치 필터. 평가(rag.search)와 생성이 같은
+    순서 규칙을 쓴다(EXP-017, S14)."""
+    if rerank is not None:
+        fused = rerank_top(fused, rerank, depth)
+    return conditions_first(fused, matched)
+
+
 def condition_docs(counts: dict[int, int], doc_scores: np.ndarray, doc_names: np.ndarray,
                    depth: int, min_fields: int) -> list[str]:
     """조건 필드가 min_fields개 이상 맞은 문서를 맞은 필드 수, dense 문서 점수 내림차순으로
@@ -304,20 +327,28 @@ class Retriever:
     def explain(self, row: np.ndarray, tokens: list[int] | None = None,
                 conditions: dict | None = None,
                 rewrite: tuple[np.ndarray, list[int]] | None = None,
+                rerank: dict[str, float] | None = None,
                 ) -> tuple[list[str], list[dict]]:
-        """상위 top_k 문서와 문서마다 단계별 기록(목록별 순위, RRF 점수, 최다 일치 여부).
+        """상위 top_k 문서와 문서마다 단계별 기록(목록별 순위, RRF·재정렬 점수, 최다 일치 여부).
 
         순위는 rank와 같다. 실패·성공 원인을 나중에 나눠 보려고 단계별 값을 남긴다(PR #71 코멘트).
+        rerank는 문서별 재정렬 점수이고, 주면 RRF 상위 retriever.rerank.depth개를 다시 줄 세운다.
         """
         named, matched, _ = self.lists(row, tokens, conditions, rewrite)
         if not self.hybrid:
             return named["dense"], [{"dense_rank": i} for i in range(1, len(named["dense"]) + 1)]
         score = self._rrf_scores(named)
         fused = sorted(score, key=score.__getitem__, reverse=True)
-        docs = conditions_first(fused, matched)[: self.r.top_k]
+        depth = self.r.rerank.depth if rerank is not None else 0
+        docs = final_order(fused, matched, rerank, depth)[: self.r.top_k]
         pos = {n: {d: i for i, d in enumerate(lst, 1)} for n, lst in named.items()}
-        return docs, [{"rrf_score": score[d], **{f"{n}_rank": pos[n].get(d) for n in named},
-                       "best_match": d in matched} for d in docs]
+        stages = []
+        for d in docs:
+            st = {"rrf_score": score[d], **{f"{n}_rank": pos[n].get(d) for n in named}}
+            if rerank is not None:
+                st["rerank_score"] = rerank.get(d)
+            stages.append({**st, "best_match": d in matched})
+        return docs, stages
 
     def rank(self, row: np.ndarray, tokens: list[int] | None = None,
              conditions: dict | None = None) -> list[str]:

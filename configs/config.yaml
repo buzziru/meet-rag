@@ -2,7 +2,7 @@ defaults:
   - eval: spec_v1
   - chunking: fixed
   - retriever: dense
-  - generator: gemma
+  - generator: openrouter
   - prompt: v1
   - _self_
 

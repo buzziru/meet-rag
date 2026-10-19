@@ -1,0 +1,21 @@
+# 생성 기본 경로: Gemma 4 31B, OpenRouter 유료 (docs/DECISIONS.md D-37). Google 경로는 gemma.yaml
+base_url: https://openrouter.ai/api/v1
+api_key_env: OPENROUTER_API
+model: google/gemma-4-31b-it
+# 프롬프트에 넣는 상위 문서 수. 문서마다 최고 점수 청크 하나(D-05)
+context_docs: 5
+# 답변을 받는 대로 출력할지. 함수 인자로도 고른다
+stream: false
+# 생성 파라미터. 레시피로 기록한다
+params:
+  temperature: 0.0
+  top_p: 1.0
+  max_tokens: 1024
+# OpenRouter 요청 본문에 더하는 값. 제공자는 CoreWeave fp4로 고정하고 다른 제공자로 넘기지 않으며,
+# 사고 과정은 끈다(D-37, PR #94 코멘트)
+extra_body:
+  provider:
+    order: [coreweave/fp4]
+    allow_fallbacks: false
+  reasoning:
+    effort: none
