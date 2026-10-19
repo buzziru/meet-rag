@@ -37,7 +37,7 @@ LLM 없이 처리한다(초안 "코드로 판정하는 항목").
 
 ### judge
 
-- `configs/judge/deepseek_go.yaml`: DeepSeek V4.1 Flash, opencode Go 경로(D-38). 엔드포인트와 키 환경변수 이름은 구현 때 opencode Go 문서로 확인해 적는다. 대안 경로 `configs/judge/deepseek_openrouter.yaml`(`deepseek/deepseek-v4.1-flash`)도 둔다. `temperature` 0
+- `configs/judge/deepseek_go.yaml`: DeepSeek V4.1 Flash, opencode Go 경로(D-38). 엔드포인트 `https://opencode.ai/inference/go/openai/v1`(Chat Completions), 모델 `deepseek-v4.1-flash`, 키 `OPENCODE_API_KEY`. Console 종량제 경로(`/inference/openai/v1`)는 구독이 아니라 잔액에서 차감해 쓰지 않는다. Go 문서(https://opencode.ai/docs/go/, 2026-10-19)에 따라 요청마다 자체 User-Agent(`meet-rag-judge/<버전>`)와 실행마다 고정한 `x-opencode-session`을 보낸다. 워크스페이스 Privacy에서 Global 지역을 켜야 이 모델을 부를 수 있다(사용자 설정 2026-10-19). 기본 응답에 사고 과정 토큰이 있어(더미 호출 28토큰) 켜고 끄는 값을 config에 둔다. 대안 경로 `configs/judge/deepseek_openrouter.yaml`(`deepseek/deepseek-v4.1-flash`)도 둔다. `temperature` 0
 - 기준별 프롬프트는 `configs/judge/prompt/`에 버전 파일로 둔다. 출력은 JSON으로 받고 형식이 틀리면 그 항목을 실패로 기록한다(다시 묻지 않는다). 프롬프트를 쓰는 방법은 아래 "judge 프롬프트: RAGAS 차용과 한국어 회의록 수정"
   - 충실성: RAGAS 논문과 같이 두 번 부른다. (1) 답변을 진술로 나누고 (2) 진술마다 근거로 뒷받침되는지 판정한다. 점수는 뒷받침된 진술 수 / 전체 진술 수
   - 답변 관련성: judge가 답변이 질의에 답하는지를 3단계(답함 1, 일부 0.5, 답하지 않음 0)로 매긴다(결정 사항 2). 논문의 역질문 생성과 임베딩 유사도는 쓰지 않는다
