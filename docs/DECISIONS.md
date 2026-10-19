@@ -374,8 +374,28 @@
 - 관계: D-30 정정의 "생성이 반복 실패하면 유료 API로 생성하는 분기"는 기본 경로가 유료가 되어 필요 없어진다
 - 날짜: 2026-10-19
 
+## D-38 생성 단계 평가 방향: RAGAS 지표 정의를 빌린 LLM judge 직접 구현
+- 결정(사용자 결정 2026-10-19): 생성 평가는 LLM judge로 하고, 지표 정의는 RAGAS(Es et al., "RAGAs: Automated Evaluation of Retrieval Augmented Generation", EACL 2024 System Demonstrations, pp. 150\~158, arXiv:2309.15217)를 빌려 직접 구현한다. ragas·deepeval 라이브러리는 쓰지 않는다. SPEC 개정 초안은 SPEC 밖의 `docs/drafts/spec-generation-eval.md`에 둔다. 초안을 고칠 때마다 SPEC 승인을 받느라 작업이 멈추지 않게 하려는 것이다(사용자 결정, PR #99 코멘트). 남은 결정 사항이 정해지면 SPEC에 옮기며 사용자 승인을 받고 그 사실을 이 문서에 적는다
+- 이유(사용자): judge 프롬프트를 `configs/`에서 버전 관리하고, 한국어 회의록에 맞춘 지시를 쓰기 위해서다
+- 고려 중인 기준과 출처
+  - 충실성(faithfulness), 답변 관련성(answer relevance): RAGAS 논문의 세 기준(faithfulness, answer relevance, context relevance) 중 둘이다. 논문은 참조 답변 없이 계산하는 지표로 정의한다
+  - 정답성(answer correctness): 논문이 아니라 ragas 라이브러리의 지표다. 참조 답변과 답변을 진술 단위로 대조한 F1(TP / (TP + 0.5·(FP + FN)))과 의미 유사도를 가중 결합한다(ragas 문서). 참조 답변이 필요하다
+  - 거부 정확도: RGB(Chen et al., "Benchmarking Large Language Models in Retrieval-Augmented Generation", AAAI 2024, arXiv:2309.01431)의 negative rejection 계열이다. RGB는 답을 담지 않은 문서만 근거로 줬을 때 답변을 거절하는 비율(rejection rate)로 잰다
+  - context relevance는 고려 기준에 넣지 않았다. 검색 품질은 검색 단계 지표(Recall@k)가 본다
+- judge: API로 부르고 제공자, 모델, 파라미터, 프롬프트를 버전 관리한다. judge 모델은 생성 모델(Gemma 4)과 다른 계열인 DeepSeek V4.1 Flash로 하고, 경로는 opencode Go 구독으로 한다(사용자 결정, PR #99 코멘트)
+  - 이유(사용자): 같은 가격에 더 많은 사용량을 얻을 수 있어, 대량 호출이 필요한 평가에 쓴다
+  - 감수하는 것: opencode Go 문서(2026-10-19 확인)는 Go를 코딩 에이전트용으로 설계했고 남용을 감시한다고 적어, 배치 판정으로 의심받아 사용이 막힐 수 있다. 막히면 그 뒤 경로를 다시 논의한다(사용자). 대안은 같은 모델의 OpenRouter 경로(`deepseek/deepseek-v4.1-flash`)다
+  - 데이터 처리처: opencode Go는 학습 미사용·보존 0일(ZDR, 협약은 매달 갱신, 지금 협약은 2026-10-31까지)이다. D-31의 허용 처리처 목록(CLAUDE.md 금지 절, SPEC 자원 제약, protocol-guard P6)에 생성 평가 judge용으로 더했다(사용자 지시 2026-10-19, ADR-0044). 용도는 judge 호출로 한정한다. `test` 질의 제한과 대량 전송 전 보고·승인은 다른 처리처와 같다
+- 정답성 참조: `summary_a`는 참조로 쓰지 않는다. KoAlpaca(LLaMA 7B) 생성물로 생성·judge 모델보다 성능이 낮고, 사용자가 직접 본 품질이 낮다. `answer.comment`는 질의자 질문에 대한 응답 발언이라 평가 질의와 반드시 맞지 않고, 정치적 고려로 직접 답을 피하기도 한다. 사람 채점 dev 표본을 본 뒤 정하고, 참조로 부족하면 정답성을 보조 지표로 둔다(사용자 결정, PR #99 코멘트)
+- 주지표: RAGAS 지표를 고쳐 만든 LLM judge 점수로 한다. 최소 개선 폭은 추가 논의한다(사용자 결정, PR #99 코멘트)
+- multi-doc: 검색 단계와 같이 G3 동결 세트(D-15)로 생성도 평가하되 보조 관찰로 두고 판정에 쓰지 않는다(사용자 결정, PR #99)
+- test: 검색 단계와 같이 생성 단계 마지막에 사용자 지시로 1회만 쓴다(사용자 결정, PR #99 코멘트). 지금 SPEC·CLAUDE.md는 test를 검색 단계 종료 1회로만 허용하므로, 이 사용은 초안을 SPEC에 옮기며 SPEC·CLAUDE.md를 고친 뒤에 효력이 있다
+- 생성 조건: 실험 간 비교는 T=0과 고정 프롬프트로 하고, 제공자는 OpenRouter CoreWeave로 고정한다(D-37)
+- 오라클 조건: 정답 문서를 근거에 직접 넣는 조건은 매 실험이 아니라 진단용으로 한 번 한다. 검색 실패와 생성 실패를 가르는 데 쓰고, 근거에서 정답 문서를 뺀 입력은 거부 정확도 세트로도 쓸 수 있다
+- 날짜: 2026-10-19
+
 ## D-39 검색 단계 종료: test 1회 결과
-- 결정: 검색 단계를 마친다. 기준 설정은 EXP-017(D-36) 그대로이고 test 결과로 바꾸지 않는다(사용자 결정 2026-10-19). 번호는 PR #99가 D-38을 쓰므로 D-39다
+- 결정: 검색 단계를 마친다. 기준 설정은 EXP-017(D-36) 그대로이고 test 결과로 바꾸지 않는다(사용자 결정 2026-10-19). 번호는 D-38(PR #99) 다음이다
 - 결과(`docs/slices/13-test-run.md` 결과 절, `notebooks/33_01_S13_test결과.ipynb`): 기준 test Recall@5 0.9577, Recall@1 0.9104, Recall@10 0.9657, MRR@10 0.9308(test 3,003질의). 베이스라인(0.8525) 대비 +10.52%p [+9.14, +11.88](dev +9.81%p), 리랭커 몫 +2.26%p [+1.57, +2.98](dev +1.53%p)
 - 해석: dev 누적 이득이 test에서 유지됐다(D-35). dev를 반복해 쓴 낙관은 이 지표에서 드러나지 않았다. test 질의도 정답 문서를 보고 생성해 어휘 겹침의 이득은 test에도 있으므로, 실사용 질의 성능은 이 결과로 알 수 없다
 - 실행: 커밋 092f527, Colab T4 약 19분(약 0.33 CU 환산), test 후보 쌍만 `upload --allow-test`로 보냄(ADR-0043). 같은 설정으로 다시 실행하지 않는다
