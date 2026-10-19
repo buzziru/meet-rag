@@ -12,7 +12,7 @@
 
 ## 만드는 것
 
-- `search.queries=test`: summary_q의 `test` 분할 질의. `index.scope=full`에서만 쓰고, `search.allow_test=true`가 없으면 멈춘다. 질의 목록은 `load_gold(cfg, "test", allow_test=True)`에서 온다. 순위 파일·재정렬 쌍·점수·조건 경로가 `${search.queries}`로 갈라져 dev 파일과 겹치지 않는다
+- `search.queries=test`: summary_q의 `test` 분할 질의. `index.scope=full`에서만 쓰고, `search.allow_test=true`가 없으면 멈춘다. 질의 목록은 `load_gold(cfg, "test", allow_test=True)`에서 온다. 순위 파일 이름(`-test`)과 재정렬 쌍·점수 경로(`${search.queries}`)가 dev 파일과 겹치지 않는다. 질의 조건은 검색이 실행 때 질의 원문에서 뽑아 조건 파일을 쓰지 않는다(S12)
 - 질의 임베딩 캐시: `search.queries=test`는 `paths.query_emb_test`(`data/index/${embedding.slug}/queries-test.npz`)를 쓴다. 로컬 CPU로 임베딩한다(snowflake-ko 질의당 약 0.3초, EXP-017 31_02. 3,000여 건에 약 15분, KURE-v1도 비슷하다고 본다(추정))
 - 테스트(합성 입력): `allow_test` 없이 멈추는지, test 경로가 dev-full 경로와 다른지, 기본값(`summary_q`)의 순위 파일이 바뀌지 않는지
 - 결과 노트북(실행 뒤): 설정별 test 지표, 회의 단위 paired bootstrap(평가 모듈 함수를 불러 씀, `rag.eval.compare`와 같은 10,000회·seed), dev 누적 이득의 test 유지 정도(D-35). 질의 원문은 출력하지 않는다
@@ -34,7 +34,10 @@
 
 ## 1회 실행 절차 (사용자 지시 뒤)
 
-1. 설정마다 로컬에서 test 순위(리랭커 없는 설정) 또는 후보 쌍(EXP-017)을 만든다. 질의 임베딩은 로컬 CPU
+1. 설정마다 로컬에서 test 순위(리랭커 없는 설정) 또는 후보 쌍(EXP-017)을 만든다. 질의 임베딩은 로컬 CPU다. 공통 인자는 `index.scope=full search.queries=test search.allow_test=true`다
+   - S5 베이스라인: `rag.search <공통>` → `kure-v1-fixed-512-64-test.csv`(기본 config가 베이스라인이다. 같은 명령의 dev-full이 기존 `f15688…`과 같음을 확인했다)
+   - EXP-014: `rag.search +exp=exp014 <공통>`
+   - EXP-017 후보 쌍: `rag.search +exp=exp017 <공통> search.mode=rerank-pairs`
 2. EXP-017 후보 쌍을 GPU로 채점한다(결정 사항 2의 방식)
 3. `rag.search +exp=exp017 index.scope=full search.queries=test search.allow_test=true`로 순위를 만든다
 4. `rag.eval.score --run <순위> --layer test --allow-test`로 채점하고, 결과 노트북을 쓴다

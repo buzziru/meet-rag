@@ -97,6 +97,7 @@ def test_test_queries_use_own_paths():
     assert files["emb"] != query_files(load_cfg(["index.scope=full", "+exp=exp017"]))["emb"]
     assert "test-full" in cfg.paths.rerank_pairs and "test-full" in cfg.paths.rerank_scores
 
+
 def test_condition_docs_orders_by_count_then_dense():
     names = np.array(["a", "b", "c", "d"])
     scores = np.array([0.1, 0.9, 0.5, 0.7])
