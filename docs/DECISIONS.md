@@ -375,14 +375,20 @@
 - 날짜: 2026-10-19
 
 ## D-38 생성 단계 평가 방향: RAGAS 지표 정의를 빌린 LLM judge 직접 구현
-- 결정(사용자 결정 2026-10-19): 생성 평가는 LLM judge로 하고, 지표 정의는 RAGAS(Es et al., "RAGAs: Automated Evaluation of Retrieval Augmented Generation", EACL 2024 System Demonstrations, pp. 150\~158, arXiv:2309.15217)를 빌려 직접 구현한다. ragas·deepeval 라이브러리는 쓰지 않는다. SPEC 개정 초안은 SPEC "생성 단계 평가 (개정 초안, 승인 대기)" 절이다. 그 절의 미결 사항이 모두 사용자 결정으로 정해지고 사용자가 개정을 승인하면 확정하고, 승인 사실을 이 문서에 적는다
+- 결정(사용자 결정 2026-10-19): 생성 평가는 LLM judge로 하고, 지표 정의는 RAGAS(Es et al., "RAGAs: Automated Evaluation of Retrieval Augmented Generation", EACL 2024 System Demonstrations, pp. 150\~158, arXiv:2309.15217)를 빌려 직접 구현한다. ragas·deepeval 라이브러리는 쓰지 않는다. SPEC 개정 초안은 SPEC 밖의 `docs/drafts/spec-generation-eval.md`에 둔다. 초안을 고칠 때마다 SPEC 승인을 받느라 작업이 멈추지 않게 하려는 것이다(사용자 결정, PR #99 코멘트). 남은 결정 사항이 정해지면 SPEC에 옮기며 사용자 승인을 받고 그 사실을 이 문서에 적는다
 - 이유(사용자): judge 프롬프트를 `configs/`에서 버전 관리하고, 한국어 회의록에 맞춘 지시를 쓰기 위해서다
 - 고려 중인 기준과 출처
   - 충실성(faithfulness), 답변 관련성(answer relevance): RAGAS 논문의 세 기준(faithfulness, answer relevance, context relevance) 중 둘이다. 논문은 참조 답변 없이 계산하는 지표로 정의한다
   - 정답성(answer correctness): 논문이 아니라 ragas 라이브러리의 지표다. 참조 답변과 답변을 진술 단위로 대조한 F1(TP / (TP + 0.5·(FP + FN)))과 의미 유사도를 가중 결합한다(ragas 문서). 참조 답변이 필요하다
   - 거부 정확도: RGB(Chen et al., "Benchmarking Large Language Models in Retrieval-Augmented Generation", AAAI 2024, arXiv:2309.01431)의 negative rejection 계열이다. RGB는 답을 담지 않은 문서만 근거로 줬을 때 답변을 거절하는 비율(rejection rate)로 잰다
   - context relevance는 고려 기준에 넣지 않았다. 검색 품질은 검색 단계 지표(Recall@k)가 본다
-- judge: API로 부르고 제공자, 모델, 파라미터, 프롬프트를 버전 관리한다. judge 모델은 생성 모델(Gemma 4)과 다른 계열로 둔다. 후보는 DeepSeek V4.1 Flash이고, 경로(opencode Go 구독 또는 OpenRouter)가 정해지지 않아 확정하지 않는다(SPEC 초안 미결 사항)
+- judge: API로 부르고 제공자, 모델, 파라미터, 프롬프트를 버전 관리한다. judge 모델은 생성 모델(Gemma 4)과 다른 계열인 DeepSeek V4.1 Flash로 하고, 경로는 opencode Go 구독으로 한다(사용자 결정, PR #99 코멘트)
+  - 이유(사용자): 같은 가격에 더 많은 사용량을 얻을 수 있어, 대량 호출이 필요한 평가에 쓴다
+  - 감수하는 것: opencode Go 문서(2026-10-19 확인)는 Go를 코딩 에이전트용으로 설계했고 남용을 감시한다고 적어, 배치 판정으로 의심받아 사용이 막힐 수 있다. 막히면 그 뒤 경로를 다시 논의한다(사용자). 대안은 같은 모델의 OpenRouter 경로(`deepseek/deepseek-v4.1-flash`)다
+  - 데이터 처리처: opencode Go는 학습 미사용·보존 0일(ZDR, 협약은 매달 갱신, 지금 협약은 2026-10-31까지)이다. D-31의 허용 처리처 목록(CLAUDE.md 금지 절, SPEC 자원 제약, protocol-guard)에는 아직 없다. 목록은 이 PR에서 고치지 않았다. 이 경로로 평가 질의를 보내려면 사용자가 목록을 고쳐야 한다
+- 정답성 참조: `summary_a`는 참조로 쓰지 않는다. KoAlpaca(LLaMA 7B) 생성물로 생성·judge 모델보다 성능이 낮고, 사용자가 직접 본 품질이 낮다. `answer.comment`는 질의자 질문에 대한 응답 발언이라 평가 질의와 반드시 맞지 않고, 정치적 고려로 직접 답을 피하기도 한다. 사람 채점 dev 표본을 본 뒤 정하고, 참조로 부족하면 정답성을 보조 지표로 둔다(사용자 결정, PR #99 코멘트)
+- 주지표: RAGAS 지표를 고쳐 만든 LLM judge 점수로 한다. 최소 개선 폭은 추가 논의한다(사용자 결정, PR #99 코멘트)
+- test: 검색 단계와 같이 생성 단계 마지막에만 쓴다(사용자 결정, PR #99 코멘트)
 - 생성 조건: 실험 간 비교는 T=0과 고정 프롬프트로 하고, 제공자는 OpenRouter CoreWeave로 고정한다(D-37)
 - 오라클 조건: 정답 문서를 근거에 직접 넣는 조건은 매 실험이 아니라 진단용으로 한 번 한다. 검색 실패와 생성 실패를 가르는 데 쓰고, 근거에서 정답 문서를 뺀 입력은 거부 정확도 세트로도 쓸 수 있다
 - 날짜: 2026-10-19
