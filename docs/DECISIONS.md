@@ -375,7 +375,7 @@
 - 날짜: 2026-10-19
 
 ## D-38 생성 단계 평가 방향: RAGAS 지표 정의를 빌린 LLM judge 직접 구현
-- 결정(사용자 결정 2026-10-19): 생성 평가는 LLM judge로 하고, 지표 정의는 RAGAS(Es et al., "RAGAs: Automated Evaluation of Retrieval Augmented Generation", EACL 2024 System Demonstrations, pp. 150\~158, arXiv:2309.15217)를 빌려 직접 구현한다. ragas·deepeval 라이브러리는 쓰지 않는다. SPEC 개정 초안은 SPEC "생성 단계 평가 (개정 초안)" 절이고, 그 절의 미결 사항이 정해지면 초안을 확정한다
+- 결정(사용자 결정 2026-10-19): 생성 평가는 LLM judge로 하고, 지표 정의는 RAGAS(Es et al., "RAGAs: Automated Evaluation of Retrieval Augmented Generation", EACL 2024 System Demonstrations, pp. 150\~158, arXiv:2309.15217)를 빌려 직접 구현한다. ragas·deepeval 라이브러리는 쓰지 않는다. SPEC 개정 초안은 SPEC "생성 단계 평가 (개정 초안, 승인 대기)" 절이다. 그 절의 미결 사항이 모두 사용자 결정으로 정해지고 사용자가 개정을 승인하면 확정하고, 승인 사실을 이 문서에 적는다
 - 이유(사용자): judge 프롬프트를 `configs/`에서 버전 관리하고, 한국어 회의록에 맞춘 지시를 쓰기 위해서다
 - 고려 중인 기준과 출처
   - 충실성(faithfulness), 답변 관련성(answer relevance): RAGAS 논문의 세 기준(faithfulness, answer relevance, context relevance) 중 둘이다. 논문은 참조 답변 없이 계산하는 지표로 정의한다
