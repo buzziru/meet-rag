@@ -60,7 +60,7 @@
 
 - `src/rag/search.py`, `configs/config.yaml`(`search`, `paths`), `tests/test_search.py`
 - `.claude/skills/meet-rag/scripts/colab_job.py`의 test 1회 업로드 옵션은 하네스 변경이라 이 조각과 나눠 `chore/` 브랜치의 F 흐름(ADR 포함)으로 한다
-- 실행 뒤: 결과 노트북, `docs/DECISIONS.md`, `docs/PLAN.md`, `docs/STATUS.md`, 이 문서
+- 실행 뒤: 결과 노트북, `docs/DECISIONS.md`, `docs/PLAN.md`, `docs/STATUS.md`, `CLAUDE.md`(명령 절에 실행을 마쳤다는 줄. 다시 돌리지 않도록 명령 자체는 적지 않는다), 이 문서
 
 ## 범위 밖
 
