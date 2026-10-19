@@ -373,3 +373,16 @@
 - 남은 일(생성 단계 구현에서): OpenRouter는 같은 모델을 여러 제공자(양자화 fp4·fp8·bf16)로 보내므로 제공자는 CoreWeave(`coreweave/fp4`)로 고정한다(`provider.order`, `allow_fallbacks: false`, 사용자 결정 2026-10-19, PR #94 코멘트). 이유(사용자): 제공자 목록에서 입력·출력 가격이 가장 낮고 확인 시점 지연도 가장 낮았다. 가격은 OpenRouter 엔드포인트 API(`/api/v1/models/google/gemma-4-31b-it/endpoints`, 2026-10-19 조회)에서 100만 토큰당 입력 $0.10·출력 $0.34다. 처음 코멘트는 DeepInfra였고 측정 20번도 모두 DeepInfra라, 위 근거의 지연은 CoreWeave 값이 아니다. 생성 단계 구현 때 CoreWeave로 첫 토큰 지연을 다시 잰다. fp4는 제공자 목록에서 가장 강한 양자화라 답변 품질이 떨어질 수 있다(추론). 품질은 사고 과정 끔 비교와 함께 생성 평가에서 본다. D-30의 3초는 답변 첫 토큰 지연의 중앙값으로 판정한다(같은 결정). 실험 간 비교를 위해 T=0과 함께 반복 실행 변동 폭을 잰다(D-35). 공개 데모용 키에는 크레딧 한도를 둔다. 실제 입력 길이에서 첫 토큰 지연을 다시 잰다(D-30 3초 중 검색이 평균 약 0.84초, EXP-017). 사고 과정을 끈 답변의 품질은 비교하지 않았다(측정은 지연·오류·글자 수만 봄). D-11 베이스라인은 사고 과정을 켠 출력이라, 생성 평가 기준을 정한 뒤 두 설정의 답변을 비교한다
 - 관계: D-30 정정의 "생성이 반복 실패하면 유료 API로 생성하는 분기"는 기본 경로가 유료가 되어 필요 없어진다
 - 날짜: 2026-10-19
+
+## D-38 생성 단계 평가 방향: RAGAS 지표 정의를 빌린 LLM judge 직접 구현
+- 결정(사용자 결정 2026-10-19): 생성 평가는 LLM judge로 하고, 지표 정의는 RAGAS(Es et al., "RAGAs: Automated Evaluation of Retrieval Augmented Generation", EACL 2024 System Demonstrations, pp. 150\~158, arXiv:2309.15217)를 빌려 직접 구현한다. ragas·deepeval 라이브러리는 쓰지 않는다. SPEC 개정 초안은 SPEC "생성 단계 평가 (개정 초안)" 절이고, 그 절의 미결 사항이 정해지면 초안을 확정한다
+- 이유(사용자): judge 프롬프트를 `configs/`에서 버전 관리하고, 한국어 회의록에 맞춘 지시를 쓰기 위해서다
+- 고려 중인 기준과 출처
+  - 충실성(faithfulness), 답변 관련성(answer relevance): RAGAS 논문의 세 기준(faithfulness, answer relevance, context relevance) 중 둘이다. 논문은 참조 답변 없이 계산하는 지표로 정의한다
+  - 정답성(answer correctness): 논문이 아니라 ragas 라이브러리의 지표다. 참조 답변과 답변을 진술 단위로 대조한 F1(TP / (TP + 0.5·(FP + FN)))과 의미 유사도를 가중 결합한다(ragas 문서). 참조 답변이 필요하다
+  - 거부 정확도: RGB(Chen et al., "Benchmarking Large Language Models in Retrieval-Augmented Generation", AAAI 2024, arXiv:2309.01431)의 negative rejection 계열이다. RGB는 답을 담지 않은 문서만 근거로 줬을 때 답변을 거절하는 비율(rejection rate)로 잰다
+  - context relevance는 고려 기준에 넣지 않았다. 검색 품질은 검색 단계 지표(Recall@k)가 본다
+- judge: API로 부르고 제공자, 모델, 파라미터, 프롬프트를 버전 관리한다. judge 모델은 생성 모델(Gemma 4)과 다른 계열로 둔다. 후보는 DeepSeek V4.1 Flash이고, 경로(opencode Go 구독 또는 OpenRouter)가 정해지지 않아 확정하지 않는다(SPEC 초안 미결 사항)
+- 생성 조건: 실험 간 비교는 T=0과 고정 프롬프트로 하고, 제공자는 OpenRouter CoreWeave로 고정한다(D-37)
+- 오라클 조건: 정답 문서를 근거에 직접 넣는 조건은 매 실험이 아니라 진단용으로 한 번 한다. 검색 실패와 생성 실패를 가르는 데 쓰고, 근거에서 정답 문서를 뺀 입력은 거부 정확도 세트로도 쓸 수 있다
+- 날짜: 2026-10-19
