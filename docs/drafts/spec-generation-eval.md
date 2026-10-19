@@ -18,7 +18,7 @@ SPEC에 더할 생성 단계 평가의 초안이다(D-38). 초안은 SPEC 밖에
 | --- | --- | --- | --- | --- |
 | 충실성 | 답변의 진술이 근거에서 나오는가 | RAGAS 논문 faithfulness | judge가 답변을 진술로 나누고 진술마다 근거로 뒷받침되는지 판정, 뒷받침된 진술 수 / 전체 진술 수 | 필요 없음 |
 | 답변 관련성 | 답변이 질의에 답하는가 | RAGAS 논문 answer relevance | judge 판정. 계산 방식(논문의 역질문 생성과 임베딩 유사도, 또는 judge 직접 채점)은 생성 평가 SLICE에서 정한다 | 필요 없음 |
-| 정답성 | 답변이 참조 답변의 사실과 맞는가 | ragas 라이브러리 answer correctness(RAGAS 논문에는 없음). 진술 단위 사실 F1과 의미 유사도의 가중 결합이고, 의미 유사도는 SAS(Risch et al., "Semantic Answer Similarity for Evaluating Question Answering Models", MRQA@EMNLP 2021, arXiv:2108.06130)를 근거로 든다. v0.2.15 기본 가중치는 사실 0.75·의미 0.25이고, 지금 ragas 문서는 이 지표 대신 factual correctness(진술 단위 정밀도·재현율·F1)와 semantic similarity를 따로 둔다 | judge가 진술 단위로 대조해 TP / (TP + 0.5·(FP + FN)). 의미 유사도를 함께 쓸지는 생성 평가 SLICE에서 정한다 | `answer.comment`(결정 사항 1) |
+| 답변 정확성 | 답변이 참조 답변의 사실과 맞는가 | ragas 라이브러리 answer correctness(RAGAS 논문에는 없음). 진술 단위 사실 F1과 의미 유사도의 가중 결합이고, 의미 유사도는 SAS(Risch et al., "Semantic Answer Similarity for Evaluating Question Answering Models", MRQA@EMNLP 2021, arXiv:2108.06130)를 근거로 든다. v0.2.15 기본 가중치는 사실 0.75·의미 0.25이고, 지금 ragas 문서는 이 지표 대신 factual correctness(진술 단위 정밀도·재현율·F1)와 semantic similarity를 따로 둔다 | judge가 진술 단위로 대조해 TP / (TP + 0.5·(FP + FN)). 의미 유사도를 함께 쓸지는 생성 평가 SLICE에서 정한다 | `answer.comment`(결정 사항 1) |
 | 거부 정확도 | 답이 없는 근거에서 거부하고, 답이 있는 근거에서 거부하지 않는가 | RGB negative rejection | 거부 문구를 코드로 판정. 답이 없는 근거 세트는 오라클 진단에서 정답 문서를 뺀 입력으로 만든다 | 필요 없음 |
 
 RAGAS 논문의 세 번째 기준 context relevance는 쓰지 않는다. 검색 품질은 검색 단계 지표(Recall@k)가 본다.
@@ -58,12 +58,12 @@ LLM 없이 처리하고 judge에 넘기지 않는다(PLAN "생성 평가" 절).
 - 질의 세트: G3 동결 세트 `queries_g3.jsonl` 600건(D-15). dev 전용이고 고치지 않는다
 - 기준: 위 기준 표와 코드 판정 항목을 그대로 쓴다. 생성 EXP마다 single-doc 결과와 함께 보고한다
 - 기준 실험과의 차이는 paired bootstrap 95% 구간으로 보고하고 판정 라벨을 붙이지 않는다. 재표본 단위는 SPEC multi-doc 보조 관찰과 같은 `pool_id`, 반복 횟수와 seed는 위 판정 절과 같다
-- 정답성 참조: 세트의 기대 답(`answer`)은 검수하지 않은 참고 자료이고, 표본 통과 47건 중 16건에 기대 답·요소 문제가 있었다(D-15 단서). 참조로 쓸지는 결정 사항 1과 함께 정한다
+- 답변 정확성 참조: 세트의 기대 답(`answer`)은 검수하지 않은 참고 자료이고, 표본 통과 47건 중 16건에 기대 답·요소 문제가 있었다(D-15 단서). 참조로 쓸지는 결정 사항 1과 함께 정한다
 - 해석의 한계: 질의 수가 single-doc보다 적어 구간이 넓으므로 방향과 큰 변화만 읽는다(SPEC multi-doc 보조 관찰과 같다)
 
 ## 결정 사항
 
-1. 정답성의 위치: 참조 답변은 `answer.comment`로 한다. 답변 발언 원문이라 질의의 답 내용을 그대로 담고 있고, `summary_a`는 KoAlpaca(LLaMA 7B)가 그 내용을 요약한 생성물이라 쓰지 않는다(사용자 결정, PR #99). 다만 `answer.comment`는 질의자 질문 전체에 대한 응답이라 평가 질의와 범위가 다를 수 있고, 정치적 고려로 직접 답을 피하기도 한다. dev-small에서 `answer.comment`를 참조로 정답성을 재 보고, 정답성을 종합 지표(결정 사항 2)에 넣을지 보조 지표로 관찰할지 정한다
-2. 종합 지표 구성: 주지표는 RAGAS 기준을 결합한 종합 지표다(D-38). 결합할 기준과 방식(평균, 가중치)은 정답성의 위치(결정 사항 1)와 judge 보정 결과를 보고 정한다
+1. 답변 정확성의 위치: 참조 답변은 `answer.comment`로 한다. 답변 발언 원문이라 질의의 답 내용을 그대로 담고 있고, `summary_a`는 KoAlpaca(LLaMA 7B)가 그 내용을 요약한 생성물이라 쓰지 않는다(사용자 결정, PR #99). 다만 `answer.comment`는 질의자 질문 전체에 대한 응답이라 평가 질의와 범위가 다를 수 있고, 정치적 고려로 직접 답을 피하기도 한다. dev-small에서 `answer.comment`를 참조로 답변 정확성을 재 보고, 답변 정확성을 종합 지표(결정 사항 2)에 넣을지 보조 지표로 관찰할지 정한다
+2. 종합 지표 구성: 주지표는 RAGAS 기준을 결합한 종합 지표다(D-38). 결합할 기준과 방식(평균, 가중치)은 답변 정확성의 위치(결정 사항 1)와 judge 보정 결과를 보고 정한다
 3. 최소 개선 폭: 추가 논의한다(사용자, PR #99 코멘트). 기준 설정을 반복 실행해 생성과 judge의 변동 폭을 재는 것이 근거가 된다(D-35, `docs/ML 프로젝트 문서 작성 원칙.md` EXP 원칙)
 4. judge 보정의 통과 수준: 기준별 일치율·kappa가 얼마 이상이면 판정에 쓰는지
