@@ -1,32 +1,30 @@
 # STATUS (세션 종료 시 덮어씀)
 
 ## 현재 위치
-- 검색 기준: EXP-014 설정(D-32). dev-full Recall@5 0.9413, Recall@1 0.8372, multi-doc Recall@5 0.9541. 실행 `rag.search +exp=exp014`, 생성 `rag.generate +exp=exp014`
-- 이번 세션
-  - EXP-016(점수 결합에서 조건 목록 제외) 보류, 예외 채택 안 함, H16 닫음(PR #87)
-  - H8 사전 확인(Jev 판단기 AUC 0.672, 구제율 0.6%)과 H5 dense 접두 상한 분석으로 둘 다 진행 안 함. H4·H5·H8·H12·H14 닫음(PR #88)
-  - G2 기준 오답 검토: 실패 177개 중 검색기로 개선 가능 17개(+0.56%p 상한), 좁힐 수 없음 160개(일반론·맥락 빠진 질의). 검색기 성능이 상한에 가깝다고 봄(D-34, PR #89)
-  - 데이터설명서(.hwp) 확인: `summary_q`는 정답 문서를 요약한 "생성요약 질문"(`docs/data.md` §1)
-- 진행 중 EXP: 017 지금 기준 위 리랭커 재판단(H2, `exp/exp017-rerank`). 초안·config 커밋, 결정 사항(T4, 추론 서버 지연은 배포 SLICE) 확정, 착수 지시 받음. 구현 전
-
-## 병합 대기 PR
-- #90 PR #89 코멘트 반영(D-30 상한을 질의 입력부터 답변 출력 시작(스트리밍 첫 토큰)까지로 정정, SPEC 미결 3, D-34 메모, PLAN 배포 할 일)
+- 검색 단계 종료(D-39). 기준 EXP-017(D-36): EXP-014에 RRF 후보 상위 20개 KURE-Reranker-nano 재정렬. dev-full Recall@5 0.9566, test Recall@5 0.9577(3,003질의), 베이스라인 대비 test +10.52%p로 dev 이득 유지. 검색 부분 질의당 평균 약 0.84초(CPU 0.40 + T4 0.44)
+- 생성 기본 경로: OpenRouter 유료 Gemma 4 31B, 사고 과정 끔, 제공자 CoreWeave 고정(D-37). 아직 구현하지 않음(`rag.generate`는 Google 무료 경로, 리랭커 미연결)
+- 생성 평가 방향(D-38): RAGAS 정의를 빌린 LLM judge 직접 구현, judge는 API·버전 관리. SPEC 개정 초안 `docs/drafts/spec-generation-eval.md`(SPEC 미반영)
+- 이번 세션 PR #91\~#102 병합: 백로그·문헌(H10·H11·H17), +1.0%p 해석(D-35)과 문서 작성 원칙, EXP-017(D-36), 생성 경로(D-37), 노트북 ruff 수정, S13 test 1회(search.queries=test, D-39), colab_job --allow-test 추가 뒤 제거(ADR-0043·0045)
 
 ## 실행 중 작업
 - 없음(Colab 세션 없음, 노트북 커널 종료)
 
 ## 이번 세션 결정
-- 검색 단계는 리랭커(D-26)를 지금 기준 위에서 다시 판단한 뒤 test 1회 실행으로 마친다. 운영 채택은 성능, 질의당 시간(D-30 3초), 운영 비용(D-26)으로 정한다(D-34)
-- D-30 3초는 질의 입력부터 답변 출력 시작까지. 답변은 스트리밍. 생성 반복 실패 시 유료 API 분기(배포 SLICE, PR #90)
-- 배포에 문제가 생기면 config에서 리랭커만 뺀 구성(EXP-014 설정)으로 배포한다
-- 데이터셋 품질 개선(요청 문구 등)은 이 프로젝트에서 다루지 않는다
+- +1.0%p는 자동 채택선, 미만 보류는 D-33 선례로 사용자가 정한다(D-35). 최소 개선 폭은 베이스라인 확인 때 근거와 함께 정한다(문서 작성 원칙)
+- 리랭커 운영 채택(D-36), D-26 재판정 조항은 하지 않음
+- 생성: OpenRouter 유료, CoreWeave(fp4) 고정, D-30 3초는 첫 토큰 중앙값으로 판정(D-37)
+- test 결과로 기준 설정을 바꾸지 않음. 실사용 질의는 따로 만들지 않고 배포 페이지에 시험용 질문 샘플을 둔다(PR #101 코멘트)
+- 생성 단계 test 1회도 사용자 지시로 할 수 있다(D-38, PR #102 코멘트)
+- H17(검색기별 상위 슬롯 보장)은 아이디어로만 남김
 
 ## 다음 행동
-1. [B] EXP-017 이어 가기(`exp/exp017-rerank`, 진행 기록 `_workspace/exp017_main_progress.md`). PR #90이 병합됐으면 main을 맞춘 뒤 이 브랜치에 main을 병합한다. 순서: 구현(`rag.search` `write_pairs`가 `ret.dirs` 전체에서 청크 본문을 읽게 하고 `extra_chunks` 금지 해제, 단위 시험, EXP-006 dev-small 후보 쌍을 다시 만들어 그대로인지 확인) → 로컬 후보 쌍 생성(dev-small·dev-full·multi-doc) → Colab T4(E 흐름, 예상 35\~45분·약 0.6\~0.8 CU 승인됨): dev-small 점수 확인 뒤 dev-full·multi-doc 점수와 GPU 지연을 한 작업으로 → 로컬 순위·판정, CPU 단계 지연 측정 → 원인 분석 노트북 → 운영 채택 판단(사용자)
-2. [B] 운영 채택을 정한 뒤 test 1회 실행으로 검색 단계 종료(사용자 지시로만 실행)
-3. [A] 생성 평가: SPEC 개정으로 지표를 정한 뒤 H10·H11
+1. [A] 검색 단계 정리표: EXP별 single-doc·multi-doc 순위 변화 한 표(PLAN 이후 단계)
+2. [D] G4 평가 세트 확장 검토: 하거나 닫을지 결정
+3. [A] SPEC 생성 평가 개정: 초안의 남은 결정 사항을 정해 SPEC·CLAUDE.md(test 문구)에 옮긴다(사용자 승인)
+4. [A] 생성 경로 구현: OpenRouter CoreWeave 설정(`configs/generator/`), 사고 과정 끔, `rag.generate`에 리랭커 연결, 실제 입력 길이에서 첫 토큰 지연 재측정(D-37 남은 일)
+5. [B] 생성 실험(H10 컨텍스트 구성 등)은 3·4 뒤
 
 ## 사용자 확인 필요
-- PR #90 리뷰·병합
+- 남은 빈 워크트리 폴더 `.claude/worktrees/nervous-nobel-f8af97`, `stoic-cohen-b17c4b`: 두 하위 세션을 보관(archive)하면 지울 수 있다
 - 캐시 정리 여부: `uv cache prune`, KURE-Reranker-nano HF 캐시
 - 원격 브랜치 정리(사용자): `chore/harness-setup`, `docs/review-2026-10-01`
