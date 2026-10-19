@@ -379,14 +379,14 @@
 - 이유(사용자): judge 프롬프트를 `configs/`에서 버전 관리하고, 한국어 회의록에 맞춘 지시를 쓰기 위해서다
 - 고려 중인 기준과 출처
   - 충실성(faithfulness), 답변 관련성(answer relevance): RAGAS 논문의 세 기준(faithfulness, answer relevance, context relevance) 중 둘이다. 논문은 참조 답변 없이 계산하는 지표로 정의한다
-  - 참조 답변 일치도(answer correctness): 이름은 진짜 정답 여부가 아니라 참조 답변과의 진술 일치를 잰다는 점을 드러내려고 이렇게 옮긴다(사용자 결정, PR #100). RAGAS 논문이 아니라 ragas 라이브러리의 지표다. 참조 답변과 답변을 진술 단위로 대조한 F1(TP / (TP + 0.5·(FP + FN)))과 의미 유사도를 가중 결합한다(v0.2.15 기본 0.75·0.25). 의미 유사도의 근거 문헌은 SAS(Risch et al., "Semantic Answer Similarity for Evaluating Question Answering Models", MRQA@EMNLP 2021, arXiv:2108.06130)다(ragas 소스 `_answer_similarity.py`). 지금 ragas 문서는 이 지표 대신 factual correctness와 semantic similarity를 따로 둔다. 참조 답변이 필요하다
+  - 핵심 답 포함도(answer correctness): 이름은 질의에 대한 핵심 답을 답변이 담았는지를 잰다는 점을 드러내려고 "핵심 답 포함도"로 한다(사용자 결정, PR #100). RAGAS 논문이 아니라 ragas 라이브러리의 지표다. 참조 답변과 답변을 진술 단위로 대조한 F1(TP / (TP + 0.5·(FP + FN)))과 의미 유사도를 가중 결합한다(v0.2.15 기본 0.75·0.25). 의미 유사도의 근거 문헌은 SAS(Risch et al., "Semantic Answer Similarity for Evaluating Question Answering Models", MRQA@EMNLP 2021, arXiv:2108.06130)다(ragas 소스 `_answer_similarity.py`). 지금 ragas 문서는 이 지표 대신 factual correctness와 semantic similarity를 따로 둔다. 참조 답변이 필요하다
   - 거부 정확도: RGB(Chen et al., "Benchmarking Large Language Models in Retrieval-Augmented Generation", AAAI 2024, arXiv:2309.01431)의 negative rejection 계열이다. RGB는 답을 담지 않은 문서만 근거로 줬을 때 답변을 거절하는 비율(rejection rate)로 잰다
   - context relevance는 고려 기준에 넣지 않았다. 검색 품질은 검색 단계 지표(Recall@k)가 본다
 - judge: API로 부르고 제공자, 모델, 파라미터, 프롬프트를 버전 관리한다. judge 모델은 생성 모델(Gemma 4)과 다른 계열인 DeepSeek V4.1 Flash로 하고, 경로는 opencode Go 구독으로 한다(사용자 결정, PR #99 코멘트)
   - 이유(사용자): 같은 가격에 더 많은 사용량을 얻을 수 있어, 대량 호출이 필요한 평가에 쓴다
   - 감수하는 것: opencode Go 문서(2026-10-19 확인)는 Go를 코딩 에이전트용으로 설계했고 남용을 감시한다고 적어, 배치 판정으로 의심받아 사용이 막힐 수 있다. 막히면 그 뒤 경로를 다시 논의한다(사용자). 대안은 같은 모델의 OpenRouter 경로(`deepseek/deepseek-v4.1-flash`)다
   - 데이터 처리처: opencode Go는 학습 미사용·보존 0일(ZDR, 협약은 매달 갱신, 지금 협약은 2026-10-31까지)이다. D-31의 허용 처리처 목록(CLAUDE.md 금지 절, SPEC 자원 제약, protocol-guard P6)에 생성 평가 judge용으로 더했다(사용자 지시 2026-10-19, ADR-0044). 용도는 judge 호출로 한정한다. `test` 질의 제한과 대량 전송 전 보고·승인은 다른 처리처와 같다
-- 참조 답변 일치도의 참조 답변: `answer.comment`로 한다. 답변 발언 원문이라 질의의 답 내용을 그대로 담고 있고, `summary_a`는 KoAlpaca(LLaMA 7B)가 그 내용을 요약한 생성물로 생성·judge 모델보다 성능이 낮고 사용자가 직접 본 품질도 낮아 쓰지 않는다. `answer.comment`는 질의자 질문 전체에 대한 응답이라 평가 질의와 범위가 다를 수 있고 정치적 고려로 직접 답을 피하기도 해서, dev-small에서 `answer.comment`를 참조 답변으로 일치도를 재 본 뒤 종합 지표에 넣을지 보조 지표로 관찰할지 정한다(사용자 결정, PR #99)
+- 핵심 답 포함도의 참조 답변: `answer.comment`로 한다. 답변 발언 원문이라 질의의 답 내용을 그대로 담고 있고, `summary_a`는 KoAlpaca(LLaMA 7B)가 그 내용을 요약한 생성물로 생성·judge 모델보다 성능이 낮고 사용자가 직접 본 품질도 낮아 쓰지 않는다. `answer.comment`는 질의자 질문 전체에 대한 응답이라 평가 질의와 범위가 다를 수 있고 정치적 고려로 직접 답을 피하기도 해서, dev-small에서 `answer.comment`를 참조 답변으로 포함도를 재 본 뒤 종합 지표에 넣을지 보조 지표로 관찰할지 정한다(사용자 결정, PR #99)
 - 주지표: RAGAS 지표를 고쳐 만든 LLM judge 기준을 결합한 종합 지표로 한다. 결합 구성과 최소 개선 폭은 추가 논의한다(사용자 결정, PR #99 코멘트)
 - multi-doc: 검색 단계와 같이 G3 동결 세트(D-15)로 생성도 평가하되 보조 관찰로 두고 판정에 쓰지 않는다(사용자 결정, PR #99)
 - test: 검색 단계와 같이 생성 단계 마지막에 사용자 지시로 1회만 쓴다(사용자 결정, PR #99 코멘트). 지금 SPEC·CLAUDE.md는 test를 검색 단계 종료 1회로만 허용하므로, 이 사용은 초안을 SPEC에 옮기며 SPEC·CLAUDE.md를 고친 뒤에 효력이 있다
