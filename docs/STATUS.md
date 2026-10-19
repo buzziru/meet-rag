@@ -1,30 +1,29 @@
 # STATUS (세션 종료 시 덮어씀)
 
 ## 현재 위치
-- 검색 단계 종료(D-39). 기준 EXP-017(D-36): EXP-014에 RRF 후보 상위 20개 KURE-Reranker-nano 재정렬. dev-full Recall@5 0.9566, test Recall@5 0.9577(3,003질의), 베이스라인 대비 test +10.52%p로 dev 이득 유지. 검색 부분 질의당 평균 약 0.84초(CPU 0.40 + T4 0.44)
-- 생성 기본 경로: OpenRouter 유료 Gemma 4 31B, 사고 과정 끔, 제공자 CoreWeave 고정(D-37). 아직 구현하지 않음(`rag.generate`는 Google 무료 경로, 리랭커 미연결)
-- 생성 평가 방향(D-38): RAGAS 정의를 빌린 LLM judge 직접 구현, judge는 API·버전 관리. SPEC 개정 초안 `docs/drafts/spec-generation-eval.md`(SPEC 미반영)
-- 이번 세션 PR #91\~#102 병합: 백로그·문헌(H10·H11·H17), +1.0%p 해석(D-35)과 문서 작성 원칙, EXP-017(D-36), 생성 경로(D-37), 노트북 ruff 수정, S13 test 1회(search.queries=test, D-39), colab_job --allow-test 추가 뒤 제거(ADR-0043·0045)
+- 검색 단계 종료(D-39). 기준 EXP-017(D-36), test Recall@5 0.9577
+- 생성 단계 착수: S14 생성 평가 모듈 구현, PR #106 리뷰 대기(브랜치 `feat/s14-gen-eval`). 생성 기본 경로 OpenRouter CoreWeave(D-37)에 EXP-017 재정렬 점수 연결, `rag.gen_eval`(일괄 생성·코드 판정·DeepSeek judge·집계), 결정 D-40
+- dev-small 20질의 동작 확인: 충실성 0.953, 관련성 0.875, 핵심 답변 포함도 0.696(14질의), 거부 0/20, 첫 토큰 중앙값 0.56초. 판정에 쓰지 않음(slices/14-gen-eval.md 결과 절)
+- 이번 세션 PR: #104 검색 단계 정리표(병합), #105 G4 닫음(대기), #106 S14(대기)
 
 ## 실행 중 작업
-- 없음(Colab 세션 없음, 노트북 커널 종료)
+- 없음
 
 ## 이번 세션 결정
-- +1.0%p는 자동 채택선, 미만 보류는 D-33 선례로 사용자가 정한다(D-35). 최소 개선 폭은 베이스라인 확인 때 근거와 함께 정한다(문서 작성 원칙)
-- 리랭커 운영 채택(D-36), D-26 재판정 조항은 하지 않음
-- 생성: OpenRouter 유료, CoreWeave(fp4) 고정, D-30 3초는 첫 토큰 중앙값으로 판정(D-37)
-- test 결과로 기준 설정을 바꾸지 않음. 실사용 질의는 따로 만들지 않고 배포 페이지에 시험용 질문 샘플을 둔다(PR #101 코멘트)
-- 생성 단계 test 1회도 사용자 지시로 할 수 있다(D-38, PR #102 코멘트)
-- H17(검색기별 상위 슬롯 보장)은 아이디어로만 남김
+- G4 닫음: multi-doc 질의 유형을 더하지 않는다(PR #105)
+- S14 결정 1\~5(D-40): 재정렬은 점수 파일, 관련성 3단계, 메타데이터는 일자·위원회만, 거부 교차 집계의 "청크에 답 있음"은 핵심 진술 judge 대조 0.5 이상
+- judge는 opencode Go(Global 지역 설정, 학습 미사용 협약 유지). 사고 과정은 단계마다 다르게 둔다(사용자 결정). Go 경로는 `reasoning_effort` none·low·기본을 받는다(none 확인)
+- summary_q의 대화 말투 질의("전문가로서 어떻게 보나")는 RAG 질문으로 부적절하다(사용자 의견). 생성 평가에서의 처리는 dev-small 전체 관찰 뒤 SPEC 개정에서 정한다
 
 ## 다음 행동
-1. [A] 검색 단계 정리표: EXP별 single-doc·multi-doc 순위 변화 한 표(PLAN 이후 단계)
-2. [D] G4 평가 세트 확장 검토: 하거나 닫을지 결정
-3. [A] SPEC 생성 평가 개정: 초안의 남은 결정 사항을 정해 SPEC·CLAUDE.md(test 문구)에 옮긴다(사용자 승인)
-4. [A] 생성 경로 구현: OpenRouter CoreWeave 설정(`configs/generator/`), 사고 과정 끔, `rag.generate`에 리랭커 연결, 실제 입력 길이에서 첫 토큰 지연 재측정(D-37 남은 일)
-5. [B] 생성 실험(H10 컨텍스트 구성 등)은 3·4 뒤
+1. [A] PR #106 판단할 곳(j_v1 문구, 경계 0.5, 사고 과정, 인용 없는 문장) 코멘트 반영. 사고 과정은 2의 결과로 답한다
+2. [A] judge 단계별 사고 과정 설정: config에 단계별 `reasoning_effort` 항목을 두고, 같은 20질의를 none·low로 다시 채점(각 약 100호출, Go 구독)해 기본값 결과와 단계별 일치율을 비교 → 불일치 건을 사용자가 검토 → 단계별 값 확정(slices/14-gen-eval.md 관찰 마지막 항목). 평가 모듈 수정 여부는 사용자가 정한다
+3. [A] dev-small 전체(1,039질의) 생성·judge: 호출 수·비용 보고 후 승인. 참조 사용 불가·대화 말투 질의 비율을 함께 센다(PLAN 생성 평가 "핵심 답변 포함도 관찰")
+4. [D] G5 사람 채점과 judge 보정 → 필요하면 j_v2
+5. [A] 변동 폭 측정·오라클 진단 → SPEC 생성 평가 개정 → [B] 생성 실험(H10, 근거 단위·출처 표기)
 
 ## 사용자 확인 필요
-- 남은 빈 워크트리 폴더 `.claude/worktrees/nervous-nobel-f8af97`, `stoic-cohen-b17c4b`: 두 하위 세션을 보관(archive)하면 지울 수 있다
+- PR #105·#106 병합
+- 하네스 대기 3건(`_workspace/00_main_harness-pending.md`, [F]): A1 지시서 요약·결정 설명 보고, 작업 결과 본문 보고, 대기 중 EXP-012 Colab 회수 항목
 - 캐시 정리 여부: `uv cache prune`, KURE-Reranker-nano HF 캐시
 - 원격 브랜치 정리(사용자): `chore/harness-setup`, `docs/review-2026-10-01`
