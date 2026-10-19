@@ -44,6 +44,13 @@ def test_non_dev_qids_counts_test_and_unknown(tmp_path, monkeypatch):
     assert colab_job.non_dev_qids(up) == 2
 
 
+def test_allow_test_passes_test_but_not_unknown(tmp_path, monkeypatch):
+    monkeypatch.setattr(colab_job, "ROOT", make_root(tmp_path))
+    up = tmp_path / "up.jsonl"
+    write_jsonl(up, [{"qid": "t1"}, {"qid": "md-conf-9999"}, {"qid": "d1"}])
+    assert colab_job.non_dev_qids(up, allow_test=True) == 1
+
+
 def test_non_dev_qids_without_frozen_set(tmp_path, monkeypatch):
     monkeypatch.setattr(colab_job, "ROOT", make_root(tmp_path, frozen=False))
     up = tmp_path / "up.jsonl"

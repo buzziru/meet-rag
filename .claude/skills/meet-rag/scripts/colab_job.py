@@ -140,15 +140,18 @@ def blocked(path: str) -> bool:
     return name in (".env", "queries.csv")
 
 
-def non_dev_qids(path: Path) -> int:
+def non_dev_qids(path: Path, allow_test: bool = False) -> int:
     """jsonl에서 qid가 있고 dev 질의가 아닌 행 수. test 질의는 VM에 올리지 않는다(SPEC 자원 제약).
+
+    allow_test는 검색 단계 종료 test 1회 실행(S13, 사용자 지시)에서만 준다. 그때도 dev·test
+    어느 분할에도 없는 qid는 센다.
 
     dev 질의는 summary_q dev 분할과 G3 multi-doc 동결 세트(test 회의를 뺀 문서로만 만든 dev 전용
     세트, SPEC "보조 관찰")다. 파일 이름과 무관하게 내용으로 판정한다.
     qid가 없는 행(코퍼스)은 세지 않는다.
     """
     splits = pd.read_csv(ROOT / "data/splits/queries.csv", dtype=str)
-    dev = set(splits.loc[splits["split"] == "dev", "qid"])
+    dev = set(splits.loc[splits["split"].isin(["dev", "test"] if allow_test else ["dev"]), "qid"])
     frozen = ROOT / "data/multidoc/queries_g3.jsonl"
     if frozen.exists():
         with frozen.open(encoding="utf-8") as f:
@@ -158,12 +161,14 @@ def non_dev_qids(path: Path) -> int:
         return sum("qid" in r and r["qid"] not in dev for r in rows)
 
 
-def upload(session: str, local: str, remote: str) -> None:
+def upload(session: str, local: str, remote: str, allow_test: bool = False) -> None:
     src = Path(local)
     if blocked(local) or blocked(remote):
         sys.exit(f"올리지 않는 파일이다(분할·.env): {local}")
-    if src.suffix == ".jsonl" and (n := non_dev_qids(src)):
+    if src.suffix == ".jsonl" and (n := non_dev_qids(src, allow_test)):
         sys.exit(f"dev가 아닌 질의 {n}건이 있다. dev 질의만 거른 파일을 올린다: {local}")
+    if allow_test:
+        print("test 질의 업로드 허용(검색 단계 종료 test 1회 실행, S13)")
     target = f"{VM_REPO}/{remote}"
     vm_sh(session, f"mkdir -p {shlex.quote(str(Path(target).parent.as_posix()))}")
     if src.stat().st_size > 20_000_000:  # 큰 파일은 압축해 보낸다(159MB 코퍼스 → 73MB)
@@ -261,6 +266,8 @@ def main() -> None:
         elif name == "upload":
             sp.add_argument("local")
             sp.add_argument("remote")
+            # 검색 단계 종료 test 1회 실행에서만 준다(S13, 사용자 지시)
+            sp.add_argument("--allow-test", action="store_true")
         elif name == "launch":
             sp.add_argument("uv_args", nargs=argparse.REMAINDER)
         elif name == "poll":
@@ -277,7 +284,7 @@ def main() -> None:
     elif a.cmd == "setup":
         setup(a.session, a.commit)
     elif a.cmd == "upload":
-        upload(a.session, a.local, a.remote)
+        upload(a.session, a.local, a.remote, a.allow_test)
     elif a.cmd == "launch":
         launch(a.session, [x for x in a.uv_args if x != "--"])
     elif a.cmd == "poll":
