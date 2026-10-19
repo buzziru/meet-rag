@@ -1,0 +1,32 @@
+# @package _global_
+# EXP-017 지금 기준(EXP-014, D-32) 위에서 KURE-Reranker-nano로 상위 후보 재정렬, Colab GPU
+# (docs/experiments/EXP-017.md). EXP-006의 재정렬 설정을 EXP-014 위에 더한다.
+# 순서: (로컬) rag.search search.mode=rerank-pairs → (VM) rag.rerank 점수·지연 → (로컬) rag.search
+defaults:
+  - exp014
+  - _self_
+
+retriever:
+  run_name: hybrid-cond-filter-law-ms256-k20-ce  # EXP-014 순위 파일을 덮어쓰지 않는다
+  rerank:  # EXP-006과 같은 값(재정렬 깊이·모델·입력은 dev-full을 보고 바꾸지 않는다)
+    enabled: true  # 점수 파일로 RRF 상위 depth개를 다시 줄 세운 뒤 필터를 적용한다
+    depth: 20
+    backend: cross-encoder
+    model: nlpai-lab/KURE-Reranker-nano
+    revision: f3b3eff2b5251f135b638891ebe7d6c5ae94cc3e
+    max_length: 1024  # 질의 + 청크 하나. 토크나이저가 달라 여유를 둔다
+    batch_size: 32
+    mode: score  # score | latency
+    # 로컬 cpu·float32. Colab은 명령에서 cuda·float16으로 바꾼다
+    device: cpu
+    dtype: float32
+    threads: null
+    latency:
+      n_queries: 100
+      seed: 20260929
+
+paths:
+  # EXP-005·006(EXP-004 기준) 후보 쌍·점수·지연 파일을 덮어쓰지 않게 기준 이름을 넣는다
+  rerank_pairs: data/rerank/${search.queries}-${index.scope}-ms256-k20.pairs.jsonl
+  rerank_scores: data/rerank/${search.queries}-${index.scope}-ms256-k20-${retriever.rerank.backend}.scores.jsonl
+  rerank_latency: data/rerank/latency-${search.queries}-${index.scope}-ms256-k20-${retriever.rerank.backend}.json
