@@ -89,7 +89,7 @@ D-38은 RAGAS 지표 정의를 빌려 직접 구현하고 ragas 라이브러리�
 - `src/rag/generate.py`, `src/rag/retrieve.py`, `src/rag/search.py`(재정렬 순서 규칙을 `rag.retrieve`로 옮기는 부분만), 새 `src/rag/gen_eval/`
 - `configs/config.yaml`(기본 generator, `paths.gen_runs`·`gen_refs`·`gen_judge`, `gen_eval` 절), 새 `configs/generator/openrouter.yaml`, 새 `configs/judge/`
 - `tests/`의 해당 테스트
-- `docs/slices/14-gen-eval.md`, `docs/slices/06-generate.md`(경로 서술), `CLAUDE.md` "명령" 절, `docs/PLAN.md`(S14 줄), `docs/DECISIONS.md`(결정 사항 1\~3 기록)
+- `docs/slices/14-gen-eval.md`, `docs/slices/06-generate.md`(경로 서술), `CLAUDE.md` "명령" 절, `docs/PLAN.md`(S14 줄), `docs/DECISIONS.md`(결정 사항 기록, D-40)
 
 ## 범위 밖
 
