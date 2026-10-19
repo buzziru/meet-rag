@@ -39,10 +39,13 @@ def criterion(rows: list[dict], key: str) -> tuple[list[float], Counter, int]:
 
 
 def refusal_table(rows: list[dict]) -> list[tuple[str, int, int]]:
-    """(근거 상태, 질의 수, 거부 수). 정답 문서가 들어갔고 근거 청크가 답을 담았는데
-    거부했으면 잘못된 거부다. 정답 문서가 없을 때의 거부는 참고값이다(S14 결정 5)."""
-    groups = {"정답 문서 있음, 청크에 답 있음": lambda r: r["gold_n"] and r["answer_in_chunk"],
-              "정답 문서 있음, 청크에 답 없음": lambda r: r["gold_n"] and not r["answer_in_chunk"],
+    """(근거 상태, 질의 수, 거부 수). 정답 문서의 근거 청크에 핵심 답이 있는데 거부했으면 잘못된
+    거부다. 정답 문서가 없을 때의 거부는 참고값이다(S14 결정 5). 판단 불가는 핵심 진술이 없거나
+    judge 형식 오류인 경우다."""
+    groups = {"정답 문서 있음, 청크에 핵심 답 있음": lambda r: r["gold_n"] and r["answer_in_chunk"],
+              "정답 문서 있음, 청크에 핵심 답 없음":
+                  lambda r: r["gold_n"] and r["answer_in_chunk"] is False,
+              "정답 문서 있음, 판단 불가": lambda r: r["gold_n"] and r["answer_in_chunk"] is None,
               "정답 문서 없음": lambda r: not r["gold_n"]}
     return [(name, sum(1 for r in rows if f(r)), sum(1 for r in rows if f(r) and r["refusal"]))
             for name, f in groups.items()]
@@ -85,8 +88,8 @@ def main() -> None:
     tin, tout = usage_sum(gen_usage, "prompt_tokens"), usage_sum(gen_usage, "completion_tokens")
     reasoning = sum(((u or {}).get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
                     for u in gen_usage)
-    judge_usage = [u for r in answered for key in ("faithfulness", "relevance", "inclusion")
-                   for u in (r[key].get("usage") or [])]
+    keys = ("faithfulness", "relevance", "inclusion", "key_statements", "chunk_keys")
+    judge_usage = [u for r in rows for key in keys for u in ((r.get(key) or {}).get("usage") or [])]
     first = [r["first_token_s"] for r in rows if r["first_token_s"] is not None]
     total = [r["total_s"] for r in rows]
     providers = Counter(r["provider"] for r in rows)

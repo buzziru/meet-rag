@@ -12,8 +12,8 @@ model: deepseek-v4.1-flash
 user_agent: meet-rag-judge/0.1
 params:
   temperature: 0.0
-  max_tokens: 4096  # 사고 과정 토큰 포함 상한
+  max_tokens: 16384  # 사고 과정 토큰 포함 상한. 4096은 사고 과정이 다 써 본문이 빈 응답이 20질의 중 6건(S14)
 # 요청 본문에 더하는 값. 사고 과정은 모델 기본값(켜짐)을 그대로 쓴다. 끄는 값을 정하면 여기에 둔다
 extra_body: null
-timeout: 120  # 호출 하나의 대기 상한(초)
+timeout: 300  # 호출 하나의 대기 상한(초). 사고 과정이 길면 수 분 걸릴 수 있다
 concurrency: 4  # 동시에 채점하는 생성 기록 수

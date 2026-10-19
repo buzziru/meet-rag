@@ -24,7 +24,6 @@ from openai import OpenAI
 
 from rag.conditions import committee_base
 from rag.gen_eval.checks import (
-    answer_overlap,
     citation_check,
     gold_position,
     is_refusal,
@@ -144,47 +143,68 @@ def relevance(judge: Judge, question: str, answer: str) -> dict:
     return {"score": RELEVANCE[label], "label": label, "reason": out.get("reason"), "usage": [u]}
 
 
-def inclusion(judge: Judge, question: str, answer: str, reference: str) -> dict:
-    """핵심 답변 포함도: answer.comment에서 뽑은 핵심 진술 중 답변에 담긴 비율.
-    핵심 진술 추출은 답변과 무관해 같은 질의·judge 레시피면 저장된 응답을 쓴다."""
-    ks, u1 = judge.ask("key_statements", question=question, reference=reference)
-    keys = ks.get("key_statements") if ks else None
+def key_statements(judge: Judge, question: str, reference: str) -> dict:
+    """answer.comment에서 질의에 답하는 핵심 진술. 답변과 무관해 질의마다 한 번 부르고, 핵심 답변
+    포함도와 근거 청크 판정이 같은 진술을 쓴다. 빈 목록이면 참조 사용 불가다."""
+    out, u = judge.ask("key_statements", question=question, reference=reference)
+    keys = out.get("key_statements") if out else None
     if not isinstance(keys, list):
-        return {"score": None, "error": "key_statements 형식 오류", "usage": [u1]}
-    if not keys:
-        return {"score": None, "excluded": "reference_unusable", "usage": [u1]}
-    ck, u2 = judge.ask("key_checks", key_statements=json.dumps(keys, ensure_ascii=False),
-                       answer=answer)
-    checks = ck.get("checks") if ck else None
+        return {"keys": None, "error": "key_statements 형식 오류", "usage": [u]}
+    return {"keys": keys, "usage": [u]}
+
+
+def key_presence(judge: Judge, step: str, keys: list[str], **text: str) -> dict:
+    """핵심 진술마다 대상 글(답변 또는 근거 청크)에 들어 있는지 판정하고 들어 있는 비율을 낸다."""
+    out, u = judge.ask(step, key_statements=json.dumps(keys, ensure_ascii=False), **text)
+    checks = out.get("checks") if out else None
     if (not isinstance(checks, list) or len(checks) != len(keys)
             or not all(c.get("present") in (0, 1) for c in checks)):
-        return {"score": None, "error": "checks 형식 오류", "key_statements": keys,
-                "usage": [u1, u2]}
-    return {"score": sum(c["present"] for c in checks) / len(checks), "key_statements": keys,
-            "checks": checks, "usage": [u1, u2]}
+        return {"score": None, "error": f"{step} 형식 오류", "usage": [u]}
+    return {"score": sum(c["present"] for c in checks) / len(checks), "checks": checks,
+            "usage": [u]}
+
+
+def inclusion(judge: Judge, answer: str, ks: dict | None) -> dict:
+    """핵심 답변 포함도: 핵심 진술 중 답변에 담긴 비율. ks가 None이면 정답 문서가 근거에 없다."""
+    if ks is None:
+        return {"score": None, "excluded": "gold_missing"}
+    if ks["keys"] is None:
+        return {"score": None, "error": ks["error"]}
+    if not ks["keys"]:
+        return {"score": None, "excluded": "reference_unusable"}
+    return {**key_presence(judge, "key_checks", ks["keys"], answer=answer),
+            "key_statements": ks["keys"]}
 
 
 @traceable(name="judge_record", process_inputs=lambda i: {"qid": i["gen"]["qid"]})
 def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) -> dict:
-    """생성 기록 하나의 코드 판정과 judge 채점."""
+    """생성 기록 하나의 코드 판정과 judge 채점.
+
+    정답 문서가 근거에 있으면 거부 여부와 관계없이 핵심 진술을 뽑고, 그 진술이 정답 문서의 근거
+    청크에 들어 있는 비율이 gen_eval.chunk_key_min 이상이면 청크에 답이 있다고 본다(S14 결정 5).
+    핵심 진술이 없거나 형식 오류면 answer_in_chunk는 None(판단 불가)이다."""
     g = cfg.gen_eval
     answer, contexts = gen["answer"], gen["contexts"]
     gold_n = gold_position(contexts, ref["doc_id"])
-    overlap = (answer_overlap(contexts[gold_n - 1]["text"], ref["answer_comment"])
-               if gold_n else None)
     out = {"qid": gen["qid"], "refusal": is_refusal(answer, g.refusal), "gold_n": gold_n,
-           "answer_overlap": overlap,
-           "answer_in_chunk": None if overlap is None else overlap >= g.answer_overlap,
-           "usage": gen["usage"], "provider": gen["provider"],
+           "answer_in_chunk": None, "usage": gen["usage"], "provider": gen["provider"],
            "first_token_s": gen["first_token_s"], "total_s": gen["total_s"]}
+    ks = key_statements(judge, gen["query"], ref["answer_comment"]) if gold_n else None
+    if ks is not None:
+        out["key_statements"] = ks
+        if ks["keys"]:
+            chunk = key_presence(judge, "chunk_checks", ks["keys"],
+                                 excerpt=contexts[gold_n - 1]["text"])
+            out["chunk_keys"] = chunk
+            if chunk["score"] is not None:
+                out["answer_in_chunk"] = chunk["score"] >= g.chunk_key_min
     if out["refusal"]:  # 거부 답변은 거부 교차 집계로만 본다(초안 "거부 답변의 처리")
         return out
     out["citations"] = citation_check(answer, len(contexts))
     out["metadata"] = metadata_mismatches(answer, contexts, committees)
     out["faithfulness"] = faithfulness(judge, gen["query"], answer, contexts)
     out["relevance"] = relevance(judge, gen["query"], answer)
-    out["inclusion"] = (inclusion(judge, gen["query"], answer, ref["answer_comment"]) if gold_n
-                        else {"score": None, "excluded": "gold_missing"})
+    out["inclusion"] = inclusion(judge, answer, ks)
     return out
 
 

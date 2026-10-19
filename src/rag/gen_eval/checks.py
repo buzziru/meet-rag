@@ -1,7 +1,6 @@
 """생성 답변의 코드 판정(S14, 초안 "코드로 판정하는 항목"). LLM을 쓰지 않는다."""
 
 import re
-from difflib import SequenceMatcher
 
 from rag.conditions import DATE, DOC_DATE, committee_base, full_year
 
@@ -70,15 +69,3 @@ def metadata_mismatches(answer: str, contexts: list[dict], committees: set[str])
 def gold_position(contexts: list[dict], gold_doc: str) -> int | None:
     """정답 문서가 든 근거 번호. 없으면 None(라벨 doc_id 대조)."""
     return next((c["n"] for c in contexts if c["doc_id"] == gold_doc), None)
-
-
-def answer_overlap(chunk: str, comment: str) -> float:
-    """근거 청크가 answer.comment를 담은 정도: 공백을 지운 뒤 가장 긴 공통 부분 문자열 길이 /
-    comment 길이(S14 결정 5)."""
-    a, b = SPACE.sub("", chunk), SPACE.sub("", comment)
-    if not b:
-        return 0.0
-    if b in a:
-        return 1.0
-    m = SequenceMatcher(None, a, b, autojunk=False).find_longest_match(0, len(a), 0, len(b))
-    return m.size / len(b)

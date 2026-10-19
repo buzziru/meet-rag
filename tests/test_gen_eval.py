@@ -3,7 +3,6 @@ import json
 import pytest
 
 from rag.gen_eval.checks import (
-    answer_overlap,
     citation_check,
     gold_position,
     is_refusal,
@@ -11,7 +10,16 @@ from rag.gen_eval.checks import (
     sentences,
 )
 from rag.gen_eval.common import done_qids, sample_qids
-from rag.gen_eval.judge import faithfulness, inclusion, parse_json, relevance, render
+from rag.gen_eval.judge import (
+    faithfulness,
+    inclusion,
+    judge_record,
+    key_presence,
+    key_statements,
+    parse_json,
+    relevance,
+    render,
+)
 from rag.gen_eval.report import criterion, refusal_table
 
 REFUSAL = "제공된 회의록에서 답을 찾지 못했습니다"
@@ -51,12 +59,9 @@ def test_metadata_ignores_partial_dates_and_bases_committee():
     assert metadata_mismatches("3월 5일 국방위원회 답변입니다[1].", contexts, {"국방위원회"}) == []
 
 
-def test_gold_position_and_overlap():
+def test_gold_position():
     contexts = [ctx(1, "a"), ctx(2, "b")]
     assert gold_position(contexts, "b") == 2 and gold_position(contexts, "z") is None
-    assert answer_overlap("가나 다라마바사", "다라 마바") == 1.0
-    assert answer_overlap("가나다라", "다라XY") == pytest.approx(0.5)
-    assert answer_overlap("가나다", "") == 0.0
 
 
 def test_sample_keeps_prefix_when_n_grows():
@@ -106,10 +111,37 @@ def test_relevance_and_inclusion():
     assert relevance(StubJudge({"relevance": {"label": "일부"}}), "q", "a")["score"] == 0.5
     assert relevance(StubJudge({"relevance": {"label": "?"}}), "q", "a")["score"] is None
     none = StubJudge({"key_statements": {"key_statements": []}})
-    assert inclusion(none, "q", "a", "ref")["excluded"] == "reference_unusable"
+    ks = key_statements(none, "q", "ref")
+    assert inclusion(none, "a", ks)["excluded"] == "reference_unusable"
+    assert inclusion(none, "a", None)["excluded"] == "gold_missing"
     two = StubJudge({"key_statements": {"key_statements": ["k1", "k2"]},
                      "key_checks": {"checks": [{"present": 1}, {"present": 1}]}})
-    assert inclusion(two, "q", "a", "ref")["score"] == 1.0
+    assert inclusion(two, "a", key_statements(two, "q", "ref"))["score"] == 1.0
+    bad = StubJudge({"chunk_checks": {"checks": [{"present": 1}]}})
+    assert key_presence(bad, "chunk_checks", ["k1", "k2"], excerpt="e")["score"] is None
+
+
+def gen(answer, contexts):
+    return {"qid": "q1", "query": "질문", "answer": answer, "contexts": contexts, "usage": {},
+            "provider": "p", "first_token_s": 0.1, "total_s": 0.2}
+
+
+def judge_cfg():
+    from omegaconf import OmegaConf
+    return OmegaConf.create({"gen_eval": {"refusal": REFUSAL, "chunk_key_min": 0.5}})
+
+
+def test_judge_record_checks_chunk_with_key_statements_even_for_refusal():
+    stub = StubJudge({"key_statements": {"key_statements": ["k1", "k2"]},
+                      "chunk_checks": {"checks": [{"present": 1}, {"present": 0}]}})
+    contexts = [ctx(1, "other"), ctx(2, "gold", text="발췌")]
+    out = judge_record.__wrapped__(stub, gen(REFUSAL + ".", contexts),
+                                   {"doc_id": "gold", "answer_comment": "발언"}, judge_cfg(), set())
+    assert out["refusal"] and out["gold_n"] == 2 and out["answer_in_chunk"] is True
+    assert "faithfulness" not in out
+    ref = {"doc_id": "none", "answer_comment": "발언"}
+    missing = judge_record.__wrapped__(stub, gen(REFUSAL, contexts), ref, judge_cfg(), set())
+    assert missing["gold_n"] is None and missing["answer_in_chunk"] is None
 
 
 def test_report_criterion_and_refusal_table():
@@ -118,11 +150,13 @@ def test_report_criterion_and_refusal_table():
          "inclusion": {"score": 0.5}},
         {"refusal": True, "gold_n": 1, "answer_in_chunk": True},
         {"refusal": True, "gold_n": 2, "answer_in_chunk": False},
+        {"refusal": False, "gold_n": 3, "answer_in_chunk": None},
         {"refusal": False, "gold_n": None, "answer_in_chunk": None,
          "inclusion": {"score": None, "excluded": "gold_missing"}},
     ]
     scores, excluded, errors = criterion(rows, "inclusion")
     assert scores == [0.5] and excluded == {"gold_missing": 1} and errors == 0
-    assert refusal_table(rows) == [("정답 문서 있음, 청크에 답 있음", 2, 1),
-                                   ("정답 문서 있음, 청크에 답 없음", 1, 1),
+    assert refusal_table(rows) == [("정답 문서 있음, 청크에 핵심 답 있음", 2, 1),
+                                   ("정답 문서 있음, 청크에 핵심 답 없음", 1, 1),
+                                   ("정답 문서 있음, 판단 불가", 1, 0),
                                    ("정답 문서 없음", 1, 0)]
