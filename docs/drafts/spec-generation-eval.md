@@ -33,7 +33,7 @@ LLM 없이 처리하고 judge에 넘기지 않는다(PLAN "생성 평가" 절).
 
 ## judge
 
-- 모델은 DeepSeek V4.1 Flash, 경로는 opencode Go 구독(`deepseek-v4.1-flash`)이다(D-38). 생성 모델(Gemma 4)과 다른 계열이다. opencode Go는 아직 D-31 허용 처리처 목록에 없다. 이 경로로 AI Hub 데이터(질의, 근거 문서, 참조 라벨)를 보내려면 사용자가 목록을 고쳐야 한다(D-38)
+- 모델은 DeepSeek V4.1 Flash, 경로는 opencode Go 구독(`deepseek-v4.1-flash`)이다(D-38). 생성 모델(Gemma 4)과 다른 계열이다. opencode Go는 judge 용도로 D-31 허용 처리처에 들어 있다(D-38)
 - 제공자, 모델, 파라미터(`temperature` 0 등), 프롬프트를 `configs/`에서 버전 관리한다. 실행 기록과 LangSmith 메타데이터에 레시피(git 커밋, 생성 레시피, judge 레시피, 프롬프트 SHA-256)를 남긴다
 - opencode Go 이용 조건(https://opencode.ai/docs/go/, 2026-10-19 확인): OpenCode와 비슷한 요청을 내는 코딩 에이전트용으로 설계했고 남용을 감시한다. 사용량 한도는 월 금액이고 5시간에 20%, 주에 50%까지 쓸 수 있다. 학습 미사용, 보존 0일(ZDR)이고 ZDR 협약은 매달 갱신하며 지금 협약은 2026-10-31까지다. 배치 판정으로 의심받아 사용이 막히면 그때 경로를 다시 정한다(D-38). 대안은 같은 모델의 OpenRouter 경로(`deepseek/deepseek-v4.1-flash`, 2026-10-19 확인)다
 - judge 보정: dev 표본 30\~50건을 사람이 기준별로 채점하고(G 게이트, meet-rag D 흐름), judge가 같은 표본을 채점해 기준별 일치율과 Cohen's kappa를 잰다. 일치가 낮은 기준은 기준 문구나 judge 모델을 바꾸고, 충분해진 뒤에 판정에 쓴다. 보정 표본은 판정용 질의에서 뺀다
