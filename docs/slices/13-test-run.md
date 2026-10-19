@@ -60,10 +60,39 @@
 
 - `src/rag/search.py`, `configs/config.yaml`(`search`, `paths`), `tests/test_search.py`
 - `.claude/skills/meet-rag/scripts/colab_job.py`의 test 1회 업로드 옵션은 하네스 변경이라 이 조각과 나눠 `chore/` 브랜치의 F 흐름(ADR 포함)으로 한다
-- 실행 뒤: 결과 노트북, `docs/DECISIONS.md`, `docs/PLAN.md`, `docs/STATUS.md`, 이 문서
+- 실행 뒤: 결과 노트북, `docs/DECISIONS.md`, `docs/PLAN.md`, `docs/STATUS.md`, `CLAUDE.md`(명령 절에 실행을 마쳤다는 줄. 다시 돌리지 않도록 명령 자체는 적지 않는다), 이 문서
 
 ## 범위 밖
 
 - `src/rag/eval/`, `configs/eval/`, `data/splits/`(보호 경로)
 - multi-doc의 test 세트(SPEC상 없음)
 - 생성 단계
+
+## 실행 기록
+
+- 지시: 사용자 2026-10-19("S13 절차대로 test 1회 실행을 시작해줘. Colab T4 사용을 승인해"). 실행 커밋 092f527(main, PR #96·#97·#98 병합 뒤)
+- test 질의 3,003건. 질의 임베딩은 로컬 CPU float32로 따로 먼저 만들었다(인덱스와 모델을 함께 올리면 8GB 메모리가 모자람, EXP-017 31_02). KURE-v1 1,396초, snowflake-ko 비슷함
+- Colab 세션 `meet-rag-s13-test`(Tesla T4), 2026-10-19 07:05\~07:24 UTC(약 19분, 약 0.33 CU: 요율 1.04 CU/시간 환산). Python 3.12.3, torch 2.13.0+cu126, transformers 5.14.1, sentence-transformers 5.6.1. `upload --allow-test`로 후보 쌍만 올렸다. setup 출력에 응답 시간 초과가 섞여, 저장소 커밋·환경 버전·업로드 줄 수를 VM에서 확인한 뒤 실행했다
+- 명령
+  - 임베딩: `query_list`·`query_embeddings`를 같은 override(`[+exp=exp014] index.scope=full search.queries=test search.allow_test=true`)로 불러 캐시만 만듦
+  - 순위: `rag.search <공통>`, `rag.search +exp=exp014 <공통>`, `rag.search +exp=exp017 <공통> search.mode=rerank-pairs` → (VM) `python -m rag.rerank +exp=exp017 <공통> retriever.rerank.device=cuda retriever.rerank.dtype=float16` → `rag.search +exp=exp017 <공통>`
+  - 채점: `rag.eval.score --run <순위> --layer test --allow-test`, 짝 비교는 `notebooks/33_01_S13_test결과.ipynb`(평가 모듈 함수, 회의 단위 10,000회)
+- SHA-256: 순위 `kure-v1-fixed-512-64-test.csv` `399514b2…`, `…-k20-test.csv` `85e152ed…`, `…-k20-ce-test.csv` `d905a3d3…`. 후보 쌍 `test-full-ms256-k20.pairs.jsonl` `018f1544…`, 점수 `…-cross-encoder.scores.jsonl` `c8dea3ee…`. 질의 임베딩 `kure-v1/queries-test.npz` `28a3d9e5…`, `snowflake-ko/queries-test.npz` `8f828601…`
+
+## 결과
+
+| 설정 | test R@1 | test R@5 | test R@10 | test MRR@10 | dev-full R@5 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| S5 베이스라인 | 0.7090 | 0.8525 | 0.8904 | 0.7724 | 0.8584 |
+| EXP-014 | 0.8338 | 0.9351 | 0.9574 | 0.8787 | 0.9413 |
+| EXP-017(기준) | 0.9104 | 0.9577 | 0.9657 | 0.9308 | 0.9566 |
+
+| 짝 비교(Recall@5) | test 차이 (95% 구간) | dev-full 차이 | test/dev |
+| --- | --- | --- | ---: |
+| 베이스라인 → EXP-017 | +10.52%p [+9.14, +11.88] | +9.81%p | 1.07 |
+| EXP-014 → EXP-017(리랭커) | +2.26%p [+1.57, +2.98] | +1.53%p | 1.48 |
+| 베이스라인 → EXP-014 | +8.26%p [+7.01, +9.51] | +8.29%p | 1.00 |
+
+- dev 누적 이득이 test에서 유지됐다(D-35가 묻는 반복 사용의 낙관은 드러나지 않음). 기준 설정은 바꾸지 않는다(사용자 결정)
+- test가 확인하지 못하는 것: test 질의도 정답 문서를 보고 생성해, 어휘 겹침에서 온 이득은 test에도 그대로 있다
+- 단서: test 질의 임베딩은 로컬 CPU float32, dev는 Colab GPU에서 만들었다. 세 설정이 같은 조건이라 짝 비교에는 영향이 없다
