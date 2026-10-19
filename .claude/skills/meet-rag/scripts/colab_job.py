@@ -166,6 +166,8 @@ def upload(session: str, local: str, remote: str, allow_test: bool = False) -> N
     if blocked(local) or blocked(remote):
         sys.exit(f"올리지 않는 파일이다(분할·.env): {local}")
     if src.suffix == ".jsonl" and (n := non_dev_qids(src, allow_test)):
+        if allow_test:
+            sys.exit(f"dev·test 어느 분할에도 없는 질의 {n}건이 있다: {local}")
         sys.exit(f"dev가 아닌 질의 {n}건이 있다. dev 질의만 거른 파일을 올린다: {local}")
     if allow_test:
         print("test 질의 업로드 허용(검색 단계 종료 test 1회 실행, S13)")
