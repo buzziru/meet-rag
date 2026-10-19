@@ -8,7 +8,7 @@ SPEC에 더할 생성 단계 평가의 초안이다(D-38). 초안은 SPEC 밖에
 - 출력: 근거 번호 `[n]`을 붙인 한국어 답변, 또는 근거에서 답을 찾지 못했다는 거부 답변
 - 생성 조건: OpenRouter `google/gemma-4-31b-it`, 제공자 CoreWeave 고정, 사고 과정 끔(D-37). 실험 간 비교는 `temperature` 0과 고정 프롬프트(`configs/prompt/`의 버전)로 한다
 - 평가 질의: dev 분할의 평가 질의(`summary_q`). 보정 표본은 판정용 질의와 겹치지 않게 뗀다(아래 judge 보정)
-- test: 검색 단계와 같이 생성 단계 마지막에 1회만 쓴다(D-38). 그 전에는 test 질의를 읽거나 보내지 않는다
+- test: 검색 단계와 같이 생성 단계 마지막에 사용자 지시로 1회만 쓴다(D-38). 그 전에는 test 질의를 읽거나 보내지 않는다. 지금 SPEC·CLAUDE.md는 test를 검색 단계 종료 1회로만 허용하므로, 이 규칙은 SPEC에 옮기며 두 문서를 고친 뒤에 효력이 있다
 
 ## 기준
 
@@ -33,7 +33,7 @@ LLM 없이 처리하고 judge에 넘기지 않는다(PLAN "생성 평가" 절).
 
 ## judge
 
-- 모델은 DeepSeek V4.1 Flash, 경로는 opencode Go 구독(`deepseek-v4.1-flash`)이다(D-38). 생성 모델(Gemma 4)과 다른 계열이다. opencode Go는 아직 D-31 허용 처리처 목록에 없다. 이 경로로 평가 질의를 보내려면 사용자가 목록을 고쳐야 한다(D-38)
+- 모델은 DeepSeek V4.1 Flash, 경로는 opencode Go 구독(`deepseek-v4.1-flash`)이다(D-38). 생성 모델(Gemma 4)과 다른 계열이다. opencode Go는 아직 D-31 허용 처리처 목록에 없다. 이 경로로 AI Hub 데이터(질의, 근거 문서, 참조 라벨)를 보내려면 사용자가 목록을 고쳐야 한다(D-38)
 - 제공자, 모델, 파라미터(`temperature` 0 등), 프롬프트를 `configs/`에서 버전 관리한다. 실행 기록과 LangSmith 메타데이터에 레시피(git 커밋, 생성 레시피, judge 레시피, 프롬프트 SHA-256)를 남긴다
 - opencode Go 이용 조건(https://opencode.ai/docs/go/, 2026-10-19 확인): OpenCode와 비슷한 요청을 내는 코딩 에이전트용으로 설계했고 남용을 감시한다. 사용량 한도는 월 금액이고 5시간에 20%, 주에 50%까지 쓸 수 있다. 학습 미사용, 보존 0일(ZDR)이고 ZDR 협약은 매달 갱신하며 지금 협약은 2026-10-31까지다. 배치 판정으로 의심받아 사용이 막히면 그때 경로를 다시 정한다(D-38). 대안은 같은 모델의 OpenRouter 경로(`deepseek/deepseek-v4.1-flash`, 2026-10-19 확인)다
 - judge 보정: dev 표본 30\~50건을 사람이 기준별로 채점하고(G 게이트, meet-rag D 흐름), judge가 같은 표본을 채점해 기준별 일치율과 Cohen's kappa를 잰다. 일치가 낮은 기준은 기준 문구나 judge 모델을 바꾸고, 충분해진 뒤에 판정에 쓴다. 보정 표본은 판정용 질의에서 뺀다
