@@ -28,14 +28,21 @@ def rerank_top(docs: list[str], scores: dict[str, float], depth: int) -> list[st
     return sorted(docs[:depth], key=lambda d: -scores[d]) + docs[depth:]
 
 
-def write_pairs(cfg, index_dir: Path, picks: list[tuple[str, str, int]], texts: dict) -> None:
+def read_chunk_texts(dirs: list[Path], need: set[int]) -> dict[int, str]:
+    """dense 청크 번호(인덱스를 이어 붙인 순서, load_dense와 같다)로 청크 본문을 읽는다."""
+    chunk_text, offset = {}, 0
+    for d in dirs:
+        with (d / "chunks.jsonl").open(encoding="utf-8") as f:
+            for i, line in enumerate(f, offset):
+                if i in need:
+                    chunk_text[i] = json.loads(line)["text"]
+        offset = i + 1
+    return chunk_text
+
+
+def write_pairs(cfg, dirs: list[Path], picks: list[tuple[str, str, int]], texts: dict) -> None:
     """후보 쌍(qid, doc_id, 질의, 문서의 최고점 청크)을 질의 순서대로 쓴다."""
-    need = {c for _, _, c in picks}
-    chunk_text = {}
-    with (index_dir / "chunks.jsonl").open(encoding="utf-8") as f:
-        for i, line in enumerate(f):
-            if i in need:
-                chunk_text[i] = json.loads(line)["text"]
+    chunk_text = read_chunk_texts(dirs, {c for _, _, c in picks})
     rows = [{"qid": qid, "doc_id": doc, "query": texts[qid], "text": chunk_text[c]}
             for qid, doc, c in picks]
     text = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
@@ -175,8 +182,6 @@ def search(cfg) -> None:
         ex = build_extractor(cfg)
         conds = {q: ex.extract(t) for q, t in zip(qids, query_texts, strict=True)}
     export_pairs = cfg.search.mode == "rerank-pairs"
-    if export_pairs and r.get("extra_chunks"):
-        raise SystemExit("rerank-pairs는 기본 청크 텍스트만 쓰므로 extra_chunks와 함께 쓰지 않는다")
     use_rerank = ret.hybrid and r.get("rerank") and r.rerank.enabled and not export_pairs
     if export_pairs:
         doc_chunks = chunks_by_doc(ret.dense_ids)
@@ -216,7 +221,7 @@ def search(cfg) -> None:
                 gated.append(j)
             ranked[qids[j]] = finish(qids[j], docs, matched)
     if export_pairs:
-        write_pairs(cfg, ret.index_dir, picks, texts)
+        write_pairs(cfg, ret.dirs, picks, texts)
         return
     if use_rewrite:
         rewrite_ranks(cfg, ret, ranked, gated, qids, query_texts, q_emb, tokens, conds, finish)

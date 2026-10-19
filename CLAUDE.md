@@ -17,7 +17,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - multi-doc 채점·비교: `uv run python -m rag.eval_multi.score --run <순위.csv> [--out <결과.json>]`, `rag.eval_multi.compare --base <기준.csv> --cand <후보.csv>` (순위는 `rag.search index.scope=full search.queries=multidoc`, slices/09-multidoc-eval.md)
 - 인덱스: `uv run python -m rag.index index.scope=dev-small|full [embedding.device=cuda embedding.dtype=float16]` (full은 Colab L4 약 21분. 옵션: slices/04-index.md)
 - 검색: `uv run python -m rag.search [index.scope=full]` (질의 임베딩 캐시가 없을 때: slices/05-retrieve.md)
-- 생성: `uv run python -m rag.generate +exp=exp014 ask.qid=<dev qid>` (검색은 `+exp`의 설정, 지금 기준 exp014(D-32). 옵션·API 한도: slices/06-generate.md, 호출당 토큰: D-11. 5xx는 서버 상태부터 확인)
+- 생성: `uv run python -m rag.generate +exp=exp014 ask.qid=<dev qid>` (검색은 `+exp`의 설정. 검색 기준은 exp017(D-36)이지만 `rag.generate`에 리랭커가 연결되지 않아 생성은 exp014 순위를 쓴다. 옵션·API 한도: slices/06-generate.md, 호출당 토큰: D-11. 5xx는 서버 상태부터 확인)
 - multi-doc 질의(S8·G3): `uv run python -m rag.multidoc.pools` → `rag.multidoc.prepare` → `rag.multidoc.check --prepare` → `rag.multidoc.check [--dry-run]` (순서·작업자·승인: meet-rag 스킬, 유형·값 D-13, 판정 규칙 D-14)
 
 한글 출력이 깨지면 `PYTHONUTF8=1`로 실행한다. 파일은 `encoding="utf-8"`로 연다.
