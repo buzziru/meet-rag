@@ -186,3 +186,32 @@ def test_review_score_reads_score_or_exclusion():
            "inclusion": {"score": None, "excluded": "gold_missing"}, "answer_in_chunk": True}
     assert [fmt(score(row, k)) for k in ("faithfulness", "inclusion", "answer_in_chunk",
                                          "relevance")] == ["0.67", "gold_missing", "True", "-"]
+
+
+def test_judge_step_params_override_request_and_cache(tmp_path):
+    import threading
+    from types import SimpleNamespace
+
+    from rag.gen_eval.judge import Judge
+
+    sent = []
+
+    def create(**kw):
+        sent.append(kw)
+        msg = SimpleNamespace(content='{"ok": 1}')
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg)], usage=None)
+
+    j = object.__new__(Judge)
+    j.j = SimpleNamespace(model="m")
+    j.prompt = {s: SimpleNamespace(system="sys", user="{x}") for s in ("verdicts", "relevance")}
+    j.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    j.params, j.extra = {"max_tokens": 10}, {"thinking": {"type": "disabled"}}
+    j.step = {"verdicts": {"reasoning_effort": "low",
+                           "extra_body": {"thinking": {"type": "enabled"}}}}
+    j.cache, j.lock, j.calls, j.hits = tmp_path, threading.Lock(), 0, 0
+    j.ask("verdicts", x="a")
+    j.ask("relevance", x="a")
+    assert sent[0]["reasoning_effort"] == "low"
+    assert sent[0]["extra_body"] == {"thinking": {"type": "enabled"}}
+    assert "reasoning_effort" not in sent[1] and sent[1]["extra_body"] == j.extra
+    assert len(list(tmp_path.iterdir())) == 2

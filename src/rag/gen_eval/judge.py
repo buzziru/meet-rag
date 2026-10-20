@@ -72,6 +72,7 @@ def judge_recipe(cfg, gen_recipe: dict) -> dict:
     return {"name": j.name, "model": j.model, "base_url": j.base_url,
             "params": OmegaConf.to_container(j.params),
             "extra_body": OmegaConf.to_container(j.extra_body) if j.extra_body else None,
+            "step_params": OmegaConf.to_container(j.step_params) if j.get("step_params") else None,
             "prompt_version": prompt["version"], "prompt_sha256": sha(prompt),
             "gen_recipe_sha256": sha(gen_recipe)}
 
@@ -87,6 +88,8 @@ class Judge:
             default_headers={"User-Agent": j.user_agent, "x-opencode-session": session}))
         self.params = OmegaConf.to_container(j.params)
         self.extra = OmegaConf.to_container(j.extra_body) if j.extra_body else None
+        # 단계별로 params·extra_body를 덮어쓴다(예: 일부 단계만 사고 과정 켬, PR #106)
+        self.step = OmegaConf.to_container(j.step_params) if j.get("step_params") else {}
         self.cache = ROOT / cfg.paths.gen_judge_cache
         self.cache.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
@@ -97,7 +100,10 @@ class Judge:
         p = self.prompt[step]
         messages = [{"role": "system", "content": p.system},
                     {"role": "user", "content": render(p.user, **values)}]
-        body = {"model": self.j.model, "messages": messages, **self.params, "extra": self.extra}
+        over = dict(self.step.get(step) or {})
+        extra = over.pop("extra_body", self.extra)
+        params = {**self.params, **over}
+        body = {"model": self.j.model, "messages": messages, **params, "extra": extra}
         path = self.cache / f"{sha(body)}.json"
         if path.exists():
             saved = json.loads(path.read_text(encoding="utf-8"))
@@ -105,7 +111,7 @@ class Judge:
                 self.hits += 1
         else:
             r = self.client.chat.completions.create(
-                model=self.j.model, messages=messages, extra_body=self.extra, **self.params)
+                model=self.j.model, messages=messages, extra_body=extra, **params)
             saved = {"content": r.choices[0].message.content,
                      "usage": r.usage.model_dump() if r.usage else None}
             path.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
