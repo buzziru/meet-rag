@@ -4,7 +4,7 @@ defaults:
   - retriever: dense
   - generator: openrouter
   - prompt: v2
-  - judge: deepseek_go
+  - judge: deepseek_go_mixed  # j_v5, 기본 사고 과정 끔 + verdicts·key_statements만 low(D-40, 2026-10-20)
   - _self_
 
 # 분할·표본 추출용. 값은 docs/SPEC.md와 같다
