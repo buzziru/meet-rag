@@ -7,6 +7,7 @@ import importlib
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -63,3 +64,42 @@ def test_merged_in_period_keeps_only_owner_comments(digest, monkeypatch):
 def test_open_or_merged_before_period_has_head_only(digest, monkeypatch, state, merged_at):
     monkeypatch.setattr(digest, "gh", fake_gh(PR | {"state": state, "mergedAt": merged_at}, LINES))
     assert digest.collect_pr("1") == {"number": 1, "title": "t", "url": "u", "state": state}
+
+
+class FakeAPIError(Exception):
+    pass
+
+
+class FakeClient:
+    """모델 이름별로 정한 결과(응답 stop_reason 또는 예외)를 돌려준다."""
+
+    def __init__(self, outcomes: dict):
+        self.outcomes, self.calls = outcomes, []
+        self.messages = self
+
+    def create(self, model, **_):
+        self.calls.append(model)
+        outcome = self.outcomes[model]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return SimpleNamespace(stop_reason=outcome, model=model, usage=None)
+
+
+@pytest.mark.parametrize(
+    "opus,calls,failure",
+    [
+        ("end_turn", ["opus"], None),
+        ("refusal", ["opus", "sonnet"], "거절"),
+        (FakeAPIError(), ["opus", "sonnet"], "API 오류(FakeAPIError)"),
+    ],
+)
+def test_fallback_on_refusal_or_api_error(digest, monkeypatch, opus, calls, failure):
+    monkeypatch.setenv("MODEL", "opus")
+    monkeypatch.setenv("FALLBACK_MODEL", "sonnet")
+    monkeypatch.setattr(digest.anthropic, "APIError", FakeAPIError)
+    monkeypatch.setattr(digest.PROMPT.__class__, "read_text", lambda *a, **k: "지시")
+    client = FakeClient({"opus": opus, "sonnet": "end_turn"})
+    response, got = digest.ask_with_fallback(client, "{}")
+    assert client.calls == calls
+    assert got == failure
+    assert response.model == calls[-1]
