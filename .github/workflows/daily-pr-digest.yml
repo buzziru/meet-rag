@@ -1,0 +1,73 @@
+# 직전 성공 실행 이후(처음에는 지난 24시간) 열렸거나 병합된 PR을 종합해 사용자가 확인할 항목을 일일 이슈 하나로 남긴다(ADR-0046, ADR-0047).
+# 인증은 Anthropic 워크로드 ID federation이다. ID 네 개는 실행 로그에서 가려지도록 저장소 Actions secret에 둔다.
+name: daily-pr-digest
+
+on:
+  schedule:
+    - cron: "0 15 * * *" # 매일 00:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read # 직전 성공 실행 시각 조회
+  issues: write
+  id-token: write # GitHub OIDC 토큰을 Anthropic 토큰으로 교환
+
+concurrency: daily-pr-digest
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      # 공개 저장소라 저장소 소유자가 올린 PR만 읽는다. 외부 PR 본문의 지시가 Claude에 들어가지 않게 하려는 것이다
+      - name: 대상 PR 찾기
+        id: prs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          # 직전 성공 실행의 시작 시각부터 본다. 예약 실행이 늦어지거나 수동 실행이 끼어도 PR이 빠지거나 겹치지 않는다
+          since=$(gh run list -R "$GITHUB_REPOSITORY" --workflow daily-pr-digest.yml --status success --limit 1 \
+            --json createdAt --jq '.[0].createdAt // empty')
+          since=${since:-$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)}
+          echo "since=$since" >> "$GITHUB_OUTPUT"
+          numbers=$(gh pr list -R "$GITHUB_REPOSITORY" --state all --limit 100 --author "$OWNER" \
+            --json number,createdAt,mergedAt \
+            --jq "[.[] | select(.createdAt >= \"$since\" or (.mergedAt // \"\") >= \"$since\") | .number] | sort | map(tostring) | join(\" \")")
+          echo "numbers=$numbers" >> "$GITHUB_OUTPUT"
+          echo "day=$(TZ=Asia/Seoul date -d '1 hour ago' +%F)" >> "$GITHUB_OUTPUT"
+          echo "대상 PR: ${numbers:-없음}"
+
+      - uses: actions/checkout@v4
+        if: steps.prs.outputs.numbers != ''
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v6
+        if: steps.prs.outputs.numbers != ''
+
+      - name: GitHub OIDC 토큰 받기
+        if: steps.prs.outputs.numbers != ''
+        run: |
+          curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" \
+            | jq -r .value > "$RUNNER_TEMP/gha-jwt"
+
+      # 수집과 이슈 생성은 스크립트가 gh로 하고, Claude는 Messages API로 한 번만 부른다(도구 없음)
+      - name: 일일 종합
+        if: steps.prs.outputs.numbers != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          PR_NUMBERS: ${{ steps.prs.outputs.numbers }}
+          SINCE: ${{ steps.prs.outputs.since }}
+          DAY: ${{ steps.prs.outputs.day }}
+          MODEL: claude-opus-5-5
+          FALLBACK_MODEL: claude-sonnet-5-5 # MODEL이 거절하거나 재시도 뒤 API 오류일 때
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ secrets.ANTHROPIC_FEDERATION_RULE_ID }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ secrets.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ secrets.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          ANTHROPIC_WORKSPACE_ID: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
+          ANTHROPIC_IDENTITY_TOKEN_FILE: ${{ runner.temp }}/gha-jwt
+        run: uv run --no-project --with anthropic==1.15.0 python -I .github/scripts/daily_pr_digest.py
