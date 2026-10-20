@@ -10,9 +10,19 @@ SPACE = re.compile(r"\s+")
 LIST_MARK = re.compile(r"^(?:\d+[.)]|[-*•·])$")  # 목록 번호·기호만 남은 조각
 
 
-def is_refusal(answer: str, phrase: str) -> bool:
-    """프롬프트가 지정한 거부 문구가 답변에 있는가(공백 차이는 무시)."""
-    return SPACE.sub("", phrase) in SPACE.sub("", answer)
+def refusal_split(answer: str, phrase: str,
+                  fillers: list[str]) -> tuple[str | None, list[str], str]:
+    """(거부 종류, 거부 문장, 거부 문장을 뺀 답변). 거부 문장은 프롬프트가 지정한 거부 문구를
+    담은 문장이다(공백 차이는 무시). 내용 문장(거부 문장도, fillers 문구가 든 문장도 아닌 문장)이
+    없으면 "full", 있으면 "partial", 거부 문장이 없으면 None이고 답변을 그대로 돌려준다(S14b)."""
+    key = SPACE.sub("", phrase)
+    sents = sentences(answer)
+    refused = [s for s in sents if key in SPACE.sub("", s)]
+    if not refused:
+        return None, [], answer
+    rest = [s for s in sents if s not in refused]
+    content = [s for s in rest if not any(f in s for f in fillers)]
+    return ("partial" if content else "full"), refused, "\n".join(rest)
 
 
 def sentences(answer: str) -> list[str]:

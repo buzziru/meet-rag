@@ -3,7 +3,8 @@
 - 코드 판정: 거부 문구, 인용 번호, 회의 일자·위원회 이름, 정답 문서 포함
 - judge(D-38): 충실성(진술 추출 → 진술별 근거 판정), 답변 관련성(3단계),
   핵심 답변 포함도(핵심 진술 추출 → 답변 포함 판정), 정답 문서 근거 청크의 핵심 답(같은
-  핵심 진술 → 청크 포함 판정, D-40). 거부 답변은 근거 청크 판정만 한다
+  핵심 진술 → 청크 포함 판정, D-40). 전체 거부 답변은 근거 청크 판정만 하고, 부분 거부 답변은
+  거부 문장을 뺀 내용을 채점한다(S14b, D-41)
 judge 응답은 요청 본문 해시로 paths.gen_judge_cache에 저장해 다시 실행할 때 쓴다
 (같은 입력이면 API를 부르지 않는다). 명세는 docs/slices/14-gen-eval.md.
 인자는 Hydra override(예: +exp=exp017 gen_eval.n=20).
@@ -26,8 +27,8 @@ from rag.conditions import committee_base
 from rag.gen_eval.checks import (
     citation_check,
     gold_position,
-    is_refusal,
     metadata_mismatches,
+    refusal_split,
 )
 from rag.gen_eval.common import eval_qids, load_refs, read_jsonl
 from rag.index import ROOT, load_cfg
@@ -188,11 +189,14 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
 
     정답 문서가 근거에 있으면 거부 여부와 관계없이 핵심 진술을 뽑고, 그 진술이 정답 문서의 근거
     청크에 들어 있는 비율이 gen_eval.chunk_key_min 이상이면 청크에 답이 있다고 본다(S14 결정 5).
-    핵심 진술이 없거나 형식 오류면 answer_in_chunk는 None(판단 불가)이다."""
+    핵심 진술이 없거나 형식 오류면 answer_in_chunk는 None(판단 불가)이다.
+    부분 거부 답변은 거부 문장을 뺀 내용으로 충실성·관련성·인용 검사를 하고 포함도는 답변 전체로
+    본다(S14b, D-41)."""
     g = cfg.gen_eval
     answer, contexts = gen["answer"], gen["contexts"]
     gold_n = gold_position(contexts, ref["doc_id"])
-    out = {"qid": gen["qid"], "refusal": is_refusal(answer, g.refusal), "gold_n": gold_n,
+    kind, refused, rest = refusal_split(answer, g.refusal, list(g.filler_phrases))
+    out = {"qid": gen["qid"], "refusal": kind, "refused_sentences": refused, "gold_n": gold_n,
            "answer_in_chunk": None, "usage": gen["usage"], "provider": gen["provider"],
            "first_token_s": gen["first_token_s"], "total_s": gen["total_s"]}
     ks = key_statements(judge, gen["query"], ref["answer_comment"]) if gold_n else None
@@ -204,12 +208,12 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
             out["chunk_keys"] = chunk
             if chunk["score"] is not None:
                 out["answer_in_chunk"] = chunk["score"] >= g.chunk_key_min
-    if out["refusal"]:  # 거부 답변은 거부 교차 집계로만 본다(초안 "거부 답변의 처리")
+    if kind == "full":  # 전체 거부는 거부 집계로만 본다(초안 "거부 답변의 처리")
         return out
-    out["citations"] = citation_check(answer, len(contexts), list(g.filler_phrases))
-    out["metadata"] = metadata_mismatches(answer, contexts, committees)
-    out["faithfulness"] = faithfulness(judge, gen["query"], answer, contexts)
-    out["relevance"] = relevance(judge, gen["query"], answer)
+    out["citations"] = citation_check(rest, len(contexts), list(g.filler_phrases))
+    out["metadata"] = metadata_mismatches(rest, contexts, committees)
+    out["faithfulness"] = faithfulness(judge, gen["query"], rest, contexts)
+    out["relevance"] = relevance(judge, gen["query"], rest)
     out["inclusion"] = inclusion(judge, answer, ks)
     return out
 

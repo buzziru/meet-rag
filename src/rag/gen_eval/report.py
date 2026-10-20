@@ -1,7 +1,8 @@
 """judge 결과(paths.gen_judge)를 집계해 표로 낸다(S14).
 
-기준별 평균과 계산한 질의 수, 뺀 질의 수(이유별), 거부 교차 집계, 인용·메타데이터 오류,
-토큰·비용, 첫 토큰 시간을 낸다. 종합 지표와 기준 비교·판정은 만들지 않는다(초안 결정 사항 2·3 이후).
+기준별 평균과 계산한 질의 수, 뺀 질의 수(이유별), 전체·부분 거부(S14b), 거부 교차 집계,
+인용·메타데이터 오류, 토큰·비용, 첫 토큰 시간을 낸다. 종합 지표와 기준 비교·판정은
+만들지 않는다(초안 결정 사항 2·3 이후).
 인자는 Hydra override(예: +exp=exp017 gen_eval.n=20).
 """
 
@@ -72,18 +73,21 @@ def main() -> None:
     cfg = load_cfg(["index.scope=full", *sys.argv[1:]])
     rows = read_jsonl(ROOT / cfg.paths.gen_judge)
     n = len(rows)
-    answered = [r for r in rows if not r["refusal"]]
-    print(f"# {cfg.paths.gen_judge}\n\n질의 {n}개, 거부 {rate(n - len(answered), n)}\n")
+    answered = [r for r in rows if r["refusal"] != "full"]
+    partial = [r for r in rows if r["refusal"] == "partial"]
+    print(f"# {cfg.paths.gen_judge}\n\n질의 {n}개, 전체 거부 {rate(n - len(answered), n)}, "
+          f"부분 거부 {rate(len(partial), n)}\n")
 
-    print("| 기준 | 평균 | 계산한 질의 | 뺀 질의 | judge 형식 오류 |\n"
-          "| --- | ---: | ---: | --- | ---: |")
+    print("| 기준 | 평균 | 계산한 질의 | 그중 부분 거부 | 뺀 질의 | judge 형식 오류 |\n"
+          "| --- | ---: | ---: | ---: | --- | ---: |")
     for key, name in [("faithfulness", "충실성"), ("relevance", "답변 관련성"),
                       ("inclusion", "핵심 답변 포함도")]:
         scores, excluded, errors = criterion(rows, key)
+        part = len(criterion(partial, key)[0])
         ex = ", ".join(f"{k} {v}" for k, v in excluded.items()) or "-"
-        print(f"| {name} | {mean(scores)} | {len(scores)} | {ex} | {errors} |")
+        print(f"| {name} | {mean(scores)} | {len(scores)} | {part} | {ex} | {errors} |")
 
-    print("\n| 근거 상태 | 질의 | 거부 |\n| --- | ---: | ---: |")
+    print("\n| 근거 상태 | 질의 | 거부(전체·부분) |\n| --- | ---: | ---: |")
     for name, k, ref in refusal_table(rows):
         print(f"| {name} | {k} | {rate(ref, k)} |")
 

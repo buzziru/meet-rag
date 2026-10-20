@@ -5,8 +5,8 @@ import pytest
 from rag.gen_eval.checks import (
     citation_check,
     gold_position,
-    is_refusal,
     metadata_mismatches,
+    refusal_split,
     sentences,
 )
 from rag.gen_eval.common import done_qids, sample_qids
@@ -30,9 +30,18 @@ def ctx(n, doc_id="d1", date="2020년3월5일(목)", committee="국방위원회"
             "meeting_number": "제1회", "session_number": "제2차", "text": text}
 
 
-def test_refusal_ignores_spacing():
-    assert is_refusal("제공된 회의록에서  답을 찾지 못했습니다.", REFUSAL)
-    assert not is_refusal("집행률이 낮아 줄였습니다[1].", REFUSAL)
+FILLERS = ["다음과 같습니다"]
+PARTIAL = "A 위원은 B를 제안했습니다[1]. C의 시행 시기는 제공된 회의록에서 답을 찾지 못했습니다."
+
+
+def test_refusal_split_full_partial_none():
+    assert refusal_split("제공된 회의록에서  답을 찾지 못했습니다.", REFUSAL, FILLERS)[0] == "full"
+    assert refusal_split("다음과 같습니다.\n" + REFUSAL + ".", REFUSAL, FILLERS)[0] == "full"
+    ans = "집행률이 낮아 줄였습니다[1].\n통합했습니다[2]."
+    assert refusal_split(ans, REFUSAL, FILLERS) == (None, [], ans)
+    kind, refused, rest = refusal_split(PARTIAL, REFUSAL, FILLERS)
+    assert kind == "partial" and rest == "A 위원은 B를 제안했습니다[1]."
+    assert refused == ["C의 시행 시기는 제공된 회의록에서 답을 찾지 못했습니다."]
 
 
 def test_sentences_attach_trailing_citation():
@@ -137,7 +146,8 @@ def gen(answer, contexts):
 
 def judge_cfg():
     from omegaconf import OmegaConf
-    return OmegaConf.create({"gen_eval": {"refusal": REFUSAL, "chunk_key_min": 0.5}})
+    return OmegaConf.create({"gen_eval": {"refusal": REFUSAL, "chunk_key_min": 0.5,
+                                          "filler_phrases": FILLERS}})
 
 
 def test_judge_record_checks_chunk_with_key_statements_even_for_refusal():
@@ -146,11 +156,39 @@ def test_judge_record_checks_chunk_with_key_statements_even_for_refusal():
     contexts = [ctx(1, "other"), ctx(2, "gold", text="발췌")]
     out = judge_record.__wrapped__(stub, gen(REFUSAL + ".", contexts),
                                    {"doc_id": "gold", "answer_comment": "발언"}, judge_cfg(), set())
-    assert out["refusal"] and out["gold_n"] == 2 and out["answer_in_chunk"] is True
+    assert out["refusal"] == "full" and out["gold_n"] == 2 and out["answer_in_chunk"] is True
     assert "faithfulness" not in out
     ref = {"doc_id": "none", "answer_comment": "발언"}
     missing = judge_record.__wrapped__(stub, gen(REFUSAL, contexts), ref, judge_cfg(), set())
     assert missing["gold_n"] is None and missing["answer_in_chunk"] is None
+
+
+class RecordingJudge(StubJudge):
+    """단계마다 받은 입력을 남긴다."""
+
+    def __init__(self, replies):
+        super().__init__(replies)
+        self.seen = {}
+
+    def ask(self, step, **values):
+        self.seen[step] = values
+        return super().ask(step, **values)
+
+
+def test_partial_refusal_scores_content_without_refused_sentence():
+    stub = RecordingJudge({
+        "key_statements": {"key_statements": ["k1", "k2"]},
+        "chunk_checks": {"checks": [{"present": 1}, {"present": 1}]},
+        "statements": {"statements": ["s1"]}, "verdicts": {"verdicts": [{"verdict": 1}]},
+        "relevance": {"label": "일부"},
+        "key_checks": {"checks": [{"present": 1}, {"present": 0}]}})
+    out = judge_record.__wrapped__(stub, gen(PARTIAL, [ctx(1, "gold")]),
+                                   {"doc_id": "gold", "answer_comment": "발언"}, judge_cfg(), set())
+    assert out["refusal"] == "partial" and out["inclusion"]["score"] == 0.5
+    assert stub.seen["statements"]["answer"] == "A 위원은 B를 제안했습니다[1]."
+    assert stub.seen["relevance"]["answer"] == "A 위원은 B를 제안했습니다[1]."
+    assert stub.seen["key_checks"]["answer"] == PARTIAL
+    assert out["citations"]["n_sentences"] == 1
 
 
 def test_report_criterion_and_refusal_table():
