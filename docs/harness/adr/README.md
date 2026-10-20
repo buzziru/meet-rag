@@ -53,3 +53,4 @@ meet-rag 하네스(`.claude/`의 스킬·에이전트·규약)의 결정 기록�
 | [0045](0045.md) | S13 종료 뒤 `colab_job.py upload --allow-test` 제거 | 채택 | 2026-10-19 |
 | [0046](0046.md) | PR 일일 종합 이슈를 GitHub Actions(claude-code-action, ID federation)로 만든다 | 일부 대체됨(→ 0047) | 2026-10-20 |
 | [0047](0047.md) | 일일 종합의 Claude 호출을 claude-code-action에서 Messages API 한 번으로 바꾼다 | 채택 | 2026-10-20 |
+| [0048](0048.md) | 노트북 §7.1의 예외 사례로 PR #96을 기록한다 | 채택 | 2026-10-20 |

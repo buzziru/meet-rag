@@ -26,7 +26,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 ## 금지
 
 - `src/rag/eval/`, `src/rag/eval_multi/`와 `configs/config.yaml`의 `multidoc.eval`, G3 동결 세트를 정하는 `configs/multidoc/g3_exclude.yaml`과 `paths.multidoc_frozen`(D-15), `configs/eval/`, `data/splits/`를 수정하지 않는다. 바꿔야 하면 사용자 승인 후 DECISIONS.md에 기록한다
-- test 분할의 질의를 읽거나 test 점수를 계산하지 않는다. 검색 단계 종료 시 사용자 지시로 1회만 실행한다
+- test 분할의 질의를 읽거나 test 점수를 계산하지 않는다. test는 검색 단계와 생성 단계 종료 시 사용자 지시로 단계마다 1회만 실행한다. 검색 단계 1회는 S13에서 마쳤고(D-39), 생성 단계 1회는 SPEC 개정 초안(D-38)을 SPEC에 옮긴 뒤 한다
 - `docs/SPEC.md`의 평가 프로토콜은 사용자 승인 없이 바꾸지 않는다
 - 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다
 - AI Hub 데이터(코퍼스·질의·라벨·분할)는 처리 목적으로 외부 API(Google AI Studio, OpenRouter, 생성 평가 judge용 opencode Go(D-38))와 Colab에 보낼 수 있다. 금지하는 것은 공개다: 저장소 커밋, 노트북·로그·문서처럼 저장소에 남는 곳에 질의 원문을 대량으로 남기기, 외부에서 내려받을 수 있게 두기(D-31). `test` 질의는 평가 프로토콜에 따라 검색 단계 종료 시 사용자 지시 1회 실행에서만 읽고 보낸다. 질의 전체처럼 많이 보내는 실행은 호출 수·소요 시간·비용을 보고하고 사용자 승인 후에 한다
