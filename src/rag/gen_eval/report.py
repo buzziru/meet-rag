@@ -1,6 +1,6 @@
 """judge 결과(paths.gen_judge)를 집계해 표로 낸다(S14).
 
-기준별 평균과 계산한 질의 수, 뺀 질의 수(이유별), 거부 교차 집계, 거부 이유(S14b),
+기준별 평균과 계산한 질의 수, 뺀 질의 수(이유별), 전체·부분 거부(S14b), 거부 교차 집계,
 인용·메타데이터 오류, 토큰·비용, 첫 토큰 시간을 낸다. 종합 지표와 기준 비교·판정은
 만들지 않는다(초안 결정 사항 2·3 이후).
 인자는 Hydra override(예: +exp=exp017 gen_eval.n=20).
@@ -65,38 +65,6 @@ def chunk_ratio_table(rows: list[dict]) -> list[tuple[float, int, int]]:
     return [(k, ratios[k], refusals[k]) for k in sorted(ratios)]
 
 
-REASON_ROWS = [("근거에 답 있음(잘못된 거부)", "answerable"),
-               ("근거가 모호함(상황 미전달)", "ambiguous"),
-               ("답변자 회피·거부(상황 미전달)", "declined"),
-               ("근거 부족: 정답 문서 없음", "gold_missing"),
-               ("근거 부족: 청크 잘림 추정", "chunk_cut"),
-               ("근거 부족: 기타", "other")]
-MISSING = ("gold_missing", "chunk_cut", "other")
-
-
-def reason_table(rows: list[dict]) -> tuple[dict[str, Counter], int]:
-    """(이유·원인별 거부 문장 수(전체·부분 거부로 나눔), 형식 오류 답변 수). S14b, D-41."""
-    counts = {key: Counter() for _, key in REASON_ROWS}
-    errors = 0
-    for r in rows:
-        rr = r.get("refusal_reason")
-        if not rr:
-            continue
-        if rr["items"] is None:
-            errors += 1
-            continue
-        for i in rr["items"]:
-            counts[i.get("cause", i["reason"])][r["refusal"]] += 1
-    return counts, errors
-
-
-def wrong_refusal(counts: dict[str, Counter]) -> tuple[int, int]:
-    """(잘못된 거부, 분모). 분모는 근거에 답 있음 + 근거 부족이고, 상황 미전달(모호함·회피)은
-    넣지 않는다(D-41 결정 2)."""
-    wrong = sum(counts["answerable"].values())
-    return wrong, wrong + sum(sum(counts[k].values()) for k in MISSING)
-
-
 def usage_sum(usages, key: str) -> int:
     return sum((u or {}).get(key) or 0 for u in usages)
 
@@ -123,15 +91,6 @@ def main() -> None:
     for name, k, ref in refusal_table(rows):
         print(f"| {name} | {k} | {rate(ref, k)} |")
 
-    counts, reason_errors = reason_table(rows)
-    wrong, denom = wrong_refusal(counts)
-    print("\n거부 이유(거부 문장 단위, D-41)\n\n| 이유 | 전체 거부 | 부분 거부 |\n"
-          "| --- | ---: | ---: |")
-    for name, key in REASON_ROWS:
-        print(f"| {name} | {counts[key]['full']} | {counts[key]['partial']} |")
-    print(f"\n잘못된 거부율(근거에 답 있음 / (근거에 답 있음 + 근거 부족)): {rate(wrong, denom)}, "
-          f"거부 이유 judge 형식 오류 답변 {reason_errors}")
-
     print(f"\n정답 청크에 든 핵심 진술 비율(잠정 경계 {cfg.gen_eval.chunk_key_min} 이상을 "
           "'있음'으로 본다)\n\n| 비율 | 질의 | 거부 |\n| ---: | ---: | ---: |")
     for ratio, k, ref in chunk_ratio_table(rows):
@@ -153,8 +112,7 @@ def main() -> None:
     tin, tout = usage_sum(gen_usage, "prompt_tokens"), usage_sum(gen_usage, "completion_tokens")
     reasoning = sum(((u or {}).get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
                     for u in gen_usage)
-    keys = ("faithfulness", "relevance", "inclusion", "key_statements", "chunk_keys",
-            "refusal_reason")
+    keys = ("faithfulness", "relevance", "inclusion", "key_statements", "chunk_keys")
     judge_usage = [u for r in rows for key in keys for u in ((r.get(key) or {}).get("usage") or [])]
     first = [r["first_token_s"] for r in rows if r["first_token_s"] is not None]
     total = [r["total_s"] for r in rows]
