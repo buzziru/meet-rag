@@ -182,7 +182,7 @@ def test_chunk_ratio_table_counts_ratio_and_refusal():
 
 def test_review_score_reads_score_or_exclusion():
     from rag.gen_eval.review import fmt, score
-    row = {"faithfulness": {"score": 2 / 3}, "inclusion": {"score": None, "excluded": "gold_missing"},
-           "answer_in_chunk": True}
+    row = {"faithfulness": {"score": 2 / 3},
+           "inclusion": {"score": None, "excluded": "gold_missing"}, "answer_in_chunk": True}
     assert [fmt(score(row, k)) for k in ("faithfulness", "inclusion", "answer_in_chunk",
                                          "relevance")] == ["0.67", "gold_missing", "True", "-"]

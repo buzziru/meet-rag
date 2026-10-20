@@ -3,7 +3,8 @@
 gen_eval.review.judges의 두 judge 결과(paths.gen_judge)와 생성 기록·참조 발언을 읽어
 - {out}.md: 질의마다 질문·답변·근거·참조 발언과 두 설정의 판정·이유(읽는 파일)
 - {out}.csv: 질의 × 기준마다 두 설정의 점수, Claude 의견, 빈 검수 칸(채우는 파일, Excel용 utf-8-sig)
-를 쓴다. {out}_opinion.json이 있으면 질의·기준별 의견을 넣는다. 질의 원문을 담으므로 data/ 아래에만 둔다.
+를 쓴다. {out}_opinion.json이 있으면 질의·기준별 의견을 넣는다.
+질의 원문을 담으므로 data/ 아래에만 둔다.
 인자는 Hydra override(예: +exp=exp017 gen_eval.n=20 prompt=v1).
 """
 
@@ -37,7 +38,8 @@ def detail(row: dict, key: str) -> list[str]:
     """기준 하나의 판정 이유 줄들."""
     c = row.get(key) or {}
     if key == "faithfulness":
-        return [f"- [{v['verdict']}] {v['statement']} / {v['reason']}" for v in c.get("verdicts", [])]
+        return [f"- [{v['verdict']}] {v['statement']} / {v['reason']}"
+                for v in c.get("verdicts", [])]
     if key == "relevance":
         return [f"- {c.get('label', '-')}: {c.get('reason', '-')}"] if c else []
     if key == "inclusion":
@@ -67,7 +69,8 @@ def main() -> None:
                f"**참조 발언(answer.comment)**\n\n{refs[q]['answer_comment']}\n",
                f"정답 문서 위치: {a['gold_n'] or '근거에 없음'}\n",
                "<details><summary>근거 5개</summary>\n"]
-        md += [f"[{c['n']}] {c['date']} {c['committee_name']}\n\n{c['text']}\n" for c in g["contexts"]]
+        md += [f"[{c['n']}] {c['date']} {c['committee_name']}\n\n{c['text']}\n"
+               for c in g["contexts"]]
         md += ["</details>\n"]
         for key, label in CRITERIA.items():
             sa, sb = score(a, key), score(b, key)
@@ -77,9 +80,9 @@ def main() -> None:
             op = opinions.get(q, {}).get(key, "")
             if op:
                 md += [f"> Claude 의견: {op}\n"]
-            rows.append({"no": i, "qid": q, "criterion": label, names[0]: fmt(sa), names[1]: fmt(sb),
-                         "differs": sa != sb, "claude_opinion": op,
-                         **dict.fromkeys(REVIEW_COLUMNS, "")})
+            rows.append({"no": i, "qid": q, "criterion": label,
+                         names[0]: fmt(sa), names[1]: fmt(sb), "differs": sa != sb,
+                         "claude_opinion": op, **dict.fromkeys(REVIEW_COLUMNS, "")})
     out.parent.mkdir(parents=True, exist_ok=True)
     out.with_suffix(".md").write_text("\n".join(md), encoding="utf-8")
     pd.DataFrame(rows).to_csv(out.with_suffix(".csv"), index=False, encoding="utf-8-sig")
