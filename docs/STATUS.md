@@ -25,4 +25,3 @@
 
 ## 사용자 확인 필요
 - PR #119 병합
-- 캐시 정리 여부: `uv cache prune`, KURE-Reranker-nano HF 캐시, `data/gen_eval/judge_cache_r2·r3`(흔들림 측정용)
