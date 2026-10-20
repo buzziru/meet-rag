@@ -1,6 +1,6 @@
 # 생성 평가 judge 대안 경로: 같은 모델의 OpenRouter 유료 경로 (D-38). Go 사용이 막히면 judge=deepseek_openrouter
 defaults:
-  - prompt: j_v3
+  - prompt: j_v4
   - _self_
 
 name: deepseek_openrouter
