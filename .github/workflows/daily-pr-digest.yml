@@ -1,0 +1,59 @@
+# 지난 24시간 동안 열렸거나 병합된 PR을 종합해 사용자가 확인할 항목을 일일 이슈 하나로 남긴다(ADR-0046).
+# 인증은 Anthropic 워크로드 ID federation이다. ID 네 개는 저장소 Actions 변수(vars)에 둔다.
+name: daily-pr-digest
+
+on:
+  schedule:
+    - cron: "0 15 * * *" # 매일 00:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+  id-token: write # GitHub OIDC 토큰을 Anthropic 토큰으로 교환
+
+concurrency: daily-pr-digest
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: 대상 PR 찾기
+        id: prs
+        run: |
+          since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          numbers=$(gh pr list -R "$GITHUB_REPOSITORY" --state all --limit 100 \
+            --json number,createdAt,mergedAt \
+            --jq "[.[] | select(.createdAt >= \"$since\" or (.mergedAt // \"\") >= \"$since\") | .number] | sort | map(tostring) | join(\" \")")
+          echo "numbers=$numbers" >> "$GITHUB_OUTPUT"
+          echo "day=$(TZ=Asia/Seoul date -d '1 hour ago' +%F)" >> "$GITHUB_OUTPUT"
+          echo "대상 PR: ${numbers:-없음}"
+
+      - uses: actions/checkout@v4
+        if: steps.prs.outputs.numbers != ''
+
+      - name: 라벨 준비
+        if: steps.prs.outputs.numbers != ''
+        run: gh label create daily-digest -R "$GITHUB_REPOSITORY" --color BFD4F2 --description "PR 일일 종합" --force
+
+      - uses: anthropics/claude-code-action@v1
+        if: steps.prs.outputs.numbers != ''
+        with:
+          anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          anthropic_workspace_id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          github_token: ${{ github.token }}
+          prompt: |
+            저장소: ${{ github.repository }}
+            날짜(KST): ${{ steps.prs.outputs.day }}
+            대상 PR: ${{ steps.prs.outputs.numbers }}
+
+            `.github/prompts/daily-pr-digest.md`를 읽고 그 지시대로 일일 종합 이슈를 만든다.
+          claude_args: >-
+            --model claude-opus-5-5
+            --max-turns 40
+            --allowedTools "Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*)"
