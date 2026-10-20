@@ -1,0 +1,19 @@
+# deepseek_go_nothink에서 조건부 규칙이 걸린 두 단계만 사고 과정을 낮은 강도로 켠 judge (PR #106, 2026-10-20)
+# j_v3 사고 과정 끔 채점에서 verdicts(유도 질문 규칙)와 key_statements(사용 불가·긍정 명제·상대 주장 제외)의
+# 규칙이 적용되지 않았다. DeepSeek 문서: thinking enabled와 reasoning_effort(low|high|max)를 함께 쓴다
+defaults:
+  - deepseek_go_nothink
+  - _self_
+
+name: deepseek_go_mixed
+step_params:
+  verdicts:
+    reasoning_effort: low
+    extra_body:
+      thinking:
+        type: enabled
+  key_statements:
+    reasoning_effort: low
+    extra_body:
+      thinking:
+        type: enabled

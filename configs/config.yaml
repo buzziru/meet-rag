@@ -2,8 +2,9 @@ defaults:
   - eval: spec_v1
   - chunking: fixed
   - retriever: dense
-  - generator: gemma
-  - prompt: v1
+  - generator: openrouter
+  - prompt: v2
+  - judge: deepseek_go_mixed  # j_v5, 기본 사고 과정 끔 + verdicts·key_statements만 low(D-40, 2026-10-20)
   - _self_
 
 # 분할·표본 추출용. 값은 docs/SPEC.md와 같다
@@ -62,6 +63,10 @@ paths:
   rewrites: data/rewrites/${rewriter.name}-${rewriter.prompt.version}.json
   # 생성 호출 기록. 호출마다 JSON 하나
   generate_dir: data/runs/generate
+  # 생성 평가(S14). 일괄 생성 기록(질의마다 한 줄), judge 결과, judge 응답 저장(요청 본문 해시마다 파일 하나)
+  gen_runs: data/gen_eval/runs/${retriever.run_name}-${prompt.version}-${gen_eval.queries}.jsonl
+  gen_judge: data/gen_eval/judge/${retriever.run_name}-${prompt.version}-${gen_eval.queries}-${judge.name}-${judge.prompt.version}.jsonl
+  gen_judge_cache: data/gen_eval/judge_cache
   # multi-doc 후보 집합과 시작 묶음 (docs/slices/07-bundles.md)
   multidoc_pools: data/multidoc/pools.jsonl
   # S8 생성 입력·문서 원문·생성 출력·검사 기록(후보 집합마다 파일 하나), 통과 질의 (docs/slices/08-multidoc-queries.md)
@@ -212,3 +217,21 @@ multidoc:
       window_sentences: 3
       min_prob: 0.9
       timeout: 60  # Jev 호출 하나의 대기 상한(초)
+
+# 생성 평가(docs/slices/14-gen-eval.md). 질의는 평가 층(dev-small | dev-full)의 dev 질의만 쓴다
+gen_eval:
+  queries: dev-small
+  n: 20  # seed로 섞은 순서의 앞에서 자른다. n을 늘려도 앞 표본이 유지된다
+  seed: ${seed}
+  refusal: 제공된 회의록에서 답을 찾지 못했습니다  # 프롬프트 v1·v2의 거부 문구(코드 판정)
+  # 포함도용 핵심 진술 중 정답 문서의 근거 청크에 든 비율(judge chunk_checks)이 이 값 이상이면 청크에 답이
+  # 있다고 본다. 거부 교차 집계에 쓴다(S14 결정 5, 사용자 결정 2026-10-19). 근거가 부족한 잠정값이라
+  # report가 비율 분포를 함께 남기고, 그 분포를 근거로 나중에 정한다(PR #106 코멘트, 2026-10-20)
+  chunk_key_min: 0.5
+  # 내용 없는 문장(인사말, 도입 문장)의 문구. 이 문구가 든 문장은 인용 검사의 문장 수에서 빼고
+  # 따로 센다. 생성 프롬프트 v2도 이런 문장을 쓰지 말라고 지시한다(PR #106 코멘트, 2026-10-20)
+  filler_phrases: [다음과 같습니다, 아래와 같습니다, 감사합니다, 안녕하십니까]
+  # 사람 검수 파일(rag.gen_eval.review): 두 judge 설정의 결과를 나란히 둔다. 질의 원문이 있어 data/ 아래에 쓴다
+  review:
+    judges: [deepseek_go, deepseek_go_nothink]
+    out: data/review/s14_judge_think

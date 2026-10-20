@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import uuid
 from datetime import datetime
 
@@ -22,7 +23,7 @@ from openai import OpenAI
 
 from rag.conditions import build_extractor
 from rag.index import ROOT, encoder, load_cfg, load_model
-from rag.retrieve import Retriever, chunks_by_doc
+from rag.retrieve import Retriever, chunks_by_doc, read_rerank_scores
 
 CONTEXT_META = ["date", "committee_name", "meeting_number", "session_number", "original"]
 # Gemma 4는 이 엔드포인트에서 사고 과정을 끌 수 없어 답변 앞에 붙여 낸다
@@ -115,6 +116,7 @@ def recipe(cfg, index_meta: dict, stream: bool) -> dict:
         "prompt_sha256": hashlib.sha256(
             json.dumps(prompt, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest(),
         "model": g.model, "params": OmegaConf.to_container(g.params), "stream": stream,
+        "extra_body": OmegaConf.to_container(g.extra_body) if g.get("extra_body") else None,
     }
 
 
@@ -135,6 +137,11 @@ class Pipeline:
         self.client = wrap_openai(OpenAI(base_url=cfg.generator.base_url,
                                          api_key=os.environ[cfg.generator.api_key_env]))
         self._model = None
+        # 재정렬 점수는 EXP-017이 Colab에서 만든 파일을 읽는다. 실시간 재정렬은 배포 SLICE(S14)
+        r = cfg.retriever
+        use_rerank = self.retriever.hybrid and r.get("rerank") and r.rerank.enabled
+        self.rerank_scores = (read_rerank_scores(ROOT / cfg.paths.rerank_scores)
+                              if use_rerank else None)
 
     def dev_query(self, qid: str) -> tuple[str, np.ndarray]:
         """dev 질의 원문과 S5 캐시 임베딩. dev만 담은 paths.queries_dev만 읽는다."""
@@ -150,19 +157,28 @@ class Pipeline:
             self._model = load_model(self.cfg, self.cfg.embedding.query_max_tokens)
         return encoder(self._model, self.cfg, self.cfg.embedding.get("query_prompt"))([query])[0]
 
-    def rank(self, query: str, q_emb: np.ndarray) -> tuple[np.ndarray, list[str], list[dict]]:
+    def rank(self, query: str, q_emb: np.ndarray, qid: str | None = None,
+             ) -> tuple[np.ndarray, list[str], list[dict]]:
         """dense 청크 점수, 문서 순위, 문서별 단계 기록. rag.search와 같은 Retriever를 쓴다(S12)."""
+        rerank = None
+        if self.rerank_scores is not None:
+            if qid not in self.rerank_scores:
+                raise SystemExit("재정렬 점수 파일에 없는 질의다. 자유 질의의 실시간 재정렬은 "
+                                 "배포 SLICE에서 만든다(S14 결정 1)")
+            rerank = self.rerank_scores[qid]
         scores = self.retriever.chunk_emb @ q_emb
         tokens = self.retriever.query_tokens([query])
         conds = self.extractor.extract(query) if self.extractor else None
-        docs, stages = self.retriever.explain(scores, tokens[0] if tokens else None, conds)
+        docs, stages = self.retriever.explain(scores, tokens[0] if tokens else None, conds,
+                                              rerank=rerank)
         return scores, docs, stages
 
     @traceable(name="retrieve", process_inputs=lambda i: {"k": i["k"]})
-    def retrieve(self, query: str, q_emb: np.ndarray, k: int) -> list[dict]:
+    def retrieve(self, query: str, q_emb: np.ndarray, k: int, qid: str | None = None,
+                 ) -> list[dict]:
         """상위 k개 문서의 근거. score는 문서 순위를 정한 최종 점수(hybrid면 RRF, dense면 청크
         점수)이고, 근거 청크의 dense 점수와 단계별 순위를 함께 남긴다(PR #71 코멘트)."""
-        scores, docs, stages = self.rank(query, q_emb)
+        scores, docs, stages = self.rank(query, q_emb, qid)
         picked = best_chunks(scores, self.doc_chunks, docs[:k])
         rows = [self.store.get(i) for i in picked]
         out = []
@@ -179,45 +195,59 @@ class Pipeline:
         return build_messages(self.cfg.prompt, contexts, query)
 
     @traceable(name="generate", process_inputs=lambda i: {"stream": i["stream"]})
-    def generate(self, messages: list[dict], stream: bool) -> dict:
+    def generate(self, messages: list[dict], stream: bool, echo: bool = True) -> dict:
+        """답변 생성. 스트리밍이면 답변 첫 토큰까지의 시간(first_token_s)을 잰다(D-30·D-37).
+        provider는 응답이 알려 준 실제 제공자다(OpenRouter, 제공자 고정 확인용)."""
         g = self.cfg.generator
         params = OmegaConf.to_container(g.params)
+        extra = OmegaConf.to_container(g.extra_body) if g.get("extra_body") else None
+        t0, first = time.perf_counter(), None
         if not stream:
-            r = self.client.chat.completions.create(model=g.model, messages=messages, **params)
+            r = self.client.chat.completions.create(model=g.model, messages=messages,
+                                                    extra_body=extra, **params)
             text, usage = r.choices[0].message.content, r.usage.model_dump()
+            provider = getattr(r, "provider", None)
         else:
-            text, usage, printed = "", None, 0
+            text, usage, provider, printed = "", None, None, 0
             for chunk in self.client.chat.completions.create(
-                    model=g.model, messages=messages, stream=True,
+                    model=g.model, messages=messages, stream=True, extra_body=extra,
                     stream_options={"include_usage": True}, **params):
+                provider = provider or getattr(chunk, "provider", None)
                 if chunk.choices and chunk.choices[0].delta.content:
                     text += chunk.choices[0].delta.content
                     start = answer_start(text)
                     if start is not None:  # 사고 과정은 출력하지 않고 답변만 흘려보낸다
-                        piece = text[max(printed, start):]
-                        print(piece.lstrip() if printed <= start else piece, end="", flush=True)
+                        if first is None and text[start:].strip():
+                            first = time.perf_counter() - t0
+                        if echo:
+                            piece = text[max(printed, start):]
+                            print(piece.lstrip() if printed <= start else piece, end="",
+                                  flush=True)
                         printed = len(text)
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
-            print()
+            if echo:
+                print()
         thought, answer = split_thought(text)
-        return {"answer": answer, "thought": thought, "usage": usage}
+        return {"answer": answer, "thought": thought, "usage": usage, "provider": provider,
+                "first_token_s": first, "total_s": time.perf_counter() - t0}
 
     def run(self, query: str, q_emb: np.ndarray, qid: str | None = None,
-            stream: bool | None = None) -> dict:
+            stream: bool | None = None, echo: bool = True) -> dict:
         """검색 → 프롬프트 → 생성. 레시피를 LangSmith 메타데이터와 기록에 함께 남긴다."""
         stream = self.cfg.generator.stream if stream is None else stream
         rec = recipe(self.cfg, self.index_meta, stream)
         run_id = uuid.uuid4()
-        out = self._traced(query, q_emb, stream,
+        out = self._traced(query, q_emb, qid, stream, echo,
                            langsmith_extra={"run_id": run_id, "metadata": {**rec, "qid": qid}})
         return {"time": datetime.now().isoformat(timespec="seconds"), "qid": qid, "query": query,
                 **out, "langsmith_run_id": str(run_id), "recipe": rec}
 
     @traceable(name="rag", process_inputs=lambda i: {"query": i["query"]})
-    def _traced(self, query: str, q_emb: np.ndarray, stream: bool) -> dict:
-        contexts = self.retrieve(query, q_emb, self.cfg.generator.context_docs)
-        result = self.generate(self.messages(contexts, query), stream)
+    def _traced(self, query: str, q_emb: np.ndarray, qid: str | None, stream: bool,
+                echo: bool) -> dict:
+        contexts = self.retrieve(query, q_emb, self.cfg.generator.context_docs, qid)
+        result = self.generate(self.messages(contexts, query), stream, echo)
         return {"contexts": contexts, **result}
 
 

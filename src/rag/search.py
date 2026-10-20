@@ -17,15 +17,10 @@ import pandas as pd
 from rag.conditions import build_extractor
 from rag.eval.metrics import load_gold
 from rag.index import ROOT, encoder, load_cfg, load_model
-from rag.retrieve import Retriever, chunks_by_doc, conditions_first
+from rag.retrieve import Retriever, chunks_by_doc, final_order, read_rerank_scores
 from rag.rewrite import needs_rewrite, rewrite_queries, signals
 
 LAYERS = {"dev-small": "dev-small", "full": "dev-full"}  # index.scope → 평가 층
-
-
-def rerank_top(docs: list[str], scores: dict[str, float], depth: int) -> list[str]:
-    """상위 depth개를 reranker 점수 내림차순으로 바꾸고 나머지는 그대로 둔다(EXP-005)."""
-    return sorted(docs[:depth], key=lambda d: -scores[d]) + docs[depth:]
 
 
 def read_chunk_texts(dirs: list[Path], need: set[int]) -> dict[int, str]:
@@ -209,19 +204,16 @@ def search(cfg) -> None:
         texts = dict(zip(qids, query_texts, strict=True))
         picks = []
     if use_rerank:
-        rerank_scores: dict[str, dict[str, float]] = {}
-        with (ROOT / cfg.paths.rerank_scores).open(encoding="utf-8") as f:
-            for x in map(json.loads, f):
-                rerank_scores.setdefault(x["qid"], {})[x["doc_id"]] = x["score"]
+        rerank_scores = read_rerank_scores(ROOT / cfg.paths.rerank_scores)
     use_rewrite = bool(r.get("rewrite") and r.rewrite.enabled)
     if use_rewrite and (export_pairs or use_rerank):
         raise SystemExit("retriever.rewrite는 재정렬(rerank-pairs, rerank)과 함께 쓰지 않는다")
 
     def finish(qid: str, docs: list[str], matched: set[str]) -> list[str]:
         if ret.hybrid:
-            if use_rerank:
-                docs = rerank_top(docs, rerank_scores[qid], r.rerank.depth)
-            docs = conditions_first(docs, matched)[: r.top_k]
+            scores = rerank_scores[qid] if use_rerank else None
+            docs = final_order(docs, matched, scores, r.rerank.depth if use_rerank else 0)
+            docs = docs[: r.top_k]
         return docs
 
     ranked, gated, fallbacks = {}, [], 0

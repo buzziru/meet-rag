@@ -1,30 +1,27 @@
 # STATUS (세션 종료 시 덮어씀)
 
 ## 현재 위치
-- 검색 단계 종료(D-39). 기준 EXP-017(D-36): EXP-014에 RRF 후보 상위 20개 KURE-Reranker-nano 재정렬. dev-full Recall@5 0.9566, test Recall@5 0.9577(3,003질의), 베이스라인 대비 test +10.52%p로 dev 이득 유지. 검색 부분 질의당 평균 약 0.84초(CPU 0.40 + T4 0.44)
-- 생성 기본 경로: OpenRouter 유료 Gemma 4 31B, 사고 과정 끔, 제공자 CoreWeave 고정(D-37). 아직 구현하지 않음(`rag.generate`는 Google 무료 경로, 리랭커 미연결)
-- 생성 평가 방향(D-38): RAGAS 정의를 빌린 LLM judge 직접 구현, judge는 API·버전 관리. SPEC 개정 초안 `docs/drafts/spec-generation-eval.md`(SPEC 미반영)
-- 이번 세션 PR #91\~#102 병합: 백로그·문헌(H10·H11·H17), +1.0%p 해석(D-35)과 문서 작성 원칙, EXP-017(D-36), 생성 경로(D-37), 노트북 ruff 수정, S13 test 1회(search.queries=test, D-39), colab_job --allow-test 추가 뒤 제거(ADR-0043·0045)
+- 검색 단계 종료(D-39). 기준 EXP-017(D-36)
+- 생성 단계: S14 생성 평가 모듈 PR #106 리뷰 대기(브랜치 `feat/s14-gen-eval`, main 병합 반영). 생성 OpenRouter CoreWeave + 프롬프트 v2(인사말·도입 문장 금지), judge j_v5 + `deepseek_go_mixed`(기본 사고 과정 끔, `verdicts`·`key_statements`만 low), 결정 D-40
+- judge 검수: 20질의 × 4기준 사람 검수(`data/review/s14_judge_think.csv`, 1\~5번 사용자 판정, 6\~20번은 사용자 기준으로 Claude가 채움 `filled_by`). 혼합 설정 일치 충실성 19/19, 청크 16/16, 관련성 17/20, 포함도 12/18. 같은 설정 3회 반복에서 포함도 일치가 10\~13으로 흔들림(slices/14-gen-eval.md 결과 절)
+- 이번 세션 PR: #107 CLAUDE.md 정리, #108·#109·#111·#113 PR 일일 종합 워크플로(Messages API, ID federation, 매일 00시 이슈), #110 구독 토큰 안(닫음), #114 이슈 #112 결정 기록. 모두 병합. #106 대기
 
 ## 실행 중 작업
-- 없음(Colab 세션 없음, 노트북 커널 종료)
+- 없음
 
 ## 이번 세션 결정
-- +1.0%p는 자동 채택선, 미만 보류는 D-33 선례로 사용자가 정한다(D-35). 최소 개선 폭은 베이스라인 확인 때 근거와 함께 정한다(문서 작성 원칙)
-- 리랭커 운영 채택(D-36), D-26 재판정 조항은 하지 않음
-- 생성: OpenRouter 유료, CoreWeave(fp4) 고정, D-30 3초는 첫 토큰 중앙값으로 판정(D-37)
-- test 결과로 기준 설정을 바꾸지 않음. 실사용 질의는 따로 만들지 않고 배포 페이지에 시험용 질문 샘플을 둔다(PR #101 코멘트)
-- 생성 단계 test 1회도 사용자 지시로 할 수 있다(D-38, PR #102 코멘트)
-- H17(검색기별 상위 슬롯 보장)은 아이디어로만 남김
+- PR 일일 종합: GitHub Actions + Messages API 한 번 호출(ADR-0046·0047), 인증 ID federation, Opus 5.5(실패 시 Sonnet 5.5). 콘솔 프로모션 크레딧은 Claude Code에 적용되지 않음
+- D-36 questioner 하락 원인 분석 없이 감수, D-37 CoreWeave 지연은 생성 평가 때 함께 측정, test는 검색·생성 단계마다 1회(생성 단계는 SPEC 이관 뒤), §7.1 PR #96 예외(ADR-0048)
+- judge 판정 규칙(j_v3\~j_v5): 진술 의미 단위 묶음, 확인되지 않은 질의자 주장은 사실처럼 쓰면 0(그 주장으로 쓰면 1), 관련성은 요지에 실질적으로 답했는지, 참조 발언 사용 가능 여부와 핵심 진술 범위. 검수에 쓴 20질의는 판정용 질의에서 뺀다
 
 ## 다음 행동
-1. [A] 검색 단계 정리표: EXP별 single-doc·multi-doc 순위 변화 한 표(PLAN 이후 단계)
-2. [D] G4 평가 세트 확장 검토: 하거나 닫을지 결정
-3. [A] SPEC 생성 평가 개정: 초안의 남은 결정 사항을 정해 SPEC·CLAUDE.md(test 문구)에 옮긴다(사용자 승인)
-4. [A] 생성 경로 구현: OpenRouter CoreWeave 설정(`configs/generator/`), 사고 과정 끔, `rag.generate`에 리랭커 연결, 실제 입력 길이에서 첫 토큰 지연 재측정(D-37 남은 일)
-5. [B] 생성 실험(H10 컨텍스트 구성 등)은 3·4 뒤
+1. [F] 하네스 수정을 가장 먼저 한다(사용자 지시). 근거는 `_workspace/00_main_harness-pending.md`의 2026-10-19 항목 둘과 2026-10-20 항목 다섯: 결과를 본문에 보고하지 않고 질문 상자로 넘어감(이번 세션 세 번 지적, 메모리 report-work-in-chat), 병합 전 PR 코멘트 확인 누락(#111), 검수 파일의 Claude 판정 출처 표시, heredoc 이스케이프, judge 반복 흔들림 대비 판정
+2. [A] PR #106 부분 거부 코멘트(2026-10-20 07:59) 반영 후 병합: 일부만 거부한 답변도 나머지 문장은 채점하고, 거부한 부분은 이유(근거 부족: 청크 잘림·다른 문서 / 근거가 모호함: 예정·미정 / 답변자가 답을 거부·회피)에 따라 달리 평가한다. 설계안(거부 판정 범위, 이유 분류 judge 단계, 집계)을 먼저 보이고 확인받는다
+3. [A] 생성 베이스라인: 기준 설정으로 dev-small 생성·judge. 실행 전 호출 수·비용·opencode Go 사용 한도 보고 후 승인(추정 생성 약 $0.26, judge 약 5,500회). 앞 20질의로 v2 프롬프트 효과(내용 없는 문장)를 v1과 비교
+4. [D] G5 사람 채점과 judge 보정(검수 20질의는 판정에서 빼는 제외 목록 포함)
+5. [A] 변동 폭·오라클 진단 → SPEC 생성 평가 개정 → [F] 하네스 생성 평가 반영 → [B] H10
 
 ## 사용자 확인 필요
-- 남은 빈 워크트리 폴더 `.claude/worktrees/nervous-nobel-f8af97`, `stoic-cohen-b17c4b`: 두 하위 세션을 보관(archive)하면 지울 수 있다
-- 캐시 정리 여부: `uv cache prune`, KURE-Reranker-nano HF 캐시
-- 원격 브랜치 정리(사용자): `chore/harness-setup`, `docs/review-2026-10-01`
+- PR #106: 판단할 곳 1(부분 거부), 병합
+- 검수 CSV 6\~20번(Claude가 채움)은 G5 사람 판정으로 쓰려면 직접 확인 필요. 3번 충실성은 비어 있음
+- 캐시 정리 여부: `uv cache prune`, KURE-Reranker-nano HF 캐시, `data/gen_eval/judge_cache_r2·r3`(흔들림 측정용)

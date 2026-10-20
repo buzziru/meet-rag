@@ -1,0 +1,10 @@
+# deepseek_go와 같고 사고 과정만 끈 judge (PR #106 코멘트: 사고 과정 켬·끔 비교로 max_tokens를 정한다)
+# DeepSeek 문서(api-docs.deepseek.com/guides/thinking_mode): 사고 과정은 기본 켜짐, {"thinking": {"type": "disabled"}}로 끈다
+defaults:
+  - deepseek_go
+  - _self_
+
+name: deepseek_go_nothink
+extra_body:
+  thinking:
+    type: disabled

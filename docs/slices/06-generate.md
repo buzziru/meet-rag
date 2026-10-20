@@ -1,6 +1,6 @@
 # S6 생성
 
-질의 하나를 받아 전체 인덱스에서 검색하고, 상위 문서의 근거 청크를 넣은 프롬프트로 Gemma 4 31B(Google AI Studio OpenAI 호환 엔드포인트, D-01)를 호출해 답변과 근거 URL(`original`)을 낸다. 이 조각으로 naive RAG 파이프라인(청킹 → 검색 → 생성)이 끝난다.
+질의 하나를 받아 전체 인덱스에서 검색하고, 상위 문서의 근거 청크를 넣은 프롬프트로 Gemma 4 31B(Google AI Studio OpenAI 호환 엔드포인트, D-01)를 호출해 답변과 근거 URL(`original`)을 낸다. 기본 경로는 S14에서 OpenRouter(`configs/generator/openrouter.yaml`, D-37)로 바뀌었고 EXP-017 재정렬 점수를 쓴다(slices/14-gen-eval.md). 아래 Google 경로 서술은 `generator=gemma`일 때의 것이다. 이 조각으로 naive RAG 파이프라인(청킹 → 검색 → 생성)이 끝난다.
 
 답변 평가 기준은 아직 정하지 않았다(SPEC 범위 밖, 검색 단계 이후 개정). 나중에 답변이 근거에 기반했는지 평가할 수 있게 호출마다 질의·근거·답변을 한 기록으로 남긴다. 이 조각에서는 dev 질의 몇 개로 동작만 확인하고 정량 평가는 하지 않는다(D-10).
 

@@ -10,15 +10,17 @@ from rag.retrieve import (
     condition_docs,
     conditions_first,
     dense_dirs,
+    final_order,
     first_docs,
     load_dense,
     rank_docs,
     rank_with_pool,
+    rerank_top,
     rrf,
     top_docs,
     weighted_doc_scores,
 )
-from rag.search import query_files, query_list, read_chunk_texts, rerank_top, write_run
+from rag.search import query_files, query_list, read_chunk_texts, write_run
 
 
 def test_rank_docs_dedupes_by_first_chunk_rank():
@@ -125,6 +127,13 @@ def test_rrf_without_top_k_returns_all():
 def test_rerank_top_reorders_head_only():
     docs = ["a", "b", "c", "d"]
     assert rerank_top(docs, {"a": 0.1, "b": 0.9, "c": 0.5}, 3) == ["b", "c", "a", "d"]
+
+
+def test_final_order_reranks_before_condition_filter():
+    # 재정렬로 c가 1위가 되지만 최다 일치 문서 d가 앞으로 온다(EXP-017 순서)
+    got = final_order(["a", "b", "c", "d"], {"d"}, {"a": 0.1, "b": 0.2, "c": 0.9}, 3)
+    assert got == ["d", "c", "b", "a"]
+    assert final_order(["a", "b", "c"], {"b"}) == ["b", "a", "c"]
 
 
 def test_chunks_by_doc():
