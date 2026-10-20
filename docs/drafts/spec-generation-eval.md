@@ -8,7 +8,7 @@ SPEC에 더할 생성 단계 평가의 초안이다(D-38). 초안은 SPEC 밖에
 - 출력: 근거 번호 `[n]`을 붙인 한국어 답변, 또는 근거에서 답을 찾지 못했다는 거부 답변
 - 생성 조건: OpenRouter `google/gemma-4-31b-it`, 제공자 CoreWeave 고정, 사고 과정 끔(D-37). 실험 간 비교는 `temperature` 0과 고정 프롬프트(`configs/prompt/`의 버전)로 한다
 - 평가 질의: dev 분할의 평가 질의(`summary_q`). multi-doc 질의는 아래 보조 관찰로 따로 본다. 보정 표본은 판정용 질의와 겹치지 않게 뗀다(아래 judge 보정)
-- test: 검색 단계와 같이 생성 단계 마지막에 사용자 지시로 1회만 쓴다(D-38). 그 전에는 test 질의를 읽거나 보내지 않는다. 지금 SPEC·CLAUDE.md는 test를 검색 단계 종료 1회로만 허용하므로, 이 규칙은 SPEC에 옮기며 두 문서를 고친 뒤에 효력이 있다
+- test: 검색 단계와 같이 생성 단계 마지막에 사용자 지시로 1회만 쓴다(D-38). 그 전에는 test 질의를 읽거나 보내지 않는다. 지금 SPEC은 test를 검색 단계 종료 1회로만 허용하므로, 이 규칙은 SPEC에 옮긴 뒤에 효력이 있다. CLAUDE.md 금지 절은 이 조건을 붙여 적었다. SPEC에 옮길 때 CLAUDE.md 외부 전송 줄, protocol-guard P1·P6, pr-briefer R6을 함께 고친다
 
 ## 기준
 
