@@ -51,6 +51,19 @@ def refusal_table(rows: list[dict]) -> list[tuple[str, int, int]]:
             for name, f in groups.items()]
 
 
+def chunk_ratio_table(rows: list[dict]) -> list[tuple[float, int, int]]:
+    """(정답 청크에 든 핵심 진술 비율, 질의 수, 거부 수). 경계 gen_eval.chunk_key_min은 근거가
+    부족한 잠정값이라, 비율 분포를 남겨 나중에 경계를 정하는 근거로 쓴다(사용자 결정 2026-10-20)."""
+    ratios = Counter()
+    refusals = Counter()
+    for r in rows:
+        score = (r.get("chunk_keys") or {}).get("score")
+        if score is not None:
+            ratios[round(score, 2)] += 1
+            refusals[round(score, 2)] += bool(r["refusal"])
+    return [(k, ratios[k], refusals[k]) for k in sorted(ratios)]
+
+
 def usage_sum(usages, key: str) -> int:
     return sum((u or {}).get(key) or 0 for u in usages)
 
@@ -73,6 +86,11 @@ def main() -> None:
     print("\n| 근거 상태 | 질의 | 거부 |\n| --- | ---: | ---: |")
     for name, k, ref in refusal_table(rows):
         print(f"| {name} | {k} | {rate(ref, k)} |")
+
+    print(f"\n정답 청크에 든 핵심 진술 비율(잠정 경계 {cfg.gen_eval.chunk_key_min} 이상을 "
+          "'있음'으로 본다)\n\n| 비율 | 질의 | 거부 |\n| ---: | ---: | ---: |")
+    for ratio, k, ref in chunk_ratio_table(rows):
+        print(f"| {ratio:.2f} | {k} | {rate(ref, k)} |")
 
     cites = [r["citations"] for r in answered]
     n_sent = sum(c["n_sentences"] for c in cites)

@@ -20,7 +20,7 @@ from rag.gen_eval.judge import (
     relevance,
     render,
 )
-from rag.gen_eval.report import criterion, refusal_table
+from rag.gen_eval.report import chunk_ratio_table, criterion, refusal_table
 
 REFUSAL = "제공된 회의록에서 답을 찾지 못했습니다"
 
@@ -160,3 +160,12 @@ def test_report_criterion_and_refusal_table():
                                    ("정답 문서 있음, 청크에 핵심 답 없음", 1, 1),
                                    ("정답 문서 있음, 판단 불가", 1, 0),
                                    ("정답 문서 없음", 1, 0)]
+
+
+def test_chunk_ratio_table_counts_ratio_and_refusal():
+    rows = [{"chunk_keys": {"score": 0.5}, "refusal": False},
+            {"chunk_keys": {"score": 0.5}, "refusal": True},
+            {"chunk_keys": {"score": 1 / 3}, "refusal": False},
+            {"chunk_keys": {"score": None}, "refusal": False},
+            {"refusal": False}]
+    assert chunk_ratio_table(rows) == [(0.33, 1, 0), (0.5, 2, 1)]
