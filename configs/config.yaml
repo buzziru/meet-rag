@@ -231,3 +231,7 @@ gen_eval:
   # 내용 없는 문장(인사말, 도입 문장)의 문구. 이 문구가 든 문장은 인용 검사의 문장 수에서 빼고
   # 따로 센다. 생성 프롬프트 v2도 이런 문장을 쓰지 말라고 지시한다(PR #106 코멘트, 2026-10-20)
   filler_phrases: [다음과 같습니다, 아래와 같습니다, 감사합니다, 안녕하십니까]
+  # 사람 검수 파일(rag.gen_eval.review): 두 judge 설정의 결과를 나란히 둔다. 질의 원문이 있어 data/ 아래에 쓴다
+  review:
+    judges: [deepseek_go, deepseek_go_nothink]
+    out: data/review/s14_judge_think
