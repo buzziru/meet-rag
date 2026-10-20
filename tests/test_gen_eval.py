@@ -5,8 +5,8 @@ import pytest
 from rag.gen_eval.checks import (
     citation_check,
     gold_position,
-    is_refusal,
     metadata_mismatches,
+    refusal_split,
     sentences,
 )
 from rag.gen_eval.common import done_qids, sample_qids
@@ -17,10 +17,17 @@ from rag.gen_eval.judge import (
     key_presence,
     key_statements,
     parse_json,
+    refusal_reason,
     relevance,
     render,
 )
-from rag.gen_eval.report import chunk_ratio_table, criterion, refusal_table
+from rag.gen_eval.report import (
+    chunk_ratio_table,
+    criterion,
+    reason_table,
+    refusal_table,
+    wrong_refusal,
+)
 
 REFUSAL = "제공된 회의록에서 답을 찾지 못했습니다"
 
@@ -30,9 +37,18 @@ def ctx(n, doc_id="d1", date="2020년3월5일(목)", committee="국방위원회"
             "meeting_number": "제1회", "session_number": "제2차", "text": text}
 
 
-def test_refusal_ignores_spacing():
-    assert is_refusal("제공된 회의록에서  답을 찾지 못했습니다.", REFUSAL)
-    assert not is_refusal("집행률이 낮아 줄였습니다[1].", REFUSAL)
+FILLERS = ["다음과 같습니다"]
+PARTIAL = "A 위원은 B를 제안했습니다[1]. C의 시행 시기는 제공된 회의록에서 답을 찾지 못했습니다."
+
+
+def test_refusal_split_full_partial_none():
+    assert refusal_split("제공된 회의록에서  답을 찾지 못했습니다.", REFUSAL, FILLERS)[0] == "full"
+    assert refusal_split("다음과 같습니다.\n" + REFUSAL + ".", REFUSAL, FILLERS)[0] == "full"
+    ans = "집행률이 낮아 줄였습니다[1].\n통합했습니다[2]."
+    assert refusal_split(ans, REFUSAL, FILLERS) == (None, [], ans)
+    kind, refused, rest = refusal_split(PARTIAL, REFUSAL, FILLERS)
+    assert kind == "partial" and rest == "A 위원은 B를 제안했습니다[1]."
+    assert refused == ["C의 시행 시기는 제공된 회의록에서 답을 찾지 못했습니다."]
 
 
 def test_sentences_attach_trailing_citation():
@@ -137,20 +153,84 @@ def gen(answer, contexts):
 
 def judge_cfg():
     from omegaconf import OmegaConf
-    return OmegaConf.create({"gen_eval": {"refusal": REFUSAL, "chunk_key_min": 0.5}})
+    return OmegaConf.create({"gen_eval": {"refusal": REFUSAL, "chunk_key_min": 0.5,
+                                          "filler_phrases": FILLERS}})
 
 
 def test_judge_record_checks_chunk_with_key_statements_even_for_refusal():
+    reason = {"refusals": [{"reason": "missing", "in_reference": 1}]}
     stub = StubJudge({"key_statements": {"key_statements": ["k1", "k2"]},
-                      "chunk_checks": {"checks": [{"present": 1}, {"present": 0}]}})
+                      "chunk_checks": {"checks": [{"present": 1}, {"present": 0}]},
+                      "refusal_reason": reason})
     contexts = [ctx(1, "other"), ctx(2, "gold", text="발췌")]
     out = judge_record.__wrapped__(stub, gen(REFUSAL + ".", contexts),
                                    {"doc_id": "gold", "answer_comment": "발언"}, judge_cfg(), set())
-    assert out["refusal"] and out["gold_n"] == 2 and out["answer_in_chunk"] is True
+    assert out["refusal"] == "full" and out["gold_n"] == 2 and out["answer_in_chunk"] is True
+    assert out["refusal_reason"]["items"][0]["cause"] == "chunk_cut"
     assert "faithfulness" not in out
     ref = {"doc_id": "none", "answer_comment": "발언"}
     missing = judge_record.__wrapped__(stub, gen(REFUSAL, contexts), ref, judge_cfg(), set())
     assert missing["gold_n"] is None and missing["answer_in_chunk"] is None
+
+
+class RecordingJudge(StubJudge):
+    """단계마다 받은 입력을 남긴다."""
+
+    def __init__(self, replies):
+        super().__init__(replies)
+        self.seen = {}
+
+    def ask(self, step, **values):
+        self.seen[step] = values
+        return super().ask(step, **values)
+
+
+def test_partial_refusal_scores_content_and_classifies_refusal():
+    stub = RecordingJudge({
+        "key_statements": {"key_statements": ["k1", "k2"]},
+        "chunk_checks": {"checks": [{"present": 1}, {"present": 1}]},
+        "refusal_reason": {"refusals": [{"reason": "ambiguous", "in_reference": 1}]},
+        "statements": {"statements": ["s1"]}, "verdicts": {"verdicts": [{"verdict": 1}]},
+        "relevance": {"label": "일부"},
+        "key_checks": {"checks": [{"present": 1}, {"present": 0}]}})
+    out = judge_record.__wrapped__(stub, gen(PARTIAL, [ctx(1, "gold")]),
+                                   {"doc_id": "gold", "answer_comment": "발언"}, judge_cfg(), set())
+    assert out["refusal"] == "partial" and out["inclusion"]["score"] == 0.5
+    assert stub.seen["statements"]["answer"] == "A 위원은 B를 제안했습니다[1]."
+    assert stub.seen["relevance"]["answer"] == "A 위원은 B를 제안했습니다[1]."
+    assert stub.seen["key_checks"]["answer"] == PARTIAL
+    assert out["citations"]["n_sentences"] == 1
+    assert out["refusal_reason"]["items"][0]["reason"] == "ambiguous"
+
+
+def test_refusal_reason_causes_and_format_errors():
+    def run(items, gold_n, refused=("r1",)):
+        return refusal_reason(StubJudge({"refusal_reason": {"refusals": items}}), "q",
+                              list(refused), [ctx(1)], "발언", gold_n)
+    missing = [{"reason": "missing", "in_reference": 1}]
+    assert run(missing, None)["items"][0]["cause"] == "gold_missing"
+    assert run(missing, 1)["items"][0]["cause"] == "chunk_cut"
+    assert run([{"reason": "missing", "in_reference": 0}], 1)["items"][0]["cause"] == "other"
+    assert "cause" not in run([{"reason": "declined", "in_reference": 0}], 1)["items"][0]
+    assert run([{"reason": "?", "in_reference": 0}], 1)["items"] is None
+    assert run(missing, 1, refused=("r1", "r2"))["error"] == "refusal_reason 형식 오류"
+    none = refusal_reason(StubJudge({"refusal_reason": None}), "q", ["r1"], [], "발언", 1)
+    assert none["items"] is None
+
+
+def test_reason_table_and_wrong_refusal_rate():
+    def row(kind, *items):
+        return {"refusal": kind, "refusal_reason": {"items": list(items)}}
+    rows = [row("full", {"reason": "answerable"}),
+            row("partial", {"reason": "ambiguous"}, {"reason": "missing", "cause": "chunk_cut"}),
+            row("full", {"reason": "declined"}),
+            row("full", {"reason": "missing", "cause": "gold_missing"}),
+            {"refusal": "full", "refusal_reason": {"items": None}},
+            {"refusal": None}]
+    counts, errors = reason_table(rows)
+    assert counts["answerable"] == {"full": 1} and counts["chunk_cut"] == {"partial": 1}
+    assert counts["ambiguous"] == {"partial": 1} and errors == 1
+    assert wrong_refusal(counts) == (1, 3)  # 모호함·회피는 분모에 넣지 않는다
 
 
 def test_report_criterion_and_refusal_table():

@@ -3,7 +3,8 @@
 - 코드 판정: 거부 문구, 인용 번호, 회의 일자·위원회 이름, 정답 문서 포함
 - judge(D-38): 충실성(진술 추출 → 진술별 근거 판정), 답변 관련성(3단계),
   핵심 답변 포함도(핵심 진술 추출 → 답변 포함 판정), 정답 문서 근거 청크의 핵심 답(같은
-  핵심 진술 → 청크 포함 판정, D-40). 거부 답변은 근거 청크 판정만 한다
+  핵심 진술 → 청크 포함 판정, D-40), 거부 이유 분류(S14b, D-41). 전체 거부 답변은 근거 청크
+  판정과 거부 이유 분류만 하고, 부분 거부 답변은 거부 문장을 뺀 내용을 채점한다
 judge 응답은 요청 본문 해시로 paths.gen_judge_cache에 저장해 다시 실행할 때 쓴다
 (같은 입력이면 API를 부르지 않는다). 명세는 docs/slices/14-gen-eval.md.
 인자는 Hydra override(예: +exp=exp017 gen_eval.n=20).
@@ -26,14 +27,15 @@ from rag.conditions import committee_base
 from rag.gen_eval.checks import (
     citation_check,
     gold_position,
-    is_refusal,
     metadata_mismatches,
+    refusal_split,
 )
 from rag.gen_eval.common import eval_qids, load_refs, read_jsonl
 from rag.index import ROOT, load_cfg
 from rag.search import write_guarded
 
 RELEVANCE = {"답함": 1.0, "일부": 0.5, "답하지 않음": 0.0}
+REASONS = {"answerable", "ambiguous", "declined", "missing"}
 
 
 def sha(obj) -> str:
@@ -182,17 +184,39 @@ def inclusion(judge: Judge, answer: str, ks: dict | None) -> dict:
             "key_statements": ks["keys"]}
 
 
+def refusal_reason(judge: Judge, question: str, refused: list[str], contexts: list[dict],
+                   reference: str, gold_n: int | None) -> dict:
+    """거부 문장마다 거부한 내용과 이유(S14b, D-41). 근거는 5개 전체를 준다. 근거 부족(missing)의
+    원인은 코드가 나눈다: 정답 문서가 근거에 없으면 gold_missing, 참조 발언에 답이 있으면 chunk_cut
+    (청크 잘림 추정), 그 밖은 other."""
+    out, u = judge.ask("refusal_reason", question=question, contexts=format_contexts(contexts),
+                       refusals=json.dumps(refused, ensure_ascii=False), reference=reference)
+    items = out.get("refusals") if out else None
+    if (not isinstance(items, list) or len(items) != len(refused)
+            or not all(i.get("reason") in REASONS and i.get("in_reference") in (0, 1)
+                       for i in items)):
+        return {"items": None, "error": "refusal_reason 형식 오류", "usage": [u]}
+    for i in items:
+        if i["reason"] == "missing":
+            i["cause"] = ("gold_missing" if not gold_n
+                          else "chunk_cut" if i["in_reference"] else "other")
+    return {"items": items, "usage": [u]}
+
+
 @traceable(name="judge_record", process_inputs=lambda i: {"qid": i["gen"]["qid"]})
 def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) -> dict:
     """생성 기록 하나의 코드 판정과 judge 채점.
 
     정답 문서가 근거에 있으면 거부 여부와 관계없이 핵심 진술을 뽑고, 그 진술이 정답 문서의 근거
     청크에 들어 있는 비율이 gen_eval.chunk_key_min 이상이면 청크에 답이 있다고 본다(S14 결정 5).
-    핵심 진술이 없거나 형식 오류면 answer_in_chunk는 None(판단 불가)이다."""
+    핵심 진술이 없거나 형식 오류면 answer_in_chunk는 None(판단 불가)이다.
+    거부 문장은 이유를 분류하고, 부분 거부 답변은 거부 문장을 뺀 내용으로 충실성·관련성·인용 검사를
+    하며 포함도는 답변 전체로 본다(S14b, D-41)."""
     g = cfg.gen_eval
     answer, contexts = gen["answer"], gen["contexts"]
     gold_n = gold_position(contexts, ref["doc_id"])
-    out = {"qid": gen["qid"], "refusal": is_refusal(answer, g.refusal), "gold_n": gold_n,
+    kind, refused, rest = refusal_split(answer, g.refusal, list(g.filler_phrases))
+    out = {"qid": gen["qid"], "refusal": kind, "refused_sentences": refused, "gold_n": gold_n,
            "answer_in_chunk": None, "usage": gen["usage"], "provider": gen["provider"],
            "first_token_s": gen["first_token_s"], "total_s": gen["total_s"]}
     ks = key_statements(judge, gen["query"], ref["answer_comment"]) if gold_n else None
@@ -204,12 +228,15 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
             out["chunk_keys"] = chunk
             if chunk["score"] is not None:
                 out["answer_in_chunk"] = chunk["score"] >= g.chunk_key_min
-    if out["refusal"]:  # 거부 답변은 거부 교차 집계로만 본다(초안 "거부 답변의 처리")
+    if refused:
+        out["refusal_reason"] = refusal_reason(judge, gen["query"], refused, contexts,
+                                               ref["answer_comment"], gold_n)
+    if kind == "full":  # 전체 거부는 거부 집계로만 본다(초안 "거부 답변의 처리")
         return out
-    out["citations"] = citation_check(answer, len(contexts), list(g.filler_phrases))
-    out["metadata"] = metadata_mismatches(answer, contexts, committees)
-    out["faithfulness"] = faithfulness(judge, gen["query"], answer, contexts)
-    out["relevance"] = relevance(judge, gen["query"], answer)
+    out["citations"] = citation_check(rest, len(contexts), list(g.filler_phrases))
+    out["metadata"] = metadata_mismatches(rest, contexts, committees)
+    out["faithfulness"] = faithfulness(judge, gen["query"], rest, contexts)
+    out["relevance"] = relevance(judge, gen["query"], rest)
     out["inclusion"] = inclusion(judge, answer, ks)
     return out
 
