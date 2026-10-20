@@ -114,7 +114,7 @@ A2(구현)와 B3(실험 코드)에 적용한다. 실험 기록은 다시 만드�
 
 ## E. GPU 작업 (Colab)
 
-전체 코퍼스 임베딩·인덱스 구축·재임베딩처럼 GPU가 필요한 작업(A2, B3)과 test 질의의 Colab 처리가 필요해지면, 시작 전에 `references/colab.md`와 `colab-operator` 스킬을 Skill 도구로 불러와 E1\~E7을 따른다. 기억으로 대신하지 않는다(S4에서 두 번 모두 불러오지 않고 진행). 승인(GPU 종류, 예상 시간, 요율 환산 compute unit)과 VM 조작은 메인만 한다. 로컬 PC에는 GPU가 없고(SPEC 자원 제약), 생성(OpenRouter, D-37)과 judge(opencode Go, D-38)는 GPU를 쓰지 않는다.
+전체 코퍼스 임베딩·인덱스 구축·재임베딩처럼 GPU가 필요한 작업(A2, B3)이나 생성 단계 test 1회의 Colab 처리(업로드 허용 ADR을 다시 둔 뒤, protocol-guard P6)가 필요해지면, 시작 전에 `references/colab.md`와 `colab-operator` 스킬을 Skill 도구로 불러와 E1\~E7을 따른다. 기억으로 대신하지 않는다(S4에서 두 번 모두 불러오지 않고 진행). 승인(GPU 종류, 예상 시간, 요율 환산 compute unit)과 VM 조작은 메인만 한다. 로컬 PC에는 GPU가 없고(SPEC 자원 제약), 생성(OpenRouter, D-37)과 judge(opencode Go, D-38)는 GPU를 쓰지 않는다.
 
 ## F. 하네스 수정
 
