@@ -30,6 +30,8 @@ test 질의를 읽거나 test 점수를 계산하는 실행·코드 경로가 �
 - 검색 단계에서 쓴 test 경로(`search.allow_test`, `rag.eval.score --allow-test`)는 생성 단계 1회에 다시 쓰려고 남긴 것이라 그대로 있는 것은 위반이 아니다. SPEC 개정 전이라도 test를 실행하지 않는 코드·설정 준비는 위반이 아니다
 - 위반: 사용자 지시 기록 없는 실행, 같은 단계의 두 번째 실행, SPEC 개정 전 생성 단계 test 실행(드라이런 포함)
 
+diff에서 찾을 코드 경로:
+
 - `split == "test"`, `"test"` 문자열로 분할을 고르는 코드
 - `data/splits/queries.csv`를 읽고 split으로 거르지 않은 채 질의 전체를 쓰는 코드. 필터가 없으면 test가 섞인다
 - config에서 평가 분할을 바꿀 수 있게 하면서 기본값이나 호출부가 test인 경우

@@ -77,7 +77,8 @@ def colab(*args, stdin=None, check=True, timeout=TIMEOUT, retries=RETRIES) -> st
     if check and code != 0:
         sys.exit(f"colab {' '.join(args[:2])} 실패 (코드 {code}):\n{out}\n"
                  "exec가 계속 멈추면 colab restart-kernel -s 세션 뒤 다시 하고, "
-                 "그래도 안 되면 colab console로 같은 명령을 보낸다(meet-rag E절 오류 처리)")
+                 "그래도 안 되면 colab console로 같은 명령을 보낸다"
+                 "(meet-rag references/colab.md 오류 처리)")
     return out.strip()
 
 
