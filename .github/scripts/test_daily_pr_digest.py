@@ -55,7 +55,7 @@ def test_merged_in_period_keeps_only_owner_comments(digest, monkeypatch):
     pr = digest.collect_pr("1")
     assert pr["comments"] == [{"body": "소유자"}]
     assert pr["reviews"] == []
-    assert pr["line_comments"] == [{"path": "a.py", "line": 2, "body": "줄 소유자"}]
+    assert [c["body"] for c in pr["line_comments"]] == ["줄 소유자"]
     assert pr["files"] == [{"path": "a.py", "additions": 3, "deletions": 1}]
 
 

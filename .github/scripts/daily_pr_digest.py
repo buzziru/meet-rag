@@ -45,7 +45,8 @@ def collect_pr(number: str) -> dict:
             {"state": r["state"], "body": r["body"]} for r in by_owner(pr["reviews"], "author")
         ],
         "line_comments": [
-            {"path": c["path"], "line": c.get("line"), "body": c["body"]} for c in line_comments
+            {k: c.get(k) for k in ("id", "in_reply_to_id", "path", "line", "body")}
+            for c in line_comments
         ],
         "files": [
             {"path": f["path"], "additions": f["additions"], "deletions": f["deletions"]}
@@ -86,7 +87,8 @@ def main() -> None:
     gh("label", "create", "daily-digest", "-R", REPO, "--color", "BFD4F2",
        "--description", "PR 일일 종합", "--force")
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md", delete=False) as f:
-        f.write(body)
+        # 거절 때 대체 모델이 쓸 수 있어 실제로 쓴 모델을 남긴다
+        f.write(f"{body}\n\n---\n작성 모델: `{response.model}`\n")
     print(gh("issue", "create", "-R", REPO, "--title", f"PR 일일 종합 {DAY}",
              "--label", "daily-digest", "--body-file", f.name))
 
