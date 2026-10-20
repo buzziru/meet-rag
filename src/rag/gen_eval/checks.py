@@ -7,6 +7,7 @@ from rag.conditions import DATE, DOC_DATE, committee_base, full_year
 CITE = re.compile(r"\[(\d+)\]")
 SENT_END = re.compile(r"(?<=[.!?])\s+|\n+")
 SPACE = re.compile(r"\s+")
+LIST_MARK = re.compile(r"^(?:\d+[.)]|[-*•·])$")  # 목록 번호·기호만 남은 조각
 
 
 def is_refusal(answer: str, phrase: str) -> bool:
@@ -15,24 +16,35 @@ def is_refusal(answer: str, phrase: str) -> bool:
 
 
 def sentences(answer: str) -> list[str]:
-    """문장 목록. 인용 번호만 남은 조각("[1]")은 앞 문장에 붙인다."""
+    """문장 목록. 인용 번호만 남은 조각("[1]")은 앞 문장에, 목록 번호만 남은 조각("1.")은
+    뒤 문장에 붙인다."""
     out: list[str] = []
+    mark = ""
     for s in (p.strip() for p in SENT_END.split(answer)):
         if not s:
             continue
         if out and not CITE.sub("", s).strip():
             out[-1] += " " + s
+        elif LIST_MARK.match(s):
+            mark += s + " "
         else:
-            out.append(s)
+            out.append(mark + s)
+            mark = ""
     return out
 
 
-def citation_check(answer: str, k: int) -> dict:
-    """근거 번호 밖 인용([n], n이 1~k 밖)과 인용 없는 문장 수."""
+def citation_check(answer: str, k: int, fillers: list[str]) -> dict:
+    """근거 번호 밖 인용([n], n이 1~k 밖)과 인용 없는 문장 수.
+
+    fillers 문구가 든 문장(인사말, "다음과 같습니다" 같은 도입 문장)은 내용이 없어 문장 수와
+    인용 없는 문장에서 빼고 filler로 따로 센다(PR #106 코멘트, 2026-10-20)."""
     sents = sentences(answer)
+    filler = [s for s in sents if any(f in s for f in fillers)]
+    body = [s for s in sents if s not in filler]
     invalid = sorted({int(n) for n in CITE.findall(answer) if not 1 <= int(n) <= k})
-    uncited = sum(1 for s in sents if not CITE.search(s))
-    return {"n_sentences": len(sents), "invalid": invalid, "uncited": uncited}
+    uncited = sum(1 for s in body if not CITE.search(s))
+    return {"n_sentences": len(body), "invalid": invalid, "uncited": uncited,
+            "filler": len(filler)}
 
 
 def doc_date(date: str) -> str | None:

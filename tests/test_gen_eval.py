@@ -41,8 +41,17 @@ def test_sentences_attach_trailing_citation():
 
 
 def test_citation_check_counts_invalid_and_uncited():
-    got = citation_check("예산을 줄였습니다[1]. 사업을 통합했습니다[7]. 감사합니다.", 5)
-    assert got == {"n_sentences": 3, "invalid": [7], "uncited": 1}
+    ans = "예산을 줄였습니다[1]. 사업을 통합했습니다[7]. 집행률이 낮았습니다."
+    got = citation_check(ans, 5, [])
+    assert got == {"n_sentences": 3, "invalid": [7], "uncited": 1, "filler": 0}
+
+
+def test_citation_check_skips_list_marks_and_fillers():
+    ans = ("주요 내용은 다음과 같습니다.\n1. 집행률이 낮았습니다[1].\n"
+           "2. 예산을 줄였습니다[2]. 감사합니다.")
+    assert sentences(ans)[1:3] == ["1. 집행률이 낮았습니다[1].", "2. 예산을 줄였습니다[2]."]
+    got = citation_check(ans, 5, ["다음과 같습니다", "감사합니다"])
+    assert got == {"n_sentences": 2, "invalid": [], "uncited": 0, "filler": 2}
 
 
 def test_metadata_mismatches_checks_cited_doc_only():

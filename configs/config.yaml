@@ -3,7 +3,7 @@ defaults:
   - chunking: fixed
   - retriever: dense
   - generator: openrouter
-  - prompt: v1
+  - prompt: v2
   - judge: deepseek_go
   - _self_
 
@@ -228,3 +228,6 @@ gen_eval:
   # 있다고 본다. 거부 교차 집계에 쓴다(S14 결정 5, 사용자 결정 2026-10-19). 근거가 부족한 잠정값이라
   # report가 비율 분포를 함께 남기고, 그 분포를 근거로 나중에 정한다(PR #106 코멘트, 2026-10-20)
   chunk_key_min: 0.5
+  # 내용 없는 문장(인사말, 도입 문장)의 문구. 이 문구가 든 문장은 인용 검사의 문장 수에서 빼고
+  # 따로 센다. 생성 프롬프트 v2도 이런 문장을 쓰지 말라고 지시한다(PR #106 코멘트, 2026-10-20)
+  filler_phrases: [다음과 같습니다, 아래와 같습니다, 감사합니다, 안녕하십니까]

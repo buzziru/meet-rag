@@ -99,6 +99,8 @@ def main() -> None:
     bad = sum(1 for c in cites if c["invalid"])
     print(f"| 근거 번호 밖 인용이 있는 답변 | {rate(bad, len(cites))} |")
     print(f"| 인용 없는 문장 | {rate(sum(c['uncited'] for c in cites), n_sent)} |")
+    print(f"| 내용 없는 문장(인사말·도입 문장, 문장 수에서 뺌) | "
+          f"{sum(c.get('filler', 0) for c in cites)} |")
     print(f"| 회의 일자·위원회 불일치가 있는 답변 | {rate(sum(1 for m in meta if m), len(meta))} |")
 
     gen_usage = [r["usage"] for r in rows]

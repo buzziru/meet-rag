@@ -200,7 +200,7 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
                 out["answer_in_chunk"] = chunk["score"] >= g.chunk_key_min
     if out["refusal"]:  # 거부 답변은 거부 교차 집계로만 본다(초안 "거부 답변의 처리")
         return out
-    out["citations"] = citation_check(answer, len(contexts))
+    out["citations"] = citation_check(answer, len(contexts), list(g.filler_phrases))
     out["metadata"] = metadata_mismatches(answer, contexts, committees)
     out["faithfulness"] = faithfulness(judge, gen["query"], answer, contexts)
     out["relevance"] = relevance(judge, gen["query"], answer)
