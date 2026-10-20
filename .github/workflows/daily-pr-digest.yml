@@ -6,6 +6,11 @@ on:
   schedule:
     - cron: "0 15 * * *" # 매일 00:00 KST
   workflow_dispatch:
+    inputs:
+      full_output:
+        description: Claude 출력 전체를 로그에 남긴다(실패 원인 확인용). 로그는 공개된다
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -58,6 +63,7 @@ jobs:
           anthropic_service_account_id: ${{ secrets.ANTHROPIC_SERVICE_ACCOUNT_ID }}
           anthropic_workspace_id: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
           github_token: ${{ github.token }}
+          show_full_output: ${{ inputs.full_output || false }}
           prompt: |
             저장소: ${{ github.repository }}
             날짜(KST): ${{ steps.prs.outputs.day }}
