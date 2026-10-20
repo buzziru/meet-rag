@@ -1,0 +1,71 @@
+# 직전 성공 실행 이후(처음에는 지난 24시간) 열렸거나 병합된 PR을 종합해 사용자가 확인할 항목을 일일 이슈 하나로 남긴다(ADR-0046).
+# 인증은 Anthropic 워크로드 ID federation이다. ID 네 개는 실행 로그에서 가려지도록 저장소 Actions secret에 둔다.
+name: daily-pr-digest
+
+on:
+  schedule:
+    - cron: "0 15 * * *" # 매일 00:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read # 직전 성공 실행 시각 조회
+  issues: write
+  id-token: write # GitHub OIDC 토큰을 Anthropic 토큰으로 교환
+
+concurrency: daily-pr-digest
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      # 공개 저장소라 저장소 소유자가 올린 PR만 읽는다. 외부 PR 본문의 지시가 Claude에 들어가지 않게 하려는 것이다
+      - name: 대상 PR 찾기
+        id: prs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          # 직전 성공 실행의 시작 시각부터 본다. 예약 실행이 늦어지거나 수동 실행이 끼어도 PR이 빠지거나 겹치지 않는다
+          since=$(gh run list -R "$GITHUB_REPOSITORY" --workflow daily-pr-digest.yml --status success --limit 1 \
+            --json createdAt --jq '.[0].createdAt // empty')
+          since=${since:-$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)}
+          echo "since=$since" >> "$GITHUB_OUTPUT"
+          numbers=$(gh pr list -R "$GITHUB_REPOSITORY" --state all --limit 100 --author "$OWNER" \
+            --json number,createdAt,mergedAt \
+            --jq "[.[] | select(.createdAt >= \"$since\" or (.mergedAt // \"\") >= \"$since\") | .number] | sort | map(tostring) | join(\" \")")
+          echo "numbers=$numbers" >> "$GITHUB_OUTPUT"
+          echo "day=$(TZ=Asia/Seoul date -d '1 hour ago' +%F)" >> "$GITHUB_OUTPUT"
+          echo "대상 PR: ${numbers:-없음}"
+
+      - uses: actions/checkout@v4
+        if: steps.prs.outputs.numbers != ''
+        with:
+          persist-credentials: false # .git/config에 토큰을 남기지 않는다
+
+      - name: 라벨 준비
+        if: steps.prs.outputs.numbers != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh label create daily-digest -R "$GITHUB_REPOSITORY" --color BFD4F2 --description "PR 일일 종합" --force
+
+      - uses: anthropics/claude-code-action@v1
+        if: steps.prs.outputs.numbers != ''
+        with:
+          anthropic_federation_rule_id: ${{ secrets.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ secrets.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ secrets.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          anthropic_workspace_id: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
+          github_token: ${{ github.token }}
+          prompt: |
+            저장소: ${{ github.repository }}
+            날짜(KST): ${{ steps.prs.outputs.day }}
+            대상 기간 시작(UTC): ${{ steps.prs.outputs.since }}
+            대상 PR: ${{ steps.prs.outputs.numbers }}
+
+            `.github/prompts/daily-pr-digest.md`를 읽고 그 지시대로 일일 종합 이슈를 만든다.
+          claude_args: >-
+            --model claude-opus-5-5
+            --max-turns 40
+            --allowedTools "Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr diff:*),Bash(gh api repos/${{ github.repository }}/pulls:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*)"
