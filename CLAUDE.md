@@ -20,7 +20,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - test 1회(S13): 실행을 마쳤고 다시 돌리지 않는다. 절차·명령·결과는 slices/13-test-run.md, D-39
 - 생성: `uv run python -m rag.generate +exp=exp017 ask.qid=<dev qid>` (검색은 `+exp`의 설정. 재정렬 점수 파일이 있는 dev 질의만, 경로·옵션: slices/06-generate.md, slices/14-gen-eval.md. 5xx는 서버 상태부터 확인)
 - 생성 평가(S14): `uv run python -m rag.gen_eval.generate +exp=exp017 gen_eval.n=<N>` → `rag.gen_eval.judge` → `rag.gen_eval.report` (같은 override, 비용·호출 수: slices/14-gen-eval.md)
-- multi-doc 질의(S8·G3): `uv run python -m rag.multidoc.pools` → `rag.multidoc.prepare` → `rag.multidoc.check --prepare` → `rag.multidoc.check [--dry-run]` (순서·작업자·승인: meet-rag 스킬, 유형·값 D-13, 판정 규칙 D-14)
+- multi-doc 질의(S8·G3): 생성을 마치고 동결했다(D-15). 다시 만들 때의 절차는 slices/08-multidoc-queries.md, 하네스 ADR-0017\~0024, 작업자 정의·실행 순서는 ADR-0049 이전 git 이력
 
 한글 출력이 깨지면 `PYTHONUTF8=1`로 실행한다. 파일은 `encoding="utf-8"`로 연다.
 
