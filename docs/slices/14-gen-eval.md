@@ -11,7 +11,7 @@
 - `configs/generator/openrouter.yaml`: `google/gemma-4-31b-it`, `api_key_env: OPENROUTER_API`, 제공자 고정(`provider.order: [coreweave/fp4]`, `allow_fallbacks: false`), 사고 과정 끔(`reasoning.effort: none`), `temperature` 0, `context_docs` 5. 기본 generator를 이 파일로 바꾼다(D-37). `gemma.yaml`(Google 경로)은 지우지 않는다
 - `rag.generate`: OpenRouter 요청 본문에 제공자·사고 과정 설정을 넣는다. 응답의 실제 제공자(`provider`)를 기록에 남겨 고정이 지켜졌는지 확인한다. 스트리밍에서 답변 첫 토큰까지의 시간을 잰다
 - 리랭커 연결: EXP-017과 같이 RRF 후보(필터 전) 상위 `rerank.depth`개를 재정렬 점수로 다시 줄 세운 뒤 최다 일치 필터를 적용한다. 순서 규칙(`rag.search`의 `rerank_top` → `conditions_first`)을 `rag.retrieve`로 옮겨 평가와 생성이 같은 코드를 쓴다(S12 원칙). 점수 출처는 결정 사항 1
-- 프롬프트는 `configs/prompt/v1.yaml`을 그대로 쓴다. 바꾸면 H10에서 새 버전으로 만든다
+- 프롬프트는 `configs/prompt/v1.yaml`을 그대로 쓴다. 바꾸면 H10에서 새 버전으로 만든다. 예외: 인사말·도입 문장 금지 한 줄을 더한 v2를 기본으로 했다(PR #106 코멘트, 사용자 결정 2026-10-20, D-40). 근거 구성 등 나머지 프롬프트 변경은 H10에서 한다
 
 ### 일괄 생성
 
@@ -88,7 +88,7 @@ D-38은 RAGAS 지표 정의를 빌려 직접 구현하고 ragas 라이브러리�
 ## 수정 허용 파일
 
 - `src/rag/generate.py`, `src/rag/retrieve.py`, `src/rag/search.py`(재정렬 순서 규칙을 `rag.retrieve`로 옮기는 부분만), 새 `src/rag/gen_eval/`
-- `configs/config.yaml`(기본 generator, `paths.gen_runs`·`gen_refs`·`gen_judge`, `gen_eval` 절), 새 `configs/generator/openrouter.yaml`, 새 `configs/judge/`
+- `configs/config.yaml`(기본 generator·prompt·judge, `paths.gen_runs`·`gen_refs`·`gen_judge`, `gen_eval` 절), 새 `configs/generator/openrouter.yaml`, 새 `configs/judge/`, 새 `configs/prompt/v2.yaml`(PR #106 코멘트)
 - `tests/`의 해당 테스트
 - `docs/slices/14-gen-eval.md`, `docs/slices/06-generate.md`(경로 서술), `CLAUDE.md` "명령" 절, `docs/PLAN.md`(S14 줄), `docs/DECISIONS.md`(결정 사항 기록, D-40)
 
@@ -98,7 +98,7 @@ D-38은 RAGAS 지표 정의를 빌려 직접 구현하고 ragas 라이브러리�
 - 오라클 진단과 거부 정확도 세트(PLAN 다음 항목)
 - 종합 지표, 기준 비교·판정, SPEC 개정
 - 실시간 재정렬과 배포
-- 프롬프트 변경(H10)
+- 프롬프트 변경(H10). 인사말·도입 문장 금지(v2)만 이 조각에서 했다
 - `src/rag/eval/`, `src/rag/eval_multi/`, `configs/eval/`(보호 경로)
 
 ## 결과
