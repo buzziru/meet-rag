@@ -1,5 +1,5 @@
 # 직전 성공 실행 이후(처음에는 지난 24시간) 열렸거나 병합된 PR을 종합해 사용자가 확인할 항목을 일일 이슈 하나로 남긴다(ADR-0046).
-# 인증은 Anthropic 워크로드 ID federation이다. ID 네 개는 저장소 Actions 변수(vars)에 둔다.
+# 인증은 Anthropic 워크로드 ID federation이다. ID 네 개는 실행 로그에서 가려지도록 저장소 Actions secret에 둔다.
 name: daily-pr-digest
 
 on:
@@ -53,10 +53,10 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         if: steps.prs.outputs.numbers != ''
         with:
-          anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
-          anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
-          anthropic_service_account_id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
-          anthropic_workspace_id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          anthropic_federation_rule_id: ${{ secrets.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ secrets.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ secrets.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          anthropic_workspace_id: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
           github_token: ${{ github.token }}
           prompt: |
             저장소: ${{ github.repository }}
