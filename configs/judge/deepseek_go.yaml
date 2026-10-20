@@ -1,7 +1,7 @@
 # 생성 평가 judge: DeepSeek V4.1 Flash, opencode Go 구독 경로 (D-38, docs/slices/14-gen-eval.md)
 # Console 종량제 경로(/inference/openai/v1)는 잔액에서 차감해 쓰지 않는다
 defaults:
-  - prompt: j_v2
+  - prompt: j_v3
   - _self_
 
 name: deepseek_go  # judge 결과 파일 이름(paths.gen_judge)
