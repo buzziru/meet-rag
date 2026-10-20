@@ -25,7 +25,7 @@ main을 원격과 맞출 때마다 병합된 로컬 브랜치도 함께 지운�
 2. `git switch main`, `git fetch --prune`, `git pull --ff-only`
 3. `git branch --merged main -vv`에 나온 브랜치(`main` 제외)를 `git branch -d`로 지운다. `-D`는 쓰지 않는다. 그중 원격 브랜치가 남아 있던(upstream이 있고 `gone`이 아닌) 브랜치는 지운 뒤 사용자에게 알린다. 원격 삭제는 사용자 몫이다
 4. `git branch --no-merged main -vv`에서 원격이 `gone`인 브랜치는 지우지 않고 사용자에게 알린다. 병합하지 않고 닫은 PR일 수 있다. 원격이 있거나 아직 올리지 않은 작업 브랜치는 알리지 않는다
-5. 3에서 지운 브랜치의 PR(`gh pr list --state merged --head <브랜치>`)마다 사용자 코멘트(`gh pr view N --comments`, `gh api repos/{owner}/{repo}/pulls/N/comments`)를 보고, 답글이나 반영 커밋이 없는 코멘트를 후속 작업으로 STATUS "다음 행동"이나 진행 기록에 적고 사용자에게 알린다. 사용자는 병합 직전에 단 코멘트를 후속 PR에서 반영할 것으로 보고 병합한다(사용자 설명 2026-10-20). 이 확인이 없으면 코멘트가 빠진다(PR #92 코멘트가 병합 뒤 반영되지 않음)
+5. 병합을 확인한 PR마다 사용자 코멘트(`gh pr view N --comments`, `gh api repos/{owner}/{repo}/pulls/N/comments`)를 점검한다. 대상은 2에서 받아 온 병합 커밋(`git log --merges --format=%s ORIG_HEAD..HEAD`의 `Merge pull request #N`)과 이 세션에서 병합을 확인한 PR이다. 로컬 브랜치로 찾지 않는다. 로컬 브랜치는 원격이 지워진 뒤에도 여러 이유로 남거나 처음부터 없을 수 있다. 답글이나 반영 커밋이 없는 코멘트는 바로 반영한다. 진행 중인 작업과 구별되는 일이면 처리 방법(하위 세션을 만들어 처리, STATUS "다음 행동"에 기록 등)을 사용자에게 묻고 그 결정을 따른다. 사용자는 병합 직전에 단 코멘트를 후속 PR에서 반영할 것으로 보고 병합한다(사용자 설명 2026-10-20, PR #116 코멘트). 이 점검이 없으면 코멘트가 빠진다(PR #92 코멘트가 병합 뒤 반영되지 않음)
 
 ## 브랜치
 
