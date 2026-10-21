@@ -1,4 +1,5 @@
 import json
+import sys
 
 import pytest
 
@@ -13,6 +14,7 @@ from rag.gen_eval.common import done_qids, sample_qids
 from rag.gen_eval.judge import (
     faithfulness,
     inclusion,
+    judge_recipe,
     judge_record,
     key_presence,
     key_statements,
@@ -21,6 +23,8 @@ from rag.gen_eval.judge import (
     render,
 )
 from rag.gen_eval.report import chunk_ratio_table, criterion, refusal_table
+from rag.gen_eval.review import main as review_main
+from rag.index import load_cfg
 
 REFUSAL = "제공된 회의록에서 답을 찾지 못했습니다"
 
@@ -253,3 +257,25 @@ def test_judge_step_params_override_request_and_cache(tmp_path):
     assert sent[0]["extra_body"] == {"thinking": {"type": "enabled"}}
     assert "reasoning_effort" not in sent[1] and sent[1]["extra_body"] == j.extra
     assert len(list(tmp_path.iterdir())) == 2
+
+
+def test_judge_recipe_records_code_checks_and_ignores_gen_commit():
+    cfg = load_cfg(["index.scope=full"])
+    a = {"git_commit": "A", "git_dirty": False, "model": "m"}
+    rec = judge_recipe(cfg, [a, {**a, "git_commit": "B"}])
+    assert rec["chunk_key_min"] == cfg.gen_eval.chunk_key_min and rec["refusal"]
+    assert rec["gen_commits"] == ["A", "B"] and rec["git_commit"]
+    # 커밋만 다른 생성 기록은 같은 레시피로 본다(이어 쓰기 done_qids와 같은 규칙, S15 결정 사항 2)
+    assert rec["gen_recipe_sha256"] == judge_recipe(cfg, [{**a, "git_commit": "C"}])[
+        "gen_recipe_sha256"]
+    assert judge_recipe(cfg, [{**a, "model": "n"}])["gen_recipe_sha256"] != rec["gen_recipe_sha256"]
+
+
+def test_review_stops_when_filled_csv_exists(tmp_path, monkeypatch):
+    out = tmp_path / "review"
+    out.with_suffix(".csv").write_text("user_choice\n채움\n", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["rag.gen_eval.review",
+                                      f"gen_eval.review.out='{out.as_posix()}'"])
+    with pytest.raises(SystemExit, match="search.overwrite"):
+        review_main()
+    assert "채움" in out.with_suffix(".csv").read_text(encoding="utf-8")

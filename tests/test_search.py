@@ -3,12 +3,13 @@ import json
 import numpy as np
 import pytest
 
-from rag.index import load_cfg
+from rag.index import index_basis, load_cfg
 from rag.retrieve import (
     Retriever,
     chunks_by_doc,
     condition_docs,
     conditions_first,
+    dense_chunkings,
     dense_dirs,
     final_order,
     first_docs,
@@ -201,8 +202,7 @@ def test_load_dense_appends_in_order(tmp_path):
     assert emb.shape == (5, 3) and emb[:2].sum() == 6 and emb[2:].sum() == 0
 
 
-def test_write_run_refuses_different_content(tmp_path, monkeypatch):
-    monkeypatch.setattr("rag.search.ROOT", tmp_path)
+def test_write_run_refuses_different_content(tmp_path):
     path = tmp_path / "run.csv"
     rows = [{"qid": "q1", "rank": 1, "doc_id": "d1"}]
     assert write_run(path, rows, overwrite=False) == "씀"
@@ -232,8 +232,12 @@ def test_read_chunk_texts_numbers_across_indexes(tmp_path):
 def _tmp_cfg(tmp_path, overrides):
     slug_size = "${embedding.slug}-${chunking.chunk_tokens}"
     template = (tmp_path / slug_size / "${index.scope}").as_posix()
-    return load_cfg([f"paths.index_dir='{template}'", "index.scope=dev-small",
-                     "retriever.top_k=2", "retriever.chunk_pool=null", *overrides])
+    cfg = load_cfg([f"paths.index_dir='{template}'", "index.scope=dev-small",
+                    "retriever.top_k=2", "retriever.chunk_pool=null", *overrides])
+    for d, c in zip(dense_dirs(cfg), dense_chunkings(cfg), strict=True):  # 인덱스 지문(S15)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "basis.json").write_text(json.dumps(index_basis(cfg, c)), encoding="utf-8")
+    return cfg
 
 
 def test_retriever_dense_ranks_by_max_chunk_across_indexes(tmp_path):
@@ -276,3 +280,23 @@ def test_retriever_explain_records_stage_ranks(tmp_path):
     assert docs == ret.candidates(row, tokens)[0][:2]
     assert [s["dense_rank"] for s in stages] == [{"a": 1, "b": 2, "c": 3}[d] for d in docs]
     assert stages[0]["rrf_score"] >= stages[1]["rrf_score"] and "bm25_rank" in stages[0]
+
+
+def test_load_dense_stops_when_rows_differ(tmp_path):
+    base = tmp_path / "a"
+    _write_index(base, ["a", "b"], np.ones((1, 3), dtype=np.float32))
+    with pytest.raises(SystemExit, match="임베딩 1행"):
+        load_dense([base])
+
+
+def test_retriever_checks_index_basis(tmp_path):
+    cfg = _tmp_cfg(tmp_path, [])
+    d = tmp_path / "kure-v1-512" / "dev-small"
+    _write_text_index(d, [("a", "x")], [[1.0, 0.0]])
+    basis = json.loads((d / "basis.json").read_text(encoding="utf-8"))
+    (d / "basis.json").write_text(json.dumps({**basis, "revision": "old"}), encoding="utf-8")
+    with pytest.raises(SystemExit, match="revision"):  # 다른 모델 revision으로 만든 인덱스
+        Retriever(cfg)
+    (d / "basis.json").unlink()
+    with pytest.raises(SystemExit, match="adopt_basis"):
+        Retriever(cfg)

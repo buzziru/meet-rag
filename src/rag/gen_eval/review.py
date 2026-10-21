@@ -53,6 +53,9 @@ def main() -> None:
     cfg = load_cfg(["index.scope=full", *overrides])
     names = list(cfg.gen_eval.review.judges)
     out = ROOT / cfg.gen_eval.review.out
+    if out.with_suffix(".csv").exists() and not cfg.search.overwrite:  # 사람이 채운 검수 칸(S15)
+        raise SystemExit(f"{out.with_suffix('.csv')}가 있다. "
+                         "덮어쓰려면 search.overwrite=true")
     judged = {n: {r["qid"]: r for r in read_jsonl(ROOT / load_cfg(
         ["index.scope=full", *overrides, f"judge={n}"]).paths.gen_judge)} for n in names}
     gens = {r["qid"]: r for r in read_jsonl(ROOT / cfg.paths.gen_runs)}

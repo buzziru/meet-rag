@@ -73,3 +73,14 @@ def test_split_thought():
     assert answer_start("<tho") is None
     assert answer_start("<thought>생각</thought>답") == len("<thought>생각</thought>")
     assert answer_start("바로") == 0
+
+
+def test_recipe_tracks_condition_settings_and_rerank_scores():
+    cfg = load_cfg(["index.scope=full", "+exp=exp017"])
+    meta = {"names": ["idx"], "n_chunks": 3, "rerank_scores_sha256": "a"}
+    base = recipe(cfg, meta, stream=False)
+    exclude = load_cfg(["index.scope=full", "+exp=exp017", "conditions.name_exclude=['정부']"])
+    assert recipe(exclude, meta, stream=False)["conditions"] != base["conditions"]
+    titles = OmegaConf.merge(cfg, {"ingest": {"name_titles": ["위원"]}})
+    assert recipe(titles, meta, stream=False)["name_titles"] == ["위원"]
+    assert recipe(cfg, {**meta, "rerank_scores_sha256": "b"}, stream=False) != base

@@ -10,6 +10,10 @@ defaults:
 # 분할·표본 추출용. 값은 docs/SPEC.md와 같다
 seed: 20260929
 
+# 지문(basis.json) 없는 기존 산출물(인덱스, 재정렬 점수)에 지금 설정으로 지문만 쓰고 끝낸다(S15).
+# 만든 설정을 EXP 실행 기록과 대조한 뒤 명령에서 켠다
+adopt_basis: false
+
 # G1 summary_q 검수 표본 크기 (SPEC 미결 1)
 g1_sample_size: 100
 

@@ -9,9 +9,11 @@ from collections import deque
 from pathlib import Path
 
 import pandas as pd
-from hydra import compose, initialize_config_dir
 
-ROOT = Path(__file__).resolve().parents[2]
+from rag.index import ROOT, load_cfg, write_guarded
+
+# 분할은 보호 경로(data/splits/)라 덮어쓰기 옵션을 두지 않는다(S15)
+HINT = "보호 경로다. 사용자 승인을 받고 파일을 지운 뒤 다시 실행한다"
 
 
 def assign_splits(
@@ -55,8 +57,7 @@ def read_jsonl(path: Path, fields: list[str]) -> pd.DataFrame:
 
 
 def main() -> None:
-    with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
-        cfg = compose(config_name="config")
+    cfg = load_cfg()
     docs = read_jsonl(ROOT / cfg.paths.corpus, ["doc_id", "conference_number", "meeting_name"])
     q = read_jsonl(ROOT / cfg.paths.queries, ["qid", "doc_id", "qna_type"]).merge(docs, on="doc_id")
 
@@ -67,16 +68,15 @@ def main() -> None:
     q["split"] = q["conference_number"].map(assign_splits(meetings, cfg.seed, targets))
 
     out = q.dropna(subset=["split"]).sort_values("qid")
-    splits_path = ROOT / cfg.paths.splits
-    splits_path.parent.mkdir(parents=True, exist_ok=True)
-    out[["qid", "conference_number", "split"]].to_csv(splits_path, index=False, lineterminator="\n")
+    table = out[["qid", "conference_number", "split"]].to_csv(index=False, lineterminator="\n")
+    print(f"{cfg.paths.splits}: {write_guarded(ROOT / cfg.paths.splits, table, False, HINT)}")
 
     dev = out[out["split"] == "dev"]
     docs_by_meeting = dev.groupby("conference_number")["doc_id"].agg(set).to_dict()
     dev_small = pick_dev_small(docs_by_meeting, cfg.seed, cfg.splits.dev_small_min_docs)
-    (ROOT / cfg.paths.dev_small_docs).write_text(
-        "".join(f"{d}\n" for d in dev_small), encoding="utf-8", newline="\n"
-    )
+    state = write_guarded(ROOT / cfg.paths.dev_small_docs, "".join(f"{d}\n" for d in dev_small),
+                          False, HINT)
+    print(f"{cfg.paths.dev_small_docs}: {state}")
 
     q["split"] = q["split"].fillna("unused")
     by_split = q.groupby("split")
