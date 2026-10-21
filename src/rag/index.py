@@ -187,18 +187,21 @@ def main() -> None:
     chunks_path = index_dir / "chunks.jsonl"
     basis_path = index_dir / "basis.json"
     basis = index_build_basis(cfg)
+    if cfg.adopt_basis:  # 지문 없는 기존 인덱스에 지문만 쓰고 끝낸다. 모델을 불러오지 않는다
+        if not chunks_path.exists():
+            raise SystemExit(f"{chunks_path}가 없다")
+        with chunks_path.open(encoding="utf-8") as f:
+            n_rows = sum(1 for _ in f)
+        n_emb = sum(np.load(p, mmap_mode="r").shape[0]
+                    for p in sorted((index_dir / "emb").glob("part-*.npy")))
+        if n_rows != n_emb:  # 행 수가 다른 인덱스에는 지문을 쓰지 않는다
+            raise SystemExit(f"청크 {n_rows}개와 임베딩 {n_emb}행이 다르다")
     if not basis_path.exists() and (cfg.adopt_basis or not chunks_path.exists()):
         # 새 인덱스이거나, 지문 없는 기존 인덱스를 지금 설정으로 만들었다고 사용자가 확인한 경우
         basis_path.write_text(json.dumps(basis, ensure_ascii=False, indent=2) + "\n",
                               encoding="utf-8")
     check_basis(basis_path, basis)
-    if cfg.adopt_basis:  # 지문만 쓰고 끝낸다. 모델을 불러오지 않는다
-        with chunks_path.open(encoding="utf-8") as f:
-            n_rows = sum(1 for _ in f)
-        n_emb = sum(np.load(p, mmap_mode="r").shape[0]
-                    for p in sorted((index_dir / "emb").glob("part-*.npy")))
-        if n_rows != n_emb:
-            raise SystemExit(f"청크 {n_rows}개와 임베딩 {n_emb}행이 다르다")
+    if cfg.adopt_basis:
         print(f"지문 확인 -> {basis_path} (청크 {n_rows:,}개)")
         return
 

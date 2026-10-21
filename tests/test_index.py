@@ -86,6 +86,7 @@ def test_index_stops_when_settings_differ_from_basis(tmp_path, monkeypatch):
 
 
 def test_adopt_checks_chunk_and_embedding_rows(tmp_path, monkeypatch):
-    _, args = _existing_index(tmp_path, n_emb=2)
+    d, args = _existing_index(tmp_path, n_emb=2)
     with pytest.raises(SystemExit, match="임베딩 2행"):
         _run_index(monkeypatch, [*args, "adopt_basis=true"])
+    assert not (d / "basis.json").exists()  # 행 수가 다른 인덱스에는 지문을 남기지 않는다
