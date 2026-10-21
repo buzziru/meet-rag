@@ -135,7 +135,7 @@ A2(구현)와 B3(실험 코드)에 적용한다. 실험 기록은 다시 만드�
 - 외부 API(OpenRouter, opencode Go, Google AI Studio 등)가 5xx를 내면 다시 시도하기 전에 그 제공자의 서버 상태(OpenRouter https://status.openrouter.ai, Google AI Studio https://aistudio.google.com/status 등)를 먼저 확인한다. 장애·성능 저하로 표시되면 멈추고 상태와 함께 보고한다. 정상으로 표시될 때만 한 번 다시 시도하고, 또 실패하면 보고한다. SDK 자동 재시도에 반복 실행을 겹치면 호출만 늘고 원인은 그대로다(S6 노트북을 서버 장애 중 일곱 번 다시 실행한 사례, ADR-0012). 402(결제)·403(인증)은 다시 시도하지 않고 보고한다
 - 노트북은 `scripts/nb_kernel.py`(지속 커널)로 실행한다. 셀 하나가 실패하면 처음부터 다시 돌리지 않고 그 셀을 고쳐 이어서 실행한다. 커널 유지와 `stop` 시점은 `.claude/rules/notebook.md` §8을 따른다
 - 에이전트 보고가 "사용자 승인 필요"를 포함하면 그 지점에서 멈추고 사용자에게 묻는다
-- 이스케이프(`\n`, `\~`)가 든 문자열을 파일에 넣거나 바꿀 때는 Bash heredoc 안의 Python·sed로 하지 않고 Edit 도구로 한다. 셸과 Python이 이스케이프를 두 번 해석해 실제 줄바꿈이 들어가거나 `\~`가 어긋나 파일이 깨졌다(S14 2회, 이번 하네스 작업 1회)
+- 이스케이프(`\n`, `\~`)가 든 문자열을 파일에 넣거나 바꿀 때는 Bash heredoc 안의 Python·sed로 하지 않고 Edit 도구로 한다. 함수·테스트를 통째로 덧붙이는 스크립트도 같다. 셸과 Python이 이스케이프를 두 번 해석해 실제 줄바꿈이 들어가거나 `\~`가 어긋나 파일이 깨졌다(S14 2회, 하네스 1회, S17 1회). 스크립트로 파일을 쓸 때는 `open(..., newline="\n")`로 쓴다(`write_text`·`open`은 Windows에서 CRLF로 쓴다, S16). `python`·`sed -i`가 든 Bash 명령 뒤에는 `file_damage_check` 훅이 바뀐 파일의 구문 오류와 CRLF를 알린다(ADR-0055). 알림이 오면 그 자리에서 Edit로 바로잡는다
 
 ## 테스트 시나리오
 

@@ -2,6 +2,17 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit *)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/commit_type_guard.py\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
         "matcher": "mcp__ccd_turn__wrap_up",
         "hooks": [
           {
@@ -13,6 +24,23 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*python*)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/file_damage_check.py\"",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "if": "Bash(*sed -i*)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/file_damage_check.py\" sed",
+            "timeout": 30
+          }
+        ]
+      },
       {
         "matcher": "mcp__ccd_turn__wrap_up",
         "hooks": [
