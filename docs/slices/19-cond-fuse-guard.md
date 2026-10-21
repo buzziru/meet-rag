@@ -37,3 +37,8 @@
 ## 범위 밖
 
 - B-8 나머지와 다른 낮음 항목(B-9, B-10, B-11 등)
+
+## 결과 (2026-10-21)
+
+- 구현 커밋 cfc3469. 테스트 251 → 252개, `uv run pytest -q`·`uv run ruff check .` 통과(exp 17개 조합 포함, EXP-016 설정은 그대로 만들어짐)
+- 멈춤: `uv run python -m rag.search +exp=exp014 +retriever.conditions.fuse=false index.scope=dev-small` → "conditions.fuse=false는 fusion.method=score에서만 쓴다(EXP-016)"(인덱스를 읽기 전)
