@@ -53,6 +53,16 @@ def test_pool_falls_back_when_too_few_docs():
     assert rank_with_pool(scores, doc_ids, 1, pool=3) == (["a"], False)
 
 
+def test_pool_grows_before_full_sort():
+    # 첫 묶음(30)에 문서 100개가 없다. 묶음을 키워 전체 정렬과 같은 결과를 낸다(S17)
+    rng = np.random.default_rng(2)
+    doc_ids = rng.integers(0, 400, 20000).astype(str)
+    for _ in range(20):
+        scores = rng.standard_normal(20000).astype(np.float32)
+        full = first_docs(np.argsort(-scores, kind="stable"), doc_ids, 100)
+        assert rank_with_pool(scores, doc_ids, 100, pool=30) == (full, False)
+
+
 def test_query_batch_does_not_change_ranks():
     rng = np.random.default_rng(1)
     chunks = rng.standard_normal((2000, 32)).astype(np.float32)
