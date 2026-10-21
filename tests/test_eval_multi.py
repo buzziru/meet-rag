@@ -1,9 +1,10 @@
 import json
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from rag.eval_multi.compare import diff_table
+from rag.eval_multi.compare import check_single, diff_table, metadata_result
 from rag.eval_multi.metrics import load_gold, metric_table, per_query, ranked_docs
 
 KS = [5, 10]
@@ -106,6 +107,60 @@ def test_compare_full_gain_and_seed_stable():
     complete = next(r for r in rows if r["metric"] == "complete@5")
     assert complete["diff"] == 1 and complete["ci"] == [1, 1]
     assert rows == diff_table(base, cand, gold, [], **BS)
+
+
+def test_metadata_result_uses_overall_recall_and_complete():
+    gold = make_gold([["a", "b"]] * 6)
+    base = score(make_run({q: {1: "a"} for q in gold.index}), gold)
+    cand = score(make_run({q: {1: "a", 2: "b"} for q in gold.index}), gold)
+    rows = diff_table(base, cand, gold, ["type"], **BS)
+    hold = {"layer": "dev-full", "diff": 0.0, "ci": [0.0, 0.0], "verdict": "보류"}
+    out = metadata_result(hold, rows, 0.01)
+    # Recall@5 +50%p, Complete@5 +100%p
+    assert (out["verdict"], out["stage"]) == ("채택", "multi-doc")
+    assert out["recall@5"] == {"diff": 0.5, "ci": [0.5, 0.5]}
+    reject = {"layer": "dev-full", "diff": -0.02, "ci": [-0.03, -0.01], "verdict": "기각"}
+    assert metadata_result(reject, rows, 0.01)["stage"] == "single-doc"
+
+
+P = "data/runs/kure-v1-fixed-512-64-"
+MULTI = (Path(P + "hybrid-cond-filter-multidoc.csv"),
+         Path(P + "hybrid-cond-filter-law-multidoc.csv"))
+
+
+def single_json(base, cand, layer="dev-full"):
+    return {"layer": layer, "diff": 0.0, "ci": [0.0, 0.0], "verdict": "보류",
+            "base": {"run": P + base}, "cand": {"run": P + cand}}
+
+
+def test_check_single_matches_run_names_across_layers():
+    check_single(single_json("hybrid-cond-filter-dev-full.csv",
+                             "hybrid-cond-filter-law-dev-full.csv"), *MULTI)
+    # EXP-003의 single-doc 결과를 EXP-008의 multi-doc 순위와 섞으면 멈춘다
+    with pytest.raises(SystemExit, match="실험이 아니다"):
+        check_single(single_json("hybrid-dev-full.csv", "hybrid-cond-dev-full.csv"), *MULTI)
+
+
+@pytest.mark.parametrize("bad", [
+    {"diffs": [], "frozen_sha256": "x"},  # multi-doc 비교 결과를 잘못 넣음(전에는 KeyError)
+    single_json("hybrid-cond-filter-dev-small.csv", "hybrid-cond-filter-law-dev-small.csv",
+                layer="dev-small"),  # 층이 다름(전에는 "같은 실험이 아니다")
+    [],
+])
+def test_check_single_reports_wrong_input_before_name_check(bad):
+    with pytest.raises(SystemExit, match="dev-full 결과 JSON이어야 한다"):
+        check_single(bad, *MULTI)
+
+
+def test_metadata_result_stops_when_single_verdict_used_other_min_gain():
+    # min_gain 0.01일 때 채택(+1.5%p, 하한 > 0)으로 기록된 결과를 min_gain 0.02로 넣으면 멈춘다
+    gold = make_gold([["a", "b"]] * 2)
+    s = score(make_run({q: {1: "a"} for q in gold.index}), gold)
+    rows = diff_table(s, s, gold, [], **BS)
+    old = {"layer": "dev-full", "diff": 0.015, "ci": [0.005, 0.025], "verdict": "채택"}
+    assert metadata_result(old, rows, 0.01)["verdict"] == "채택"
+    with pytest.raises(SystemExit, match="min_gain"):
+        metadata_result(old, rows, 0.02)
 
 
 def test_bootstrap_unit_is_pool():
