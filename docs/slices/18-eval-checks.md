@@ -16,7 +16,7 @@
   2. 보류이면 multi-doc으로: Recall@5 차이의 (점 추정, 하한, 상한)으로 기존 `verdict`를 쓰고, 채택이 나와도 Complete@5 차이 95% 구간 상한이 0보다 작으면 보류로 둔다
 - 반환은 채택·기각·보류와 어느 단계에서 정해졌는지(single-doc, multi-doc)다. D-35에 따라 +1.0%p 미만이고 Recall@5 하한 > 0인 보류를 예외로 올릴지는 함수가 정하지 않는다. 그 경우는 exp-judge 판정 보고에서 예외 검토 대상으로 적는다
 - `rag.eval_multi.compare`에 선택 인자 `--single <single-doc 비교 결과 JSON>`를 둔다. 주면 그 JSON의 `verdict`와 multi-doc 전체 행(`group: all`)의 `recall@5`·`complete@5`로 `metadata_verdict`를 계산해 결과에 `metadata_verdict`를 더한다. 주지 않으면 지금처럼 판정 라벨을 내지 않는다(SPEC "보조 관찰": 메타데이터 가설이 아니면 multi-doc에 판정 라벨을 붙이지 않는다). 결정 사항 1
-- single-doc 결과 JSON이 dev-full 비교인지(`layer`), 판정 기준(`min_gain`)이 지금 config와 같은지는 읽을 때 본다. 다르면 멈춘다
+- single-doc 결과 JSON이 dev-full 비교(`layer`)이고 `verdict`가 있는지 읽을 때 본다. 아니면 멈춘다. `min_gain`은 single-doc 결과에 기록되지 않아(`rag.eval.compare`는 보호 경로이고 이 조각에서 고치지 않는다) 지금 config 값을 쓴다
 
 예: EXP-008처럼 single-doc 보류, multi-doc Recall@5 +1.65%p [+0.91, +2.49], Complete@5 [+2.00, +4.83]이면 `{"verdict": "채택", "stage": "multi-doc"}`. multi-doc Recall@5 +0.8%p [+0.2, +1.4]이면 보류(D-35의 예).
 
@@ -32,7 +32,7 @@
 
 ## 결정 사항
 
-1. **판정 라벨을 어디서 낼지.**
+1. **판정 라벨을 어디서 낼지.** 결정: (a)(사용자 결정 2026-10-21). 보호 경로 수정은 이 지시서 확인으로 승인받았다(같은 날)
    - (a) 권고. `rag.eval_multi.compare --single <JSON>`일 때만 낸다. 메타데이터 가설이 아닌 EXP의 multi-doc 결과에는 지금처럼 라벨이 없다. 명령 하나 더(인자 하나)로 exp-judge가 손으로 적용하던 것을 대신한다. 예: `rag.eval_multi.compare --base … --cand … --single data/runs/exp008-compare.json` → 결과 JSON 끝에 `"metadata_verdict": {"verdict": "채택", "stage": "multi-doc", …}`
    - (b) 별도 명령(`rag.eval.metadata --single <JSON> --multi <JSON>`)이 두 비교 결과 파일을 읽어 판정한다. 비교 모듈은 그대로 두지만 모듈이 하나 늘고, multi-doc 결과 JSON의 행 구조에 기댄다
 
@@ -55,3 +55,18 @@
 - 다른 평가 쪽 낮음 항목(D-1, D-3, D-6, D-7, D-9 경계값 테스트, D-10, D-11)
 - `load_gold` 코드 변경
 - B-8(`fuse: false`·`rrf` 조합). 이 조각 다음(사용자 결정 순서)
+
+## 결과 (2026-10-21)
+
+- 구현 커밋 03feb1e. 테스트 234 → 246개, `uv run pytest -q`·`uv run ruff check .` 통과. DECISIONS D-43
+- 판정 재현(`data/runs/s18-expNNN-single.json`, `s18-expNNN-multidoc.json`에 새로 씀)
+
+| EXP | single-doc Recall@5 차이 [95% 구간] | single-doc 판정 | multi-doc Recall@5 차이 [구간] | Complete@5 구간 | metadata_verdict | EXP 문서 결론 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 002 | −2.62%p [−4.02, −1.39] | 기각 | +15.32%p [+13.19, +17.49] | [+10.67, +16.50] | 기각(single-doc) | 기각(single-doc 단계) |
+| 003 | +0.00%p [0.00, 0.00] | 보류 | +14.71%p [+12.82, +16.64] | [+10.83, +16.33] | 채택(multi-doc) | 채택(multi-doc 단계) |
+| 004 | −0.03%p [−0.10, 0.00] | 보류 | +35.54%p [+32.24, +38.81] | [+39.83, +48.00] | 채택(multi-doc) | 채택(multi-doc 단계) |
+| 008 | +0.00%p [0.00, 0.00] | 보류 | +1.65%p [+0.91, +2.49] | [+2.00, +4.83] | 채택(multi-doc) | 채택(multi-doc 단계) |
+
+- 출력 불변: EXP-008 쌍을 `--single` 없이 `main`의 `rag/eval_multi/compare.py`와 이 브랜치 코드로 돌린 출력이 바이트까지 같다
+- 지시서와 달라진 것: single-doc 결과 JSON에 `min_gain`이 기록되지 않아(`rag.eval.compare`는 수정 허용 밖) 대조하지 않고 지금 config 값을 쓴다. 층(`dev-full`)과 `verdict`만 본다

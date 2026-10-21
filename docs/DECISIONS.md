@@ -433,3 +433,11 @@
 - 이유: 지금은 빈·잘린 응답도 저장돼 다시 실행해도 같은 형식 오류가 나오고, 다시 물으려면 캐시 파일을 손으로 지워야 한다
 - 키에 `base_url`을 넣지 않는 이유: 키는 `model`·`messages`·params·`extra_body`의 해시다. 지금 judge 경로는 모델 이름이 서로 달라(opencode Go `deepseek-v4.1-flash`, OpenRouter `deepseek/deepseek-v4.1-flash`) 응답이 섞이지 않는다. 키를 바꾸면 기존 저장 응답을 모두 못 써 S14·S14b 기록을 다시 채점할 때 judge API를 처음부터 부른다. 같은 모델 이름을 쓰는 다른 경로의 judge config를 더할 때 키에 `base_url`을 넣는다
 - 날짜: 2026-10-21
+
+## D-43 메타데이터 가설의 판정을 함수로 둔다 (S18, 보호 경로 수정)
+- 결정: SPEC "메타데이터 가설의 판정"(D-18, D-35)을 `rag.eval.bootstrap.metadata_verdict`로 옮기고, `rag.eval_multi.compare --single <rag.eval.compare 결과 JSON>`일 때 결과에 `metadata_verdict`(판정, 정해진 단계, single-doc 판정, multi-doc Recall@5·Complete@5 차이와 구간)를 더한다. `--single`이 없으면 출력은 이전과 같다(라벨 없음, SPEC "보조 관찰"). 판정 규칙·지표·bootstrap 설정은 바꾸지 않았다
+- 승인: 보호 경로(`src/rag/eval/`, `src/rag/eval_multi/`) 수정은 S18 지시서 확인으로 받았다(사용자 결정 2026-10-21, 라벨은 `--single`일 때만 내는 안)
+- 이유: exp-judge가 두 비교 JSON을 읽어 규칙을 손으로 적용해, 행을 잘못 읽어도 잡아내는 코드가 없었다(코드 리뷰 2026-10 D-2)
+- 확인: EXP-002·003·004·008의 순위 파일로 다시 계산해 EXP 문서의 결론과 수치가 같다(002 single-doc 기각, 003·004·008 multi-doc 채택). `--single` 없는 multi-doc 비교 출력은 이전 코드와 바이트까지 같다(EXP-008 쌍)
+- 남은 것: D-35의 예외 검토 대상(+1.0%p 미만이고 Recall@5 하한 > 0인 multi-doc 보류)은 함수가 정하지 않고 판정 보고에서 적는다. exp-judge가 이 함수 결과를 쓰게 하는 것은 하네스(F 흐름) 후속
+- 날짜: 2026-10-21
