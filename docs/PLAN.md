@@ -39,7 +39,7 @@ SPEC 개정 초안 `docs/drafts/spec-generation-eval.md`에 기준(충실성, �
 
 고칠 묶음은 사용자가 골랐다(`docs/reviews/2026-10-code-review.md` "고칠 항목").
 
-- [ ] S15 산출물 지문과 덮어쓰기 방지: 인덱스·재정렬 점수 지문 대조, 분할·점수·검수 파일 덮어쓰기 방지, 생성·judge 레시피 보강(A-1·A-2·A-3·B-1·B-2·C-1·C-4·C-5·C-8) → slices/15-artifact-guards.md
+- [x] S15 산출물 지문과 덮어쓰기 방지: 인덱스·재정렬 점수 지문 대조, 분할·점수·검수 파일 덮어쓰기 방지, 생성·judge 레시피 보강(A-1·A-2·A-3·B-1·B-2·C-1·C-4·C-5·C-8) → slices/15-artifact-guards.md
 - [ ] 검색·생성 규칙 한 곳으로(B-5·B-6·B-7·C-3·C-6)
 - [ ] 평가 쪽(D-8 `load_gold` 테스트, D-2 메타데이터 판정 함수. D-2는 보호 경로라 승인 후)
 

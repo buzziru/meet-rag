@@ -95,3 +95,14 @@
 - 질의 임베딩 캐시의 지문(C-11, 낮음), BM25 옛 인덱스 분기(A-10), 다른 덮어쓰기 낮음 항목(A-7, B-12, D-4)
 - 규칙 중복 정리(B-5, B-6, B-7, C-3, C-6)는 다음 묶음 SLICE
 - 테스트 속도(E-1, E-2)
+
+## 결과 (2026-10-21)
+
+- 구현 커밋 35d521a. 테스트 197 → 210개, `uv run pytest -q`·`uv run ruff check .` 통과
+- adopt(결정 사항 1): 기준 인덱스 4개(`snowflake-ko-fixed-512-64`·`snowflake-ko-fixed-256-32`의 dev-small·full)와 점수 파일 3개(`summary_q-dev-small`·`summary_q-full`·`multidoc-full`의 `ms256-k20-cross-encoder`)에 지문을 썼다. 쓰기 전에 대조한 것:
+  - 인덱스: `meta.json`의 모델·`max_docs`, 청크 수와 조각 수가 `shard_size` 2048과 맞음, revision 고정(`configs/exp/exp009.yaml`, 10-13 15:09)과 코퍼스 수정(10-12)이 인덱스 생성(10-13·10-14)보다 앞섬. 512 청크는 KURE-v1 인덱스에서 복사했으므로(EXP-009) 네 인덱스 모두 청크 본문을 지금 코퍼스의 `[start:end]`와 전수 비교했다. 불일치 0, 문서 집합은 범위와 같다
+  - 점수: 후보 쌍과 행 수·(qid, doc_id) 순서가 같고(20,780, 60,320, 12,000), 후보 쌍이 점수보다 먼저 만들어졌다. 모델·revision·`max_length`는 `configs/exp/exp017.yaml`, 실행 장치 cuda·float16은 EXP-017 실행 기록을 따랐다
+- 결과 불변: `rag.search +exp=exp017`의 dev-small·dev-full·multi-doc 순위 파일이 모두 "같은 내용, 그대로 둠"
+- 멈춤: `retriever.rerank.model=other/model` → 점수 지문 불일치(model), `embedding.revision=old` → 인덱스 지문 불일치(revision)
+- 지문을 쓰지 않은 인덱스 5개와 점수 파일 5개(지난 EXP 재현용, test 1개 포함)는 그 EXP를 다시 돌릴 때 같은 대조를 거쳐 adopt한다
+- judge 기록 전체(`judge.main`)를 돌리는 테스트는 두지 않았다. 질의 표본이 분할·정답 파일을 읽어 합성 입력으로 만들기 어렵다. 커밋을 뺀 비교는 `judge_recipe` 테스트로, 이어 쓰기 규칙은 기존 `done_qids` 테스트로 확인한다
