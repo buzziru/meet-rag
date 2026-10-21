@@ -3,7 +3,7 @@ import json
 import pandas as pd
 import pytest
 
-from rag.eval_multi.compare import diff_table
+from rag.eval_multi.compare import diff_table, metadata_result
 from rag.eval_multi.metrics import load_gold, metric_table, per_query, ranked_docs
 
 KS = [5, 10]
@@ -106,6 +106,21 @@ def test_compare_full_gain_and_seed_stable():
     complete = next(r for r in rows if r["metric"] == "complete@5")
     assert complete["diff"] == 1 and complete["ci"] == [1, 1]
     assert rows == diff_table(base, cand, gold, [], **BS)
+
+
+def test_metadata_result_uses_overall_recall_and_complete():
+    gold = make_gold([["a", "b"]] * 6)
+    base = score(make_run({q: {1: "a"} for q in gold.index}), gold)
+    cand = score(make_run({q: {1: "a", 2: "b"} for q in gold.index}), gold)
+    rows = diff_table(base, cand, gold, ["type"], **BS)
+    out = metadata_result({"layer": "dev-full", "verdict": "보류"}, rows, 0.01)
+    # Recall@5 +50%p, Complete@5 +100%p
+    assert (out["verdict"], out["stage"]) == ("채택", "multi-doc")
+    assert out["recall@5"] == {"diff": 0.5, "ci": [0.5, 0.5]}
+    assert metadata_result({"layer": "dev-full", "verdict": "기각"}, rows, 0.01)["stage"] == (
+        "single-doc")
+    with pytest.raises(SystemExit, match="dev-full"):
+        metadata_result({"layer": "dev-small", "verdict": "보류"}, rows, 0.01)
 
 
 def test_bootstrap_unit_is_pool():

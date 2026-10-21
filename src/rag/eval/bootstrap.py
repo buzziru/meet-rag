@@ -23,3 +23,19 @@ def verdict(point: float, lo: float, hi: float, min_gain: float) -> str:
     if hi < 0:
         return "기각"
     return "보류"
+
+
+def metadata_verdict(single: str, recall5: tuple[float, float, float], complete5_hi: float,
+                     min_gain: float) -> dict:
+    """메타데이터 가설의 판정(docs/SPEC.md "메타데이터 가설의 판정", D-18, S18).
+
+    single-doc 판정이 채택·기각이면 그대로 두고, 보류이면 multi-doc Recall@5 차이
+    (점 추정, 하한, 상한)로 판정하되 Complete@5 차이 구간 상한이 0보다 작으면 채택하지 않는다.
+    +1.0%p 미만이고 하한 > 0인 보류를 예외로 올릴지는 사용자가 정한다(D-35). 여기서는 보류만 낸다.
+    """
+    if single != "보류":
+        return {"verdict": single, "stage": "single-doc"}
+    v = verdict(*recall5, min_gain)
+    if v == "채택" and complete5_hi < 0:
+        v = "보류"
+    return {"verdict": v, "stage": "multi-doc"}

@@ -1,9 +1,12 @@
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from rag.eval.bootstrap import paired_bootstrap, verdict
-from rag.eval.metrics import gold_ranks, metric_table, min_docs, per_query
+from rag.eval.bootstrap import metadata_verdict, paired_bootstrap, verdict
+from rag.eval.metrics import gold_ranks, load_gold, metric_table, min_docs, per_query
+from rag.index import load_cfg
 
 N_MIN = min_docs([1, 5, 10], 10)
 
@@ -109,3 +112,53 @@ def test_resampling_unit_is_meeting():
     groups = np.array(["a"] * 5 + ["b"] * 5)
     _, lo, hi = paired_bootstrap(diff, groups, 1000, 0, 0.05)
     assert (lo, hi) == (-1, 1)
+
+
+@pytest.mark.parametrize(("single", "recall5", "complete5_hi", "expected"), [
+    ("채택", (0.0, -0.01, 0.01), -0.5, ("채택", "single-doc")),  # 1항: single-doc 판정 그대로
+    ("기각", (0.05, 0.03, 0.07), 0.1, ("기각", "single-doc")),
+    ("보류", (0.0165, 0.0091, 0.0249), 0.0483, ("채택", "multi-doc")),  # EXP-008 수치
+    ("보류", (0.008, 0.002, 0.014), 0.05, ("보류", "multi-doc")),  # +1.0%p 미만(D-35의 예)
+    ("보류", (0.0165, 0.0091, 0.0249), -0.001, ("보류", "multi-doc")),  # Complete@5가 떨어짐
+    ("보류", (-0.02, -0.03, -0.01), 0.0, ("기각", "multi-doc")),
+    ("보류", (0.01, 0.001, 0.02), 0.0, ("채택", "multi-doc")),  # 경계: 점 추정 = +1.0%p, 상한 = 0
+    ("보류", (0.02, 0.0, 0.04), 0.1, ("보류", "multi-doc")),  # 경계: 하한 = 0
+])
+def test_metadata_verdict_follows_spec(single, recall5, complete5_hi, expected):
+    out = metadata_verdict(single, recall5, complete5_hi, 0.01)
+    assert (out["verdict"], out["stage"]) == expected
+
+
+def _gold_files(tmp_path):
+    """분할·질의·코퍼스·dev-small 목록 합성 파일. q1·q2는 dev(q2만 dev-small 문서), q3은 test."""
+    (tmp_path / "splits.csv").write_text(
+        "qid,conference_number,split\nq2,c2,dev\nq1,c1,dev\nq3,c3,test\n", encoding="utf-8")
+    rows = [("q1", "d1", "추출형"), ("q2", "d2", "단답형"), ("q3", "d3", "추출형")]
+    (tmp_path / "queries.jsonl").write_text("".join(
+        json.dumps({"qid": q, "doc_id": d, "qna_type": t, "query": "질의"}, ensure_ascii=False)
+        + "\n" for q, d, t in rows), encoding="utf-8")
+    (tmp_path / "corpus.jsonl").write_text("".join(
+        json.dumps({"doc_id": d, "meeting_name": m, "context": "본문"}, ensure_ascii=False) + "\n"
+        for d, m in [("d1", "국정감사"), ("d2", "본회의"), ("d3", "소위원회")]), encoding="utf-8")
+    (tmp_path / "small.txt").write_text("d2\n", encoding="utf-8")
+    return load_cfg([f"paths.{k}='{(tmp_path / v).as_posix()}'" for k, v in
+                     [("splits", "splits.csv"), ("queries", "queries.jsonl"),
+                      ("corpus", "corpus.jsonl"), ("dev_small_docs", "small.txt")]])
+
+
+def test_load_gold_filters_layers_and_attaches_meeting(tmp_path):
+    cfg = _gold_files(tmp_path)
+    full = load_gold(cfg, "dev-full")
+    assert full.index.tolist() == ["q1", "q2"]  # dev만, qid 순
+    assert full.loc["q1"].to_dict() == {"doc_id": "d1", "qna_type": "추출형",
+                                        "conference_number": "c1", "meeting_name": "국정감사"}
+    assert load_gold(cfg, "dev-small").index.tolist() == ["q2"]  # dev-small 문서의 질의만
+
+
+def test_load_gold_blocks_test_unless_allowed(tmp_path):
+    cfg = _gold_files(tmp_path)
+    with pytest.raises(SystemExit, match="allow-test"):
+        load_gold(cfg, "test")
+    assert load_gold(cfg, "test", allow_test=True).index.tolist() == ["q3"]
+    with pytest.raises(ValueError, match="알 수 없는 평가 층"):
+        load_gold(cfg, "dev")
