@@ -150,7 +150,7 @@
 | C-14 | 추적 | `generate.py:273`, `gen_eval/generate.py:44`, `gen_eval/judge.py:240` | LangSmith `flush`가 `finally` 밖에 있다(`rerank.py:122`는 안). 예외 때 추적이 빠지는지는 불확실 |
 | C-15 | 1e, 4 | `generate.py:179-189` | 근거의 `score`는 `rrf_score`인데 재정렬을 켜면 순위를 정한 점수가 아니다. docstring과 출력이 어긋난다 |
 | C-16 | 4 | `gen_eval/review.py`, `configs/config.yaml:235-237` | judge 두 설정 비교용 일회성 도구. D-40으로 결정이 났다. 남길지는 사용자 판단 |
-| B-8 | 1a | `retrieve.py:205-212`, `:231-236`, `:264-305` | `lists()`에 플래그 6개(EXP-007 기각, EXP-013 기각, EXP-015·016 보류 포함)가 얽혀 있다. `fuse: false`와 `method: rrf` 조합은 `named["cc"]` KeyError. 분기마다 EXP 주석을 달고 기각 분기를 작은 함수로 뗀다 |
+| B-8(잘못된 조합만 S19에서 고침) | 1a | `retrieve.py:205-212`, `:231-236`, `:264-305` | `lists()`에 플래그 6개(EXP-007 기각, EXP-013 기각, EXP-015·016 보류 포함)가 얽혀 있다. `fuse: false`와 `method: rrf` 조합은 `named["cc"]` KeyError. 분기마다 EXP 주석을 달고 기각 분기를 작은 함수로 뗀다 |
 | B-9 | 4, 1a | `retrieve.py:95-103`, `:353-356` | `rrf()`와 `Retriever.rank`는 테스트에서만 쓰이고, `rank`는 재정렬을 받지 않아 기준 경로와 다르다. 테스트를 `explain`(B-5의 공용 메서드)으로 옮기고 지운다 |
 | B-10 | 1e | `retrieve.py:307-310` | `fusion.weights`를 목록 삽입 순서에 위치로 대응한다. 조건 목록이 없는 질의에서 가중치가 다른 목록에 붙는다(지금 어느 exp도 닿지 않음). 이름 dict로 바꾼다 |
 | B-11 | 1e | `retrieve.py:206`, `:275`, `:278`, `search.py:244` | 기본값이 `configs/retriever/dense.yaml`이 아니라 코드의 `get(..., 기본값)`에 있다 |

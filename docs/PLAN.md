@@ -43,6 +43,7 @@ SPEC 개정 초안 `docs/drafts/spec-generation-eval.md`에 기준(충실성, �
 - [x] S15 산출물 지문과 덮어쓰기 방지: 인덱스·재정렬 점수 지문 대조, 분할·점수·검수 파일 덮어쓰기 방지, 생성·judge 레시피 보강(A-1·A-2·A-3·B-1·B-2·C-1·C-4·C-5·C-8) → slices/15-artifact-guards.md
 - [x] S16 검색·생성 규칙 한 곳으로: 최종 순위·청크 선택·본문 읽기를 한 곳에, 의존 방향 정리, 생성의 rewrite 거부, 거부 문구를 프롬프트 파일로, Kiwi 공유(B-5·B-6·B-7·C-3·C-6·E-1) → slices/16-search-gen-rules.md
 - [x] S17 검색 실행 시간 줄이기: 청크 묶음 키우기(전체 정렬 대신), 코퍼스 한 번 읽기. 평가 쪽 묶음 전에 한다(사용자 결정 2026-10-21) → slices/17-load-speed.md
+- [x] S19 조건 목록 결합 설정의 잘못된 조합(`conditions.fuse: false` + RRF)을 시작할 때 막기(B-8 일부, 사용자 선택 안 (a)) → slices/19-cond-fuse-guard.md
 - [x] S18 평가 쪽: D-2 메타데이터 판정 함수(보호 경로, 지시서 확인으로 승인), D-8 `load_gold` 합성 파일 테스트. multi-doc 단계 +1.0%p의 해석은 D-35 → slices/18-eval-checks.md
 
 ## 실험 백로그
