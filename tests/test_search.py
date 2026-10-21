@@ -21,7 +21,7 @@ from rag.retrieve import (
     top_docs,
     weighted_doc_scores,
 )
-from rag.search import query_files, query_list, read_chunk_texts, write_run
+from rag.search import query_files, query_list, write_run
 
 
 def test_rank_docs_dedupes_by_first_chunk_rank():
@@ -220,14 +220,6 @@ def _write_text_index(d, rows, emb):
     (d / "chunks.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
     np.save(d / "emb" / "part-00000.npy", np.asarray(emb, dtype=np.float32))
 
-
-def test_read_chunk_texts_numbers_across_indexes(tmp_path):
-    base, extra = tmp_path / "a", tmp_path / "b"
-    _write_text_index(base, [("a", "a0"), ("b", "b0")], np.ones((2, 3)))
-    _write_text_index(extra, [("a", "a1"), ("b", "b1"), ("b", "b2")], np.ones((3, 3)))
-    # load_dense와 같은 번호: 기본 인덱스 0~1, 추가 인덱스 2~4
-    assert read_chunk_texts([base, extra], {1, 2, 4}) == {1: "b0", 2: "a1", 4: "b2"}
-    assert read_chunk_texts([base], {0}) == {0: "a0"}
 
 def _tmp_cfg(tmp_path, overrides):
     slug_size = "${embedding.slug}-${chunking.chunk_tokens}"

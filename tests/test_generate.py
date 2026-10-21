@@ -3,15 +3,10 @@ import json
 import numpy as np
 from omegaconf import OmegaConf
 
-from rag.generate import (
-    ChunkStore,
-    answer_start,
-    best_chunks,
-    build_messages,
-    recipe,
-    split_thought,
-)
+from rag.generate import build_messages, recipe
 from rag.index import load_cfg
+from rag.llm import answer_start, split_thought
+from rag.retrieve import ChunkStore, best_chunks
 
 
 def context(n, text, url="http://example/1"):
@@ -37,6 +32,8 @@ def test_chunk_store_reads_rows_across_indexes(tmp_path):
     store = ChunkStore(dirs)
     assert [store.get(i)["text"] for i in range(5)] == ["a0", "a1", "b0", "b1", "b2"]
     assert store.get(3)["index"] == "idx-256" and store.get(3)["chunk_id"] == 1
+    # 여러 번호를 한 번에 읽는다(후보 쌍, G2). 번호는 load_dense와 같다
+    assert store.texts({1, 2, 4}) == {1: "a1", 2: "b0", 4: "b2"}
 
 
 def test_messages_number_contexts_without_urls():

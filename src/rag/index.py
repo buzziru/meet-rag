@@ -7,6 +7,7 @@
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -19,6 +20,7 @@ from omegaconf import OmegaConf
 from rag.chunking import make_chunker
 
 ROOT = Path(__file__).resolve().parents[2]
+CHUNKS = "chunks.jsonl"  # 인덱스 디렉터리의 청크 파일. 줄 순서가 임베딩 행 순서다
 
 # HF_HOME은 .env에서 읽는다. transformers를 import하기 전에 정해야 캐시 위치가 바뀐다
 load_dotenv(ROOT / ".env")
@@ -29,6 +31,14 @@ if os.environ.get("HF_HOME") and not Path(os.environ["HF_HOME"]).is_absolute():
 def load_cfg(overrides=()):
     with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
         return compose(config_name="config", overrides=list(overrides))
+
+
+def git_state() -> tuple[str, bool]:
+    """(HEAD 커밋, 추적 파일에 커밋하지 않은 변경이 있는지). 생성·judge 레시피에 남긴다."""
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True,
+                              encoding="utf-8").stdout.strip()
+    return git("rev-parse", "HEAD"), bool(git("status", "--porcelain", "--untracked-files=no"))
 
 
 OVERWRITE_HINT = "retriever.run_name·경로를 확인하고, 바꾸려면 search.overwrite=true"
@@ -191,7 +201,7 @@ def main() -> None:
     index_dir = index_path(cfg, ch)
     index_dir.mkdir(parents=True, exist_ok=True)
     started = time.time()
-    chunks_path = index_dir / "chunks.jsonl"
+    chunks_path = index_dir / CHUNKS
     basis_path = index_dir / "basis.json"
     basis = index_build_basis(cfg)
     if cfg.adopt_basis:  # 지문 없는 기존 인덱스에 지문만 쓰고 끝낸다. 모델을 불러오지 않는다

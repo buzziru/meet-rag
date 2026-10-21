@@ -23,7 +23,7 @@ from langsmith.wrappers import wrap_openai
 from omegaconf import OmegaConf
 from openai import OpenAI
 
-from rag.conditions import committee_base
+from rag.conditions import DATE, DOC_DATE, committee_base
 from rag.gen_eval.checks import (
     citation_check,
     gold_position,
@@ -31,8 +31,7 @@ from rag.gen_eval.checks import (
     refusal_split,
 )
 from rag.gen_eval.common import eval_qids, load_refs, read_jsonl, stable
-from rag.generate import git_state
-from rag.index import ROOT, load_cfg, refuse_existing, write_guarded
+from rag.index import ROOT, git_state, load_cfg, refuse_existing, write_guarded
 
 RELEVANCE = {"답함": 1.0, "일부": 0.5, "답하지 않음": 0.0}
 
@@ -67,11 +66,21 @@ def format_contexts(contexts: list[dict]) -> str:
                        f"{c['session_number']}\n{c['text']}" for c in contexts)
 
 
+def check_prompt(cfg, gen_recipe: dict) -> None:
+    """생성 기록을 만든 프롬프트가 지금 cfg.prompt와 같은지 본다. 거부 문구(cfg.prompt.refusal)를
+    이 프롬프트에서 읽으므로, 버전 이름이 같아도 내용이 다르면 멈춘다(S16)."""
+    if gen_recipe["prompt_sha256"] != sha(OmegaConf.to_container(cfg.prompt, resolve=True)):
+        raise SystemExit(f"생성 기록의 프롬프트({gen_recipe['prompt_version']})가 지금 prompt "
+                         "설정과 다르다. 생성에 쓴 프롬프트 파일로 채점한다")
+
+
 def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
-    """judge 설정, 코드 판정 설정(gen_eval), judge 실행 커밋, 생성 기록의 커밋 목록(S15).
+    """judge 설정, 코드 판정 설정(gen_eval, 프롬프트의 거부 문구), judge 실행 커밋, 생성 기록의
+    커밋 목록(S15).
 
     생성 레시피는 커밋을 빼고(stable) 비교하므로, 커밋이 다른 생성 기록이 섞였는지는
-    gen_commits를 보고 판단한다(S15 결정 사항 2)."""
+    gen_commits를 보고 판단한다(S15 결정 사항 2). 일자 판정은 검색의 조건 정규식을 같이 쓰므로
+    그 패턴을 남긴다. 검색 쪽에서 바꾸면 이전 judge 결과와 레시피가 달라진다(S16)."""
     j, g = cfg.judge, cfg.gen_eval
     prompt = OmegaConf.to_container(j.prompt, resolve=True)
     return {"name": j.name, "model": j.model, "base_url": j.base_url,
@@ -79,7 +88,8 @@ def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
             "extra_body": OmegaConf.to_container(j.extra_body) if j.extra_body else None,
             "step_params": OmegaConf.to_container(j.step_params) if j.get("step_params") else None,
             "prompt_version": prompt["version"], "prompt_sha256": sha(prompt),
-            "refusal": g.refusal, "filler_phrases": list(g.filler_phrases),
+            "refusal": cfg.prompt.refusal, "filler_phrases": list(g.filler_phrases),
+            "check_patterns": {"date": DATE.pattern, "doc_date": DOC_DATE.pattern},
             "chunk_key_min": g.chunk_key_min, "git_commit": git_state()[0],
             "gen_commits": sorted({r["git_commit"] for r in gen_recipes}),
             "gen_recipe_sha256": sha(stable(gen_recipes[0]))}
@@ -202,7 +212,9 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
     g = cfg.gen_eval
     answer, contexts = gen["answer"], gen["contexts"]
     gold_n = gold_position(contexts, ref["doc_id"])
-    kind, refused, rest = refusal_split(answer, g.refusal, list(g.filler_phrases))
+    # 거부 문구는 생성 프롬프트 파일에 있다. 기록 경로에 prompt.version이 들어가 cfg.prompt가
+    # 이 기록을 만든 프롬프트다(S16)
+    kind, refused, rest = refusal_split(answer, cfg.prompt.refusal, list(g.filler_phrases))
     out = {"qid": gen["qid"], "refusal": kind, "refused_sentences": refused, "gold_n": gold_n,
            "answer_in_chunk": None, "usage": gen["usage"], "provider": gen["provider"],
            "first_token_s": gen["first_token_s"], "total_s": gen["total_s"]}
@@ -236,6 +248,7 @@ def main() -> None:
     recipes = {sha(stable(gens[q]["recipe"])) for q in qids}  # 이어 쓰기(done_qids)와 같은 규칙
     if len(recipes) != 1:
         raise SystemExit("생성 기록의 레시피가 여럿이다")
+    check_prompt(cfg, gens[qids[0]]["recipe"])
     rec = judge_recipe(cfg, [gens[q]["recipe"] for q in qids])
     judge = Judge(cfg, session=f"meet-rag-judge-{sha(stable(rec))[:16]}")
 

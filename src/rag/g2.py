@@ -13,14 +13,13 @@ import argparse
 import json
 from collections import Counter
 
-import numpy as np
 from omegaconf import OmegaConf
 
 from rag.conditions import build_extractor
 from rag.eval.metrics import load_gold, read_run
 from rag.index import ROOT, load_cfg
 from rag.multidoc.check import wrap_lines
-from rag.retrieve import Retriever, chunks_by_doc
+from rag.retrieve import ChunkStore, Retriever, best_chunks, chunks_by_doc
 from rag.search import query_embeddings, query_files, query_list, read_texts
 
 META = ["date", "committee_name", "meeting_name", "meeting_number", "session_number", "agenda"]
@@ -64,19 +63,6 @@ def write_input(path, p, **fields) -> None:
                     encoding="utf-8")
 
 
-def chunk_texts(dirs, wanted: set[int]) -> dict[int, str]:
-    """청크 번호(인덱스들을 이어 붙인 순서) → 본문. 필요한 줄만 읽는다."""
-    out, base = {}, 0
-    for d in dirs:
-        with (d / "chunks.jsonl").open(encoding="utf-8") as f:
-            n = 0
-            for n, line in enumerate(f, 1):
-                if base + n - 1 in wanted:
-                    out[base + n - 1] = json.loads(line)["text"]
-        base += n
-    return out
-
-
 def prepare(cfg) -> None:
     g = cfg.g2
     rcfg = load_cfg([f"+exp={g.exp}", "index.scope=full"])
@@ -117,14 +103,14 @@ def prepare(cfg) -> None:
         ranks = {n: lst.index(g_doc) + 1 if g_doc in lst else None for n, lst in named.items()}
         final = top[q].index(g_doc) + 1 if g_doc in top[q] else None
         shown = [*top[q][: g.top], g_doc]
-        picks[q] = {d: int(by_doc[d][np.argmax(row[by_doc[d]])]) for d in shown}
+        picks[q] = dict(zip(shown, best_chunks(row, by_doc, shown), strict=True))
         rows[q] = {"qid": q, "gold": g_doc, "final_rank": final, "list_ranks": ranks,
                    "fused_rank": fused.index(g_doc) + 1 if g_doc in fused else None,
                    "rank_type": rank_type(ranks, g.top, g.near),
                    "same_meeting_top1": docs[top[q][0]]["conference_number"]
                    == docs[g_doc]["conference_number"],
                    "top": top[q][: g.top]}
-    chunks = chunk_texts(ret.dirs, {i for p in picks.values() for i in p.values()})
+    chunks = ChunkStore(ret.dirs).texts({i for p in picks.values() for i in p.values()})
 
     out = ROOT / cfg.paths.g2_dir
     for sub in ["in1", "in2", "out1", "out2"]:

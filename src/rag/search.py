@@ -17,27 +17,15 @@ import pandas as pd
 from rag.conditions import build_extractor
 from rag.eval.metrics import load_gold
 from rag.index import ROOT, encoder, load_cfg, load_model, write_guarded
-from rag.retrieve import Retriever, chunks_by_doc, final_order, read_rerank_scores
+from rag.retrieve import ChunkStore, Retriever, best_chunks, chunks_by_doc, read_rerank_scores
 from rag.rewrite import needs_rewrite, rewrite_queries, signals
 
 LAYERS = {"dev-small": "dev-small", "full": "dev-full"}  # index.scope → 평가 층
 
 
-def read_chunk_texts(dirs: list[Path], need: set[int]) -> dict[int, str]:
-    """dense 청크 번호(인덱스를 이어 붙인 순서, load_dense와 같다)로 청크 본문을 읽는다."""
-    chunk_text, offset = {}, 0
-    for d in dirs:
-        with (d / "chunks.jsonl").open(encoding="utf-8") as f:
-            for i, line in enumerate(f, offset):
-                if i in need:
-                    chunk_text[i] = json.loads(line)["text"]
-        offset = i + 1
-    return chunk_text
-
-
 def write_pairs(cfg, dirs: list[Path], picks: list[tuple[str, str, int]], texts: dict) -> None:
     """후보 쌍(qid, doc_id, 질의, 문서의 최고점 청크)을 질의 순서대로 쓴다."""
-    chunk_text = read_chunk_texts(dirs, {c for _, _, c in picks})
+    chunk_text = ChunkStore(dirs).texts({c for _, _, c in picks})
     rows = [{"qid": qid, "doc_id": doc, "query": texts[qid], "text": chunk_text[c]}
             for qid, doc, c in picks]
     text = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
@@ -182,7 +170,7 @@ def search(cfg) -> None:
         ex = build_extractor(cfg)
         conds = {q: ex.extract(t) for q, t in zip(qids, query_texts, strict=True)}
     export_pairs = cfg.search.mode == "rerank-pairs"
-    use_rerank = ret.hybrid and r.get("rerank") and r.rerank.enabled and not export_pairs
+    use_rerank = ret.use_rerank and not export_pairs
     if export_pairs:
         doc_chunks = chunks_by_doc(ret.dense_ids)
         texts = dict(zip(qids, query_texts, strict=True))
@@ -194,11 +182,7 @@ def search(cfg) -> None:
         raise SystemExit("retriever.rewrite는 재정렬(rerank-pairs, rerank)과 함께 쓰지 않는다")
 
     def finish(qid: str, docs: list[str], matched: set[str]) -> list[str]:
-        if ret.hybrid:
-            scores = rerank_scores[qid] if use_rerank else None
-            docs = final_order(docs, matched, scores, r.rerank.depth if use_rerank else 0)
-            docs = docs[: r.top_k]
-        return docs
+        return ret.final(docs, matched, rerank_scores[qid] if use_rerank else None)
 
     ranked, gated, fallbacks = {}, [], 0
     for start in range(0, len(qids), r.query_batch):
@@ -209,8 +193,9 @@ def search(cfg) -> None:
             fallbacks += full
             docs = ret.fuse(named)
             if ret.hybrid and export_pairs:
-                picks += [(qids[j], d, int(doc_chunks[d][np.argmax(row[doc_chunks[d]])]))
-                          for d in docs[: r.rerank.depth]]
+                head = docs[: r.rerank.depth]
+                picks += [(qids[j], d, c) for d, c in
+                          zip(head, best_chunks(row, doc_chunks, head), strict=True)]
                 continue
             if use_rewrite and needs_rewrite(
                     signals(named, row, ret.chunk_doc, len(ret.doc_names), r.rewrite.gate),

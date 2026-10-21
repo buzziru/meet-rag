@@ -8,7 +8,6 @@ LangSmith로 추적하고, 호출마다 질의·근거·답변·레시피를 pat
 import hashlib
 import json
 import os
-import subprocess
 import sys
 import time
 import uuid
@@ -22,66 +21,11 @@ from omegaconf import OmegaConf
 from openai import OpenAI
 
 from rag.conditions import build_extractor
-from rag.index import ROOT, encoder, file_sha256, load_cfg, load_model
-from rag.retrieve import Retriever, chunks_by_doc, read_rerank_scores
+from rag.index import ROOT, encoder, file_sha256, git_state, load_cfg, load_model
+from rag.llm import answer_start, split_thought
+from rag.retrieve import ChunkStore, Retriever, best_chunks, chunks_by_doc, read_rerank_scores
 
 CONTEXT_META = ["date", "committee_name", "meeting_number", "session_number", "original"]
-# Gemma 4는 이 엔드포인트에서 사고 과정을 끌 수 없어 답변 앞에 붙여 낸다
-THOUGHT_START, THOUGHT_END = "<thought>", "</thought>"
-
-
-def split_thought(text: str) -> tuple[str, str]:
-    """응답을 (사고 과정, 답변)으로 나눈다. 사고 과정이 없으면 빈 문자열."""
-    if not text.lstrip().startswith(THOUGHT_START):
-        return "", text.strip()
-    head, sep, tail = text.partition(THOUGHT_END)
-    if not sep:
-        return head.lstrip()[len(THOUGHT_START):].strip(), ""
-    return head.lstrip()[len(THOUGHT_START):].strip(), tail.strip()
-
-
-def answer_start(text: str) -> int | None:
-    """스트리밍 중 답변이 시작하는 위치. 아직 사고 과정 안이면 None."""
-    if not text.lstrip().startswith(THOUGHT_START[: len(text.lstrip())]):
-        return 0
-    end = text.find(THOUGHT_END)
-    return None if end < 0 else end + len(THOUGHT_END)
-
-
-def best_chunks(scores: np.ndarray, doc_chunks: dict[str, np.ndarray],
-                docs: list[str]) -> list[int]:
-    """문서마다 dense 점수가 가장 높은 청크 번호를 문서 순서대로 돌려준다(D-05).
-
-    추가 청크(retriever.extra_chunks)가 있으면 모든 크기의 청크 중에서 고른다(S12 결정 1).
-    """
-    return [int(doc_chunks[d][np.argmax(scores[doc_chunks[d]])]) for d in docs]
-
-
-class ChunkStore:
-    """dense 청크 번호(Retriever.dense_ids 순서)로 청크 행을 읽는다.
-
-    청크 텍스트를 모두 메모리에 올리지 않고 파일마다 줄 시작 위치만 들고 있다.
-    """
-
-    def __init__(self, dirs):
-        self.paths, starts, sizes = [], [], []
-        for d in dirs:
-            offs = [0]
-            with (d / "chunks.jsonl").open("rb") as f:
-                for line in f:
-                    offs.append(offs[-1] + len(line))
-            self.paths.append(d / "chunks.jsonl")
-            starts.append(np.array(offs[:-1]))
-            sizes.append(len(offs) - 1)
-        self.starts = starts
-        self.bounds = np.cumsum([0, *sizes])
-        self.names = [d.parent.name for d in dirs]
-
-    def get(self, i: int) -> dict:
-        k = int(np.searchsorted(self.bounds, i, side="right")) - 1
-        with self.paths[k].open("rb") as f:
-            f.seek(int(self.starts[k][i - self.bounds[k]]))
-            return {**json.loads(f.readline()), "index": self.names[k]}
 
 
 def build_messages(prompt, contexts: list[dict], query: str) -> list[dict]:
@@ -91,13 +35,6 @@ def build_messages(prompt, contexts: list[dict], query: str) -> list[dict]:
               for c in contexts]
     user = prompt.user.format(contexts="\n\n".join(blocks), query=query)
     return [{"role": "system", "content": prompt.system}, {"role": "user", "content": user}]
-
-
-def git_state() -> tuple[str, bool]:
-    def git(*args):
-        return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True,
-                              encoding="utf-8").stdout.strip()
-    return git("rev-parse", "HEAD"), bool(git("status", "--porcelain", "--untracked-files=no"))
 
 
 def recipe(cfg, index_meta: dict, stream: bool) -> dict:
@@ -129,6 +66,10 @@ class Pipeline:
 
     def __init__(self, cfg):
         self.cfg = cfg
+        r = cfg.retriever
+        if r.get("rewrite") and r.rewrite.enabled:  # 생성 경로에는 재작성이 없다(EXP-013 기각, S16)
+            raise SystemExit("생성은 retriever.rewrite를 지원하지 않는다. "
+                             "retriever.rewrite.enabled=false로 실행한다")
         self.retriever = Retriever(cfg)
         self.doc_chunks = chunks_by_doc(self.retriever.dense_ids)
         self.store = ChunkStore(self.retriever.dirs)
@@ -142,8 +83,7 @@ class Pipeline:
                                          api_key=os.environ[cfg.generator.api_key_env]))
         self._model = None
         # 재정렬 점수는 EXP-017이 Colab에서 만든 파일을 읽는다. 실시간 재정렬은 배포 SLICE(S14)
-        r = cfg.retriever
-        use_rerank = self.retriever.hybrid and r.get("rerank") and r.rerank.enabled
+        use_rerank = self.retriever.use_rerank
         self.rerank_scores = read_rerank_scores(cfg) if use_rerank else None
         self.index_meta["rerank_scores_sha256"] = (
             file_sha256(ROOT / cfg.paths.rerank_scores) if use_rerank else None)

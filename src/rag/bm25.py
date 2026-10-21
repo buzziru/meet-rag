@@ -7,6 +7,7 @@ meta_fields가 있으면 문서 메타데이터를 청크 텍스트 앞에 붙�
 
 import json
 from collections.abc import Iterable
+from functools import cache
 from pathlib import Path
 
 import bm25s
@@ -14,7 +15,7 @@ import numpy as np
 from kiwipiepy import Kiwi
 from omegaconf import OmegaConf
 
-from rag.index import ROOT
+from rag.index import CHUNKS, ROOT
 
 # 인덱스를 만든 retriever.bm25 설정. 읽을 때 지금 설정과 다르면 멈춘다
 # (이름만 같은 이전 인덱스를 조용히 읽지 않게)
@@ -63,17 +64,24 @@ def write_settings(out: Path, settings: dict) -> None:
     (out / SETTINGS).write_text(text, encoding="utf-8")
 
 
+@cache
+def shared_kiwi() -> Kiwi:
+    """프로세스에서 하나만 만든다. 생성과 첫 tokenize에 몇 초씩 들고(리뷰 E-1), tokenize만 쓰고
+    사용자 사전을 더하지 않아 공유해도 토큰화 결과가 같다(S16)."""
+    return Kiwi()
+
+
 class BM25Retriever:
     def __init__(self, cfg, index_dir: Path):
         b = cfg.retriever.bm25
         self.tags = set(b.tags)
-        self.kiwi = Kiwi()
+        self.kiwi = shared_kiwi()
         out = index_dir / f"bm25-{b.name}"
         settings = OmegaConf.to_container(b)
         if not (out / "params.index.json").exists():
             fields = b.get("meta_fields")
             meta = doc_meta(ROOT / cfg.paths.corpus, fields) if fields else None
-            build(index_dir / "chunks.jsonl", out, b, self.kiwi, meta)
+            build(index_dir / CHUNKS, out, b, self.kiwi, meta)
             write_settings(out, settings)
         elif not (out / SETTINGS).exists():
             # 설정 기록 전에 만든 인덱스(kiwi-v1, kiwi-meta-v1).

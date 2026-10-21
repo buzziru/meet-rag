@@ -1,7 +1,9 @@
 """평가(rag.search)와 생성(rag.generate)이 함께 쓰는 검색기(S12).
 
 질의 하나의 dense 점수 행, BM25 토큰, 질의 조건을 받아 문서 순위를 낸다. 설정은 cfg.retriever다.
-재정렬 점수 파일과 후보 쌍 내보내기(EXP-005·006)는 평가 전용이라 rag.search에 있다.
+최종 순위(Retriever.final), 문서의 근거 청크 선택(best_chunks), 청크 본문 읽기(ChunkStore)도
+평가와 생성이 여기서 같이 쓴다(S16). 후보 쌍 내보내기(EXP-005·006)는 평가 전용이라 rag.search에
+있다.
 규칙은 docs/slices/05-retrieve.md(dense), EXP-001·003·004·007·008·010·011·013·015·016 문서.
 """
 
@@ -12,7 +14,15 @@ import numpy as np
 
 from rag.bm25 import BM25Retriever
 from rag.conditions import ConditionIndex
-from rag.index import ROOT, check_basis, file_sha256, index_basis, index_path, load_embeddings
+from rag.index import (
+    CHUNKS,
+    ROOT,
+    check_basis,
+    file_sha256,
+    index_basis,
+    index_path,
+    load_embeddings,
+)
 
 
 def first_docs(order: np.ndarray, chunk_doc_ids: np.ndarray, k: int) -> list[str]:
@@ -185,8 +195,63 @@ def chunks_by_doc(chunk_doc_ids: np.ndarray) -> dict[str, np.ndarray]:
     return dict(zip(names, groups, strict=True))
 
 
+def best_chunks(scores: np.ndarray, doc_chunks: dict[str, np.ndarray],
+                docs: list[str]) -> list[int]:
+    """문서마다 dense 점수가 가장 높은 청크 번호를 문서 순서대로 돌려준다(D-05).
+
+    재정렬 후보 쌍(rag.search)과 생성 근거(rag.generate)가 같은 청크를 쓴다(S16).
+    추가 청크(retriever.extra_chunks)가 있으면 모든 크기의 청크 중에서 고른다(S12 결정 1).
+    """
+    return [int(doc_chunks[d][np.argmax(scores[doc_chunks[d]])]) for d in docs]
+
+
+class ChunkStore:
+    """dense 청크 번호(인덱스를 이어 붙인 순서, load_dense와 같다)로 청크 행을 읽는다.
+
+    청크 텍스트를 모두 메모리에 올리지 않고 파일마다 줄 시작 위치만 들고 있다.
+    """
+
+    def __init__(self, dirs: list[Path]):
+        self.paths, starts, sizes = [], [], []
+        for d in dirs:
+            offs = [0]
+            with (d / CHUNKS).open("rb") as f:
+                for line in f:
+                    offs.append(offs[-1] + len(line))
+            self.paths.append(d / CHUNKS)
+            starts.append(np.array(offs[:-1]))
+            sizes.append(len(offs) - 1)
+        self.starts = starts
+        self.bounds = np.cumsum([0, *sizes])
+        self.names = [d.parent.name for d in dirs]
+
+    def _locate(self, i: int) -> tuple[int, int]:
+        k = int(np.searchsorted(self.bounds, i, side="right")) - 1
+        return k, int(self.starts[k][i - self.bounds[k]])
+
+    def get(self, i: int) -> dict:
+        k, pos = self._locate(i)
+        with self.paths[k].open("rb") as f:
+            f.seek(pos)
+            return {**json.loads(f.readline()), "index": self.names[k]}
+
+    def texts(self, ids: set[int]) -> dict[int, str]:
+        """여러 청크의 본문. 파일마다 한 번 열고 위치 순으로 읽는다."""
+        by_file: dict[int, list[tuple[int, int]]] = {}
+        for i in sorted(ids):
+            k, pos = self._locate(i)
+            by_file.setdefault(k, []).append((i, pos))
+        out = {}
+        for k, items in by_file.items():
+            with self.paths[k].open("rb") as f:
+                for i, pos in items:
+                    f.seek(pos)
+                    out[i] = json.loads(f.readline())["text"]
+        return out
+
+
 def read_doc_ids(index_dir: Path) -> np.ndarray:
-    with (index_dir / "chunks.jsonl").open(encoding="utf-8") as f:
+    with (index_dir / CHUNKS).open(encoding="utf-8") as f:
         return np.array([json.loads(line)["doc_id"] for line in f])
 
 
@@ -231,6 +296,8 @@ class Retriever:
             self.bm25_ids = read_doc_ids(self.index_dir)  # BM25는 기본 청크만 쓴다
             self.bm25 = BM25Retriever(cfg, self.index_dir)
         self.use_cond = bool(self.hybrid and r.get("conditions") and r.conditions.enabled)
+        # 재정렬 점수로 상위 후보를 다시 줄 세우는지. 평가와 생성이 이 값을 읽는다(S16)
+        self.use_rerank = bool(self.hybrid and r.get("rerank") and r.rerank.enabled)
         self.weighted = r.get("doc_agg") is not None
         self.score_fusion = self.hybrid and r.fusion.get("method", "rrf") == "score"
         if self.use_cond or self.weighted or self.score_fusion:
@@ -353,23 +420,33 @@ class Retriever:
         named, matched, full = self.lists(row, tokens, conditions, rewrite)
         return self.fuse(named), matched, full
 
+    def final(self, fused: list[str], matched: set[str],
+              rerank: dict[str, float] | None = None) -> list[str]:
+        """결합 후보 → 최종 상위 top_k. 평가(rag.search)와 생성(explain)이 같이 부른다(S16).
+
+        hybrid면 final_order(재정렬 → 최다 일치 필터) 뒤 top_k로 자른다. 재정렬 깊이는 점수가
+        있을 때만 retriever.rerank.depth다. dense 단독이면 후보가 이미 top_k개다.
+        """
+        if not self.hybrid:
+            return fused
+        depth = self.r.rerank.depth if rerank is not None else 0
+        return final_order(fused, matched, rerank, depth)[: self.r.top_k]
+
     def explain(self, row: np.ndarray, tokens: list[int] | None = None,
                 conditions: dict | None = None,
-                rewrite: tuple[np.ndarray, list[int]] | None = None,
                 rerank: dict[str, float] | None = None,
                 ) -> tuple[list[str], list[dict]]:
         """상위 top_k 문서와 문서마다 단계별 기록(목록별 순위, RRF·재정렬 점수, 최다 일치 여부).
 
-        순위는 rank와 같다. 실패·성공 원인을 나중에 나눠 보려고 단계별 값을 남긴다(PR #71 코멘트).
+        순위는 final로 정한다. 실패·성공 원인을 나중에 나눠 보려고 단계별 값을 남긴다(PR #71).
         rerank는 문서별 재정렬 점수이고, 주면 RRF 상위 retriever.rerank.depth개를 다시 줄 세운다.
         """
-        named, matched, _ = self.lists(row, tokens, conditions, rewrite)
+        named, matched, _ = self.lists(row, tokens, conditions)
         if not self.hybrid:
             return named["dense"], [{"dense_rank": i} for i in range(1, len(named["dense"]) + 1)]
         score = self._rrf_scores(named)
         fused = sorted(score, key=score.__getitem__, reverse=True)
-        depth = self.r.rerank.depth if rerank is not None else 0
-        docs = final_order(fused, matched, rerank, depth)[: self.r.top_k]
+        docs = self.final(fused, matched, rerank)
         pos = {n: {d: i for i, d in enumerate(lst, 1)} for n, lst in named.items()}
         stages = []
         for d in docs:
