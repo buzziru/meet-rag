@@ -9,6 +9,7 @@
 | B-7 | `src/rag/rewrite.py:22`, `src/rag/gen_eval/judge.py:34`, `src/rag/gen_eval/checks.py:5` | 검색이 생성 모듈을, 생성 평가가 생성 모듈을 import하지 않게 한다. judge가 공유하는 조건 정규식을 judge 레시피에 남긴다 |
 | C-3 | `generate.py:160-179`, `retrieve.py:356-366` | 생성에서 `retriever.rewrite`가 켜져 있으면 멈추고, 쓰지 않는 `explain`의 `rewrite` 인자를 지운다 |
 | C-6 | `configs/prompt/v1.yaml:7`, `v2.yaml:9`, `configs/config.yaml:230` | 거부 문구를 프롬프트 파일 한 곳에 두고 판정이 그 값을 읽는다(결정 사항 1) |
+| E-1 | `src/rag/bm25.py:70` | Kiwi를 프로세스에서 한 번만 만든다(사용자 지시 2026-10-21로 범위에 더함) |
 
 ## 만드는 것
 
@@ -50,6 +51,12 @@
 - 테스트: `configs/prompt/*.yaml` 전부가 `refusal` 키를 갖고, 해석한 `system`에 그 문구가 들어 있다
 - 이 변경으로 v1·v2의 `prompt_sha256`이 달라진다. 기존 S14 생성 기록(v1, 20건)은 지금 코드로 이어 쓰거나 다시 채점할 수 없고, 그 커밋의 코드로 재현한다. 생성 베이스라인은 새 실행이라 영향이 없다
 
+### Kiwi 공유 (E-1)
+
+- `BM25Retriever`가 만들 때마다 `Kiwi()`를 새로 만들어, 인스턴스마다 생성 1.4\~2.7초와 첫 `tokenize` 2.1\~4.2초가 다시 든다(리뷰 측정). 실행(`rag.search`, `rag.generate`)은 `Retriever`를 한 번 만들어 영향이 시작 때 한 번이지만, 테스트는 합성 인덱스마다 다시 만든다. 아래 exp 전체 조합 테스트가 hybrid `Retriever`를 19번 만들어 전체 pytest가 60.7초(리뷰)에서 133초로 늘었다
+- `rag.bm25`에 모듈 수준에서 한 번 만드는 공유 Kiwi를 두고 `BM25Retriever`가 그것을 쓴다. 쓰는 기능은 `tokenize`뿐이고 사용자 사전을 더하지 않아 공유해도 토큰화 결과가 같다
+- 문장 청킹(`chunking.py`, EXP-012)의 Kiwi는 청커를 만들 때 한 번이라 바꾸지 않는다
+
 ### 테스트 (B-13)
 
 - explain·search 순위 일치: 합성 인덱스에서 hybrid·조건 목록·재정렬 점수를 켠 설정으로 `rag.search`의 `finish` 경로와 `explain`이 같은 top_k를 낸다
@@ -66,7 +73,7 @@
 
 ## 완료 기준
 
-1. `uv run pytest -q`, `uv run ruff check .` 통과
+1. `uv run pytest -q`, `uv run ruff check .` 통과. E-1 전후의 pytest 시간을 결과 절에 적는다
 2. 결과 불변(검색): `uv run python -m rag.search +exp=exp017 index.scope=dev-small`, `… index.scope=full`, `… index.scope=full search.queries=multidoc`가 각각 기존 순위 파일과 "같은 내용, 그대로 둠"으로 끝난다. 후보 쌍도 `search.mode=rerank-pairs`로 dev-small을 다시 내 기존 파일과 "같은 내용"으로 끝난다
 3. 결과 불변(생성 근거): 기존 생성 기록 `data/gen_eval/runs/hybrid-cond-filter-law-ms256-k20-ce-v1-dev-small.jsonl` 20건의 qid로 `Pipeline.retrieve`만 불러(생성 API는 부르지 않는다) 근거의 (`doc_id`, `index`, `chunk_id`, `score`) 목록이 기록과 같다
 4. 프롬프트 불변: `main`의 v1·v2 파일과 바꾼 파일로 같은 근거·질의를 `build_messages`에 넣으면 메시지가 글자까지 같다(한 번 비교하고 결과 절에 적는다)
@@ -88,4 +95,4 @@
 - `lists()`의 플래그 정리와 `fuse: false`·`rrf` 조합의 KeyError(B-8), `Retriever.rank`·`rrf` 정리(B-9), 가중치 위치 대응(B-10), 기본값 위치(B-11). exp 전체 조합 테스트에서 B-8 조합에 닿으면 고치지 않고 결과 절에 적는다
 - 순위 파일 이름 규칙(A-5), 근거 `score`의 뜻(C-15), 질의 임베딩 캐시(C-11, B-12)
 - 평가 쪽 묶음(D-8, D-2)과 보호 경로 전부
-- 테스트 속도(E-1, E-2)
+- 테스트 속도 중 E-2(`rag.rerank`의 torch import)와 marker 분리(E-7)
