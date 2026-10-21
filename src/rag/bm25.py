@@ -14,7 +14,7 @@ import numpy as np
 from kiwipiepy import Kiwi
 from omegaconf import OmegaConf
 
-from rag.index import ROOT
+from rag.index import CHUNKS, ROOT
 
 # 인덱스를 만든 retriever.bm25 설정. 읽을 때 지금 설정과 다르면 멈춘다
 # (이름만 같은 이전 인덱스를 조용히 읽지 않게)
@@ -73,7 +73,7 @@ class BM25Retriever:
         if not (out / "params.index.json").exists():
             fields = b.get("meta_fields")
             meta = doc_meta(ROOT / cfg.paths.corpus, fields) if fields else None
-            build(index_dir / "chunks.jsonl", out, b, self.kiwi, meta)
+            build(index_dir / CHUNKS, out, b, self.kiwi, meta)
             write_settings(out, settings)
         elif not (out / SETTINGS).exists():
             # 설정 기록 전에 만든 인덱스(kiwi-v1, kiwi-meta-v1).

@@ -151,8 +151,8 @@ def gen(answer, contexts):
 
 def judge_cfg():
     from omegaconf import OmegaConf
-    return OmegaConf.create({"gen_eval": {"refusal": REFUSAL, "chunk_key_min": 0.5,
-                                          "filler_phrases": FILLERS}})
+    return OmegaConf.create({"prompt": {"refusal": REFUSAL},
+                             "gen_eval": {"chunk_key_min": 0.5, "filler_phrases": FILLERS}})
 
 
 def test_judge_record_checks_chunk_with_key_statements_even_for_refusal():

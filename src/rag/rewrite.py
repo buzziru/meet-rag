@@ -19,8 +19,8 @@ from langsmith.wrappers import wrap_openai
 from omegaconf import OmegaConf
 from openai import OpenAI
 
-from rag.generate import split_thought
 from rag.index import ROOT
+from rag.llm import split_thought
 
 
 def signals(named: dict[str, list[str]], row: np.ndarray, chunk_doc: np.ndarray,
