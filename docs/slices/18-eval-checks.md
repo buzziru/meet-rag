@@ -16,7 +16,8 @@
   2. 보류이면 multi-doc으로: Recall@5 차이의 (점 추정, 하한, 상한)으로 기존 `verdict`를 쓰고, 채택이 나와도 Complete@5 차이 95% 구간 상한이 0보다 작으면 보류로 둔다
 - 반환은 채택·기각·보류와 어느 단계에서 정해졌는지(single-doc, multi-doc)다. D-35에 따라 +1.0%p 미만이고 Recall@5 하한 > 0인 보류를 예외로 올릴지는 함수가 정하지 않는다. 그 경우는 exp-judge 판정 보고에서 예외 검토 대상으로 적는다
 - `rag.eval_multi.compare`에 선택 인자 `--single <single-doc 비교 결과 JSON>`를 둔다. 주면 그 JSON의 `verdict`와 multi-doc 전체 행(`group: all`)의 `recall@5`·`complete@5`로 `metadata_verdict`를 계산해 결과에 `metadata_verdict`를 더한다. 주지 않으면 지금처럼 판정 라벨을 내지 않는다(SPEC "보조 관찰": 메타데이터 가설이 아니면 multi-doc에 판정 라벨을 붙이지 않는다). 결정 사항 1
-- single-doc 결과 JSON이 dev-full 비교(`layer`)이고 `verdict`가 있는지 읽을 때 본다. 아니면 멈춘다. `min_gain`은 single-doc 결과에 기록되지 않아(`rag.eval.compare`는 보호 경로이고 이 조각에서 고치지 않는다) 지금 config 값을 쓴다
+- single-doc 결과 JSON이 dev-full 비교(`layer`)이고 `verdict`가 있는지 읽을 때 본다. 아니면 멈춘다. `min_gain`은 single-doc 결과에 기록되지 않는다(`rag.eval.compare`는 보호 경로이고 이 조각에서 고치지 않는다). 그래서 기록된 차이·구간을 지금 `min_gain`으로 다시 판정해 기록된 `verdict`와 다르면 멈춘다. 예: `min_gain` 0.01일 때 채택(+1.5%p, 하한 > 0)으로 기록된 결과를 0.02인 config로 넣으면 다시 판정한 값이 보류라 멈춘다
+- 결과의 `metadata_verdict`에 읽은 single-doc 결과의 경로와 sha256을 남긴다(순위 파일과 같은 방식)
 
 예: EXP-008처럼 single-doc 보류, multi-doc Recall@5 +1.65%p [+0.91, +2.49], Complete@5 [+2.00, +4.83]이면 `{"verdict": "채택", "stage": "multi-doc"}`. multi-doc Recall@5 +0.8%p [+0.2, +1.4]이면 보류(D-35의 예).
 
@@ -69,4 +70,5 @@
 | 008 | +0.00%p [0.00, 0.00] | 보류 | +1.65%p [+0.91, +2.49] | [+2.00, +4.83] | 채택(multi-doc) | 채택(multi-doc 단계) |
 
 - 출력 불변: EXP-008 쌍을 `--single` 없이 `main`의 `rag/eval_multi/compare.py`와 이 브랜치 코드로 돌린 출력이 바이트까지 같다
-- 지시서와 달라진 것: single-doc 결과 JSON에 `min_gain`이 기록되지 않아(`rag.eval.compare`는 수정 허용 밖) 대조하지 않고 지금 config 값을 쓴다. 층(`dev-full`)과 `verdict`만 본다
+- 지시서와 달라진 것: single-doc 결과 JSON에 `min_gain`이 기록되지 않아(`rag.eval.compare`는 수정 허용 밖) `min_gain` 값을 직접 대조하지 않는다. 대신 기록된 차이·구간을 지금 `min_gain`으로 다시 판정해 기록된 판정과 다르면 멈춘다(가이드 판단할 곳 1, 승인한 지시서의 의도를 되살림). single-doc 모듈은 바꾸지 않아 과거 실험의 single-doc 평가 재현에 영향이 없다
+- 감사 P10 보고(어느 single-doc 결과로 판정했는지 남지 않음): 결과에 경로와 sha256을 남긴다

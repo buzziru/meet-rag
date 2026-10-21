@@ -435,7 +435,7 @@
 - 날짜: 2026-10-21
 
 ## D-43 메타데이터 가설의 판정을 함수로 둔다 (S18, 보호 경로 수정)
-- 결정: SPEC "메타데이터 가설의 판정"(D-18, D-35)을 `rag.eval.bootstrap.metadata_verdict`로 옮기고, `rag.eval_multi.compare --single <rag.eval.compare 결과 JSON>`일 때 결과에 `metadata_verdict`(판정, 정해진 단계, single-doc 판정, multi-doc Recall@5·Complete@5 차이와 구간)를 더한다. `--single`이 없으면 출력은 이전과 같다(라벨 없음, SPEC "보조 관찰"). 판정 규칙·지표·bootstrap 설정은 바꾸지 않았다
+- 결정: SPEC "메타데이터 가설의 판정"(D-18, D-35)을 `rag.eval.bootstrap.metadata_verdict`로 옮기고, `rag.eval_multi.compare --single <rag.eval.compare 결과 JSON>`일 때 결과에 `metadata_verdict`(판정, 정해진 단계, 읽은 single-doc 결과의 경로·sha256과 판정, multi-doc Recall@5·Complete@5 차이와 구간)를 더한다. single-doc 결과의 판정이 지금 `min_gain`으로 다시 판정한 값과 다르면 멈춘다(그 결과에 `min_gain`이 기록되지 않아서). `--single`이 없으면 출력은 이전과 같다(라벨 없음, SPEC "보조 관찰"). 판정 규칙·지표·bootstrap 설정은 바꾸지 않았다
 - 승인: 보호 경로(`src/rag/eval/`, `src/rag/eval_multi/`) 수정은 S18 지시서 확인으로 받았다(사용자 결정 2026-10-21, 라벨은 `--single`일 때만 내는 안)
 - 이유: exp-judge가 두 비교 JSON을 읽어 규칙을 손으로 적용해, 행을 잘못 읽어도 잡아내는 코드가 없었다(코드 리뷰 2026-10 D-2)
 - 확인: EXP-002·003·004·008의 순위 파일로 다시 계산해 EXP 문서의 결론과 수치가 같다(002 single-doc 기각, 003·004·008 multi-doc 채택). `--single` 없는 multi-doc 비교 출력은 이전 코드와 바이트까지 같다(EXP-008 쌍)

@@ -113,14 +113,26 @@ def test_metadata_result_uses_overall_recall_and_complete():
     base = score(make_run({q: {1: "a"} for q in gold.index}), gold)
     cand = score(make_run({q: {1: "a", 2: "b"} for q in gold.index}), gold)
     rows = diff_table(base, cand, gold, ["type"], **BS)
-    out = metadata_result({"layer": "dev-full", "verdict": "보류"}, rows, 0.01)
+    hold = {"layer": "dev-full", "diff": 0.0, "ci": [0.0, 0.0], "verdict": "보류"}
+    out = metadata_result(hold, rows, 0.01)
     # Recall@5 +50%p, Complete@5 +100%p
     assert (out["verdict"], out["stage"]) == ("채택", "multi-doc")
     assert out["recall@5"] == {"diff": 0.5, "ci": [0.5, 0.5]}
-    assert metadata_result({"layer": "dev-full", "verdict": "기각"}, rows, 0.01)["stage"] == (
-        "single-doc")
+    reject = {"layer": "dev-full", "diff": -0.02, "ci": [-0.03, -0.01], "verdict": "기각"}
+    assert metadata_result(reject, rows, 0.01)["stage"] == "single-doc"
     with pytest.raises(SystemExit, match="dev-full"):
-        metadata_result({"layer": "dev-small", "verdict": "보류"}, rows, 0.01)
+        metadata_result({**hold, "layer": "dev-small"}, rows, 0.01)
+
+
+def test_metadata_result_stops_when_single_verdict_used_other_min_gain():
+    # min_gain 0.01일 때 채택(+1.5%p, 하한 > 0)으로 기록된 결과를 min_gain 0.02로 넣으면 멈춘다
+    gold = make_gold([["a", "b"]] * 2)
+    s = score(make_run({q: {1: "a"} for q in gold.index}), gold)
+    rows = diff_table(s, s, gold, [], **BS)
+    old = {"layer": "dev-full", "diff": 0.015, "ci": [0.005, 0.025], "verdict": "채택"}
+    assert metadata_result(old, rows, 0.01)["verdict"] == "채택"
+    with pytest.raises(SystemExit, match="min_gain"):
+        metadata_result(old, rows, 0.02)
 
 
 def test_bootstrap_unit_is_pool():

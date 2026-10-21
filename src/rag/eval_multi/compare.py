@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from rag.eval.bootstrap import metadata_verdict, paired_bootstrap
+from rag.eval.bootstrap import metadata_verdict, paired_bootstrap, verdict
 from rag.eval_multi.metrics import load_gold, per_query, ranked_docs, read_run, sha256
 from rag.index import ROOT, load_cfg
 
@@ -37,10 +37,15 @@ def diff_table(base: pd.DataFrame, cand: pd.DataFrame, gold: pd.DataFrame, break
 def metadata_result(single: dict, rows: list[dict], min_gain: float) -> dict:
     """single-doc 비교 결과와 multi-doc 전체 행으로 메타데이터 가설을 판정한다(S18).
 
-    single-doc 결과가 dev-full 판정(rag.eval.compare 출력)이 아니면 멈춘다.
+    single-doc 결과가 dev-full 판정(rag.eval.compare 출력)이 아니면 멈춘다. 그 결과에는 min_gain이
+    기록되지 않으므로, 기록된 차이·구간을 지금 min_gain으로 다시 판정해 기록된 판정과 다르면 멈춘다
+    (판정 기준이 바뀐 뒤 옛 결과를 넣은 경우).
     """
     if single.get("layer") != "dev-full" or "verdict" not in single:
         raise SystemExit("--single은 rag.eval.compare의 dev-full 결과 JSON이어야 한다")
+    if verdict(single["diff"], *single["ci"], min_gain) != single["verdict"]:
+        raise SystemExit(f"--single의 판정 {single['verdict']}이 지금 min_gain {min_gain}으로 "
+                         "다시 판정한 값과 다르다. 지금 config로 rag.eval.compare를 다시 돌린다")
     all_rows = {r["metric"]: r for r in rows if r["group"] == "all"}
     recall, complete = all_rows["recall@5"], all_rows["complete@5"]
     return {"single_verdict": single["verdict"],
@@ -79,8 +84,10 @@ def main() -> None:
     }
     if args.single:
         single = json.loads(args.single.read_text(encoding="utf-8"))
-        result["metadata_verdict"] = metadata_result(single, result["diffs"],
-                                                     cfg.eval.bootstrap.min_gain)
+        result["metadata_verdict"] = {
+            # 어느 single-doc 결과로 판정했는지 남긴다. 순위 파일처럼 경로와 sha256을 적는다
+            "single": {"path": str(args.single), "sha256": sha256(args.single)},
+            **metadata_result(single, result["diffs"], cfg.eval.bootstrap.min_gain)}
     text = json.dumps(result, ensure_ascii=False, indent=2)
     print(text)
     if args.out:
