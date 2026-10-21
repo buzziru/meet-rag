@@ -25,7 +25,11 @@ TRIGGERS = ("python", "sed -i")
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def triggered(command: str) -> bool:
+def triggered(command: str, args: list[str]) -> bool:
+    """검사할 명령인지. settings.json의 `if`는 조건을 묶을 수 없어 python·sed 핸들러를 따로 둔다.
+    둘 다 든 명령에서 알림이 두 번 나지 않게 sed 핸들러(인자 sed)는 python이 든 명령을 넘긴다."""
+    if args == ["sed"] and "python" in command:
+        return False
     return any(t in command for t in TRIGGERS)
 
 
@@ -33,7 +37,15 @@ def changed_files(root: Path = ROOT) -> list[str]:
     """작업트리에서 바뀌었거나 새로 생긴(무시하지 않는) 파일."""
     out = subprocess.run(["git", "status", "--porcelain", "-z", "--untracked-files=all"],
                          cwd=root, capture_output=True, text=True, encoding="utf-8").stdout
-    return [e[3:] for e in out.split("\0") if e[3:] and e[:2].strip() != "D"]
+    paths, parts = [], iter(out.split("\0"))
+    for e in parts:
+        if not e[3:]:
+            continue
+        if e[0] in "RC":  # 이름 변경·복사는 다음 조각에 상태 없이 옛 경로가 온다
+            next(parts, None)
+        if e[:2].strip() != "D":
+            paths.append(e[3:])
+    return paths
 
 
 def problems(paths: list[str], root: Path = ROOT) -> list[str]:
@@ -60,7 +72,7 @@ def problems(paths: list[str], root: Path = ROOT) -> list[str]:
 
 def main() -> int:
     data = json.loads(sys.stdin.buffer.read().decode("utf-8"))
-    if not triggered(data.get("tool_input", {}).get("command", "")):
+    if not triggered(data.get("tool_input", {}).get("command", ""), sys.argv[1:]):
         return 0
     found = problems(changed_files())
     if not found:

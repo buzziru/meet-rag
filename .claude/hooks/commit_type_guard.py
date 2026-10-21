@@ -15,7 +15,7 @@ COMMIT = re.compile(r"\bgit\s+commit\b")
 # -m "…", -m '…', -m "$(cat <<'EOF' …", --message=…, -qm "…" 다음의 메시지 시작
 MESSAGE = re.compile(r"(?:\s-[a-zA-Z]*m|\s--message)(?:=|\s+)"
                      r"""(?:"\$\(cat\s+<<-?\s*'?\w+'?\s*\n|["']?)""")
-SUBJECT = re.compile(r"^([A-Za-z]+)(?:\([^)]*\))?!?:\s")
+SUBJECT = re.compile(r"^([A-Za-z]+):\s")  # 범위 표기 `fix(judge):`는 규약에 없다(이력 0건)
 REASON = ("커밋 타입 `{t}`는 규약에 없다. 허용: " + ", ".join(TYPES)
           + ". 형식은 `<타입>: <요약>`이다(.claude/rules/git.md 커밋 절). 성능 개선은 refactor 등 "
           "가장 가까운 타입으로 쓴다.")

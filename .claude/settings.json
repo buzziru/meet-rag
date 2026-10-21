@@ -36,7 +36,7 @@
           {
             "type": "command",
             "if": "Bash(*sed -i*)",
-            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/file_damage_check.py\"",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/file_damage_check.py\" sed",
             "timeout": 30
           }
         ]

@@ -14,9 +14,10 @@ OK = [
     'git add docs && git commit -q -m "docs: SLICE 17 결과\n\nCo-Authored-By: x"',
     'git commit -q --amend -m "refactor: BM25 검색기가 Kiwi 하나를 공유"',
     "git commit -m \"$(cat <<'EOF'\nfeat: 새 기능\n\n본문\nEOF\n)\"",
-    "git commit -qm 'fix(judge): 프롬프트 대조'",
+    "git commit -qm 'fix: 프롬프트 대조'",
 ]
 BAD = [
+    ("git commit -qm 'fix(judge): 프롬프트 대조'", "fix(judge):"),  # 범위 표기는 규약에 없다
     ('git commit -q -m "perf: BM25 검색기가 Kiwi 하나를 공유"', "perf"),
     ('git commit -m "Update readme"', "Update"),
     ("git commit -qm 'style: 정리'", "style"),
@@ -53,5 +54,5 @@ def run_hook(command):
 
 def test_hook_denies_only_bad_type():
     assert run_hook(OK[0]) is None
-    out = run_hook(BAD[0][0])["hookSpecificOutput"]
+    out = run_hook('git commit -q -m "perf: 공유"')["hookSpecificOutput"]
     assert out["permissionDecision"] == "deny" and "perf" in out["permissionDecisionReason"]

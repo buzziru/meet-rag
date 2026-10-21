@@ -4,16 +4,19 @@ import pytest
 from file_damage_check import changed_files, problems, triggered
 
 
-@pytest.mark.parametrize(("command", "expected"), [
-    ("cat > a.md <<'EOF'\n내용\nEOF", False),
-    ("uv run python - <<'EOF'\nopen('a.py', 'w')\nEOF", True),
-    ('uv run python "$S/e6.py"', True),
-    ("sed -i 's/a/b/' docs/PLAN.md", True),
-    ("git status --short", False),
-    ("uv run pytest -q", False),
+@pytest.mark.parametrize(("command", "args", "expected"), [
+    ("cat > a.md <<'EOF'\n내용\nEOF", [], False),
+    ("uv run python - <<'EOF'\nopen('a.py', 'w')\nEOF", [], True),
+    ('uv run python "$S/e6.py"', [], True),
+    ("sed -i 's/a/b/' docs/PLAN.md", ["sed"], True),
+    ("git status --short", [], False),
+    ("uv run pytest -q", [], False),
+    # python과 sed -i가 함께 든 명령은 python 핸들러만 본다(알림 두 번 실측)
+    ("sed -i 's/a/b/' f && uv run python x.py", ["sed"], False),
+    ("sed -i 's/a/b/' f && uv run python x.py", [], True),
 ])
-def test_triggered(command, expected):
-    assert triggered(command) is expected
+def test_triggered(command, args, expected):
+    assert triggered(command, args) is expected
 
 
 def test_reports_broken_python_and_crlf(tmp_path):
@@ -34,16 +37,17 @@ def test_normal_escapes_and_binary_pass(tmp_path):
     assert problems(["ok.py", "doc.md", "emb.npy", "missing.py"], tmp_path) == []
 
 
-def test_changed_files_lists_modified_and_new_not_deleted(tmp_path):
+def test_changed_files_lists_modified_new_and_renamed_not_deleted(tmp_path):
     def git(*a):
         subprocess.run(["git", *a], cwd=tmp_path, check=True, capture_output=True)
     git("init", "-q")
-    for name in ["keep.py", "gone.py"]:
-        (tmp_path / name).write_text("x = 1\n", encoding="utf-8")
+    for name in ["keep.py", "gone.py", "old_name.py"]:
+        (tmp_path / name).write_text(f"x = '{name}'\n", encoding="utf-8")
     git("add", ".")
     git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "chore: 시작")
     (tmp_path / "keep.py").write_text("x = 2\n", encoding="utf-8")
     (tmp_path / "gone.py").unlink()
+    git("mv", "old_name.py", "new_name.py")  # 스테이징된 이름 변경: 옛 경로가 따로 온다
     (tmp_path / "new dir").mkdir()
     (tmp_path / "new dir" / "a.py").write_text("y = 1\n", encoding="utf-8")
-    assert sorted(changed_files(tmp_path)) == ["keep.py", "new dir/a.py"]
+    assert sorted(changed_files(tmp_path)) == ["keep.py", "new dir/a.py", "new_name.py"]
