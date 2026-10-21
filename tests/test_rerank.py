@@ -61,3 +61,14 @@ def test_adopt_writes_basis_without_scoring(tmp_path, monkeypatch):
     rerank_main()
     basis = json.loads(rerank_basis_path(cfg).read_text(encoding="utf-8"))
     assert basis["dtype"] == "float16" and read_rerank_scores(cfg) == {"q1": {"d1": 0.5}}
+
+
+def test_latency_stops_before_measuring_when_output_exists(tmp_path, monkeypatch):
+    latency = tmp_path / "latency.json"
+    latency.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr("rag.rerank.load_model", lambda rr: pytest.fail("모델을 불러왔다"))
+    monkeypatch.setattr(sys, "argv", ["rag.rerank", *_rerank_args(tmp_path),
+                                      "retriever.rerank.mode=latency",
+                                      f"paths.rerank_latency='{latency.as_posix()}'"])
+    with pytest.raises(SystemExit, match="search.overwrite"):
+        rerank_main()

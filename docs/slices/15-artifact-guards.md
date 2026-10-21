@@ -106,3 +106,7 @@
 - 멈춤: `retriever.rerank.model=other/model` → 점수 지문 불일치(model), `embedding.revision=old` → 인덱스 지문 불일치(revision)
 - 지문을 쓰지 않은 인덱스 5개와 점수 파일 5개(지난 EXP 재현용, test 1개 포함)는 그 EXP를 다시 돌릴 때 같은 대조를 거쳐 adopt한다
 - judge 기록 전체(`judge.main`)를 돌리는 테스트는 두지 않았다. 질의 표본이 분할·정답 파일을 읽어 합성 입력으로 만들기 어렵다. 커밋을 뺀 비교는 `judge_recipe` 테스트로, 이어 쓰기 규칙은 기존 `done_qids` 테스트로 확인한다
+
+### 리뷰 반영 (PR #122, 2026-10-21)
+
+- 다시 만들면 내용이 달라지는 출력(judge 결과, 재정렬 채점·지연 측정)은 끝에서 `write_guarded`로 멈추면 작업 시간을 잃는다. 출력이 이미 있고 `search.overwrite`가 없으면 시작할 때 멈춘다(`rag.index.refuse_existing`). 검수 CSV의 확인도 이 함수로 바꿨다. 예: n=20 judge 결과가 있는 경로에 n=40으로 `rag.gen_eval.judge`를 실행하면 judge 호출 전에 "…가 있다. 덮어쓰려면 search.overwrite=true"로 멈춘다. 같은 커밋·같은 결과의 judge 재실행도 이제 멈춘다(응답이 모두 캐시에 있어 다시 돌릴 이유가 없는 경우)

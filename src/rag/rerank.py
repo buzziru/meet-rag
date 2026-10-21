@@ -25,7 +25,7 @@ from langsmith import traceable
 from langsmith.run_trees import get_cached_client
 from sentence_transformers import CrossEncoder
 
-from rag.index import ROOT, load_cfg, write_guarded  # .env를 읽는다
+from rag.index import ROOT, load_cfg, refuse_existing, write_guarded  # .env를 읽는다
 from rag.retrieve import rerank_basis, rerank_basis_path
 
 
@@ -158,10 +158,15 @@ def main() -> None:
         if not (ROOT / cfg.paths.rerank_scores).exists():
             raise SystemExit(f"{cfg.paths.rerank_scores}가 없다")
         print(f"{rerank_basis_path(cfg)} ({write_basis(cfg, False)})")
-    elif rr.backend == "jev":
-        jev_score(cfg)
-    else:
-        {"score": score, "latency": latency}[rr.mode](cfg)
+    else:  # 채점·측정 전에 출력이 있는지 본다(다시 하면 값이 조금씩 달라 끝에서 멈춘다)
+        outs = (["rerank_scores", "rerank_latency"] if rr.backend == "jev"
+                else ["rerank_scores" if rr.mode == "score" else "rerank_latency"])
+        for key in outs:
+            refuse_existing(ROOT / cfg.paths[key], cfg.search.overwrite)
+        if rr.backend == "jev":
+            jev_score(cfg)
+        else:
+            {"score": score, "latency": latency}[rr.mode](cfg)
 
 
 if __name__ == "__main__":

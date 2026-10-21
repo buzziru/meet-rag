@@ -32,7 +32,7 @@ from rag.gen_eval.checks import (
 )
 from rag.gen_eval.common import eval_qids, load_refs, read_jsonl, stable
 from rag.generate import git_state
-from rag.index import ROOT, load_cfg, write_guarded
+from rag.index import ROOT, load_cfg, refuse_existing, write_guarded
 
 RELEVANCE = {"답함": 1.0, "일부": 0.5, "답하지 않음": 0.0}
 
@@ -227,6 +227,7 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
 
 def main() -> None:
     cfg = load_cfg(["index.scope=full", *sys.argv[1:]])
+    refuse_existing(ROOT / cfg.paths.gen_judge, cfg.search.overwrite)  # judge 호출 전에 본다
     gens = {r["qid"]: r for r in read_jsonl(ROOT / cfg.paths.gen_runs)}
     qids = [q for q in eval_qids(cfg) if q in gens]  # 표본 순서. 아직 생성하지 않은 qid는 뺀다
     refs = load_refs(cfg, qids)

@@ -49,6 +49,13 @@ def write_guarded(path: Path, text: str, overwrite: bool, hint: str = OVERWRITE_
     return "씀"
 
 
+def refuse_existing(path: Path, overwrite: bool) -> None:
+    """작업 전에 출력이 이미 있으면 멈춘다. 다시 만들면 내용이 달라지는 산출물(채점, 측정, judge
+    기록)은 끝에 write_guarded로 멈추면 작업 시간을 잃으므로 시작할 때 본다(S15, PR #122 리뷰)."""
+    if path.exists() and not overwrite:
+        raise SystemExit(f"{path}가 있다. 덮어쓰려면 search.overwrite=true")
+
+
 def file_sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:

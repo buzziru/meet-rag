@@ -22,6 +22,7 @@ from rag.gen_eval.judge import (
     relevance,
     render,
 )
+from rag.gen_eval.judge import main as judge_main
 from rag.gen_eval.report import chunk_ratio_table, criterion, refusal_table
 from rag.gen_eval.review import main as review_main
 from rag.index import load_cfg
@@ -279,3 +280,12 @@ def test_review_stops_when_filled_csv_exists(tmp_path, monkeypatch):
     with pytest.raises(SystemExit, match="search.overwrite"):
         review_main()
     assert "채움" in out.with_suffix(".csv").read_text(encoding="utf-8")
+
+
+def test_judge_stops_before_calls_when_output_exists(tmp_path, monkeypatch):
+    out = tmp_path / "judge.jsonl"
+    out.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr("rag.gen_eval.judge.read_jsonl", lambda p: pytest.fail("기록을 읽었다"))
+    monkeypatch.setattr(sys, "argv", ["rag.gen_eval.judge", f"paths.gen_judge='{out.as_posix()}'"])
+    with pytest.raises(SystemExit, match="search.overwrite"):
+        judge_main()  # n을 늘려 다시 채점할 때 overwrite를 빼먹으면 호출 전에 멈춘다
