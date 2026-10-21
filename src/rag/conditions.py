@@ -10,7 +10,7 @@ import re
 import sys
 from collections import Counter
 
-from rag.index import ROOT, load_cfg
+from rag.index import ROOT, corpus_meta, load_cfg
 from rag.meta_dict import build as build_meta_dict
 
 # `YYYY년도`는 회계연도라 회의 날짜가 아니다(D-21). 두 자리 연도는 `'YY년`만 날짜로 본다(D-22)
@@ -179,11 +179,10 @@ def build_extractor(cfg) -> Extractor:
     laws = set()
 
     def docs():
-        with (ROOT / cfg.paths.corpus).open(encoding="utf-8") as f:
-            for doc in map(json.loads, f):
-                if c.get("agenda_law"):  # 법률명 사전은 코퍼스 안건에서만 만든다(EXP-008)
-                    laws.update(agenda_laws(doc.get("agenda", ""), c.law_min_chars))
-                yield doc
+        for doc in corpus_meta(cfg):  # 조건 색인과 같이 한 번만 읽는다(S17)
+            if c.get("agenda_law"):  # 법률명 사전은 코퍼스 안건에서만 만든다(EXP-008)
+                laws.update(agenda_laws(doc.get("agenda", ""), c.law_min_chars))
+            yield doc
 
     meta_dict = build_meta_dict(docs())
     return Extractor(meta_dict, cfg.ingest.name_titles, c.name_suffixes, set(c.name_exclude),

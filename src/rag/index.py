@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import time
+from functools import cache
 from pathlib import Path
 
 import numpy as np
@@ -31,6 +32,24 @@ if os.environ.get("HF_HOME") and not Path(os.environ["HF_HOME"]).is_absolute():
 def load_cfg(overrides=()):
     with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
         return compose(config_name="config", overrides=list(overrides))
+
+
+def corpus_meta(cfg) -> list[dict]:
+    """코퍼스 문서 목록(본문 context 제외). 한 프로세스에서 같은 파일은 한 번만 읽는다.
+
+    조건 색인·조건 추출기·생성의 회의 정보가 같이 쓴다. 전체 코퍼스 읽기는 한 번에 8~11초라
+    셋이 따로 읽으면 실행마다 그만큼 반복됐다(S17). 파일이 바뀌면(수정 시각·크기) 다시 읽는다.
+    돌려준 목록과 dict는 공유하므로 고치지 않는다.
+    """
+    path = ROOT / cfg.paths.corpus
+    st = path.stat()
+    return _read_corpus_meta(path, st.st_mtime_ns, st.st_size)
+
+
+@cache
+def _read_corpus_meta(path: Path, mtime_ns: int, size: int) -> list[dict]:
+    with path.open(encoding="utf-8") as f:
+        return [{k: v for k, v in json.loads(line).items() if k != "context"} for line in f]
 
 
 def git_state() -> tuple[str, bool]:

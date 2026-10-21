@@ -4,7 +4,14 @@ import sys
 import numpy as np
 import pytest
 
-from rag.index import embed_shards, index_path, load_cfg, load_embeddings, token_batches
+from rag.index import (
+    corpus_meta,
+    embed_shards,
+    index_path,
+    load_cfg,
+    load_embeddings,
+    token_batches,
+)
 from rag.index import main as index_main
 
 
@@ -90,3 +97,18 @@ def test_adopt_checks_chunk_and_embedding_rows(tmp_path, monkeypatch):
     with pytest.raises(SystemExit, match="임베딩 2행"):
         _run_index(monkeypatch, [*args, "adopt_basis=true"])
     assert not (d / "basis.json").exists()  # 행 수가 다른 인덱스에는 지문을 남기지 않는다
+
+
+def test_corpus_meta_reads_once_without_context(tmp_path, monkeypatch):
+    path = tmp_path / "corpus.jsonl"
+    path.write_text(json.dumps({"doc_id": "a", "date": "d", "context": "본문"}), encoding="utf-8")
+    cfg = load_cfg([f"paths.corpus='{path.as_posix()}'"])
+    opened = []
+    real_open = type(path).open
+    monkeypatch.setattr(type(path), "open",
+                        lambda self, *a, **k: opened.append(self) or real_open(self, *a, **k))
+    first = corpus_meta(cfg)
+    assert first == [{"doc_id": "a", "date": "d"}]  # 본문(context)은 담지 않는다
+    assert corpus_meta(cfg) is first and len(opened) == 1  # 같은 파일은 한 번만 읽는다(S17)
+    path.write_text(json.dumps({"doc_id": "b", "context": "새 본문입니다"}), encoding="utf-8")
+    assert corpus_meta(cfg) == [{"doc_id": "b"}]  # 내용이 바뀌면(크기) 다시 읽는다

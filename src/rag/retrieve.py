@@ -18,6 +18,7 @@ from rag.index import (
     CHUNKS,
     ROOT,
     check_basis,
+    corpus_meta,
     file_sha256,
     index_basis,
     index_path,
@@ -39,16 +40,21 @@ def first_docs(order: np.ndarray, chunk_doc_ids: np.ndarray, k: int) -> list[str
 
 def rank_with_pool(scores: np.ndarray, chunk_doc_ids: np.ndarray, k: int,
                    pool: int | None) -> tuple[list[str], bool]:
-    """점수 상위 pool개 청크로 문서 k개를 고른다. 모자라면 전체를 정렬한다.
+    """점수 상위 pool개 청크로 문서 k개를 고른다. 모자라면 묶음을 두 배씩 키워 다시 고르고,
+    묶음이 청크 수에 닿으면 전체를 정렬한다(S17).
+
+    hybrid는 dense 목록에서 fusion.depth(100)개 문서를 골라, 첫 묶음 200개로는 자주 모자란다.
+    전체 정렬로 바로 넘어가면 dev-full 질의 1,301건이 청크 약 34만 개를 정렬했다(S17 측정).
 
     Returns:
         (문서 목록, 전체 정렬로 넘어갔는지). 결과는 전체 정렬과 같다(경계의 동점 제외).
     """
-    if pool is not None and pool < len(scores):
+    while pool is not None and pool < len(scores):
         top = np.argpartition(-scores, pool - 1)[:pool]
         docs = first_docs(top[np.lexsort((top, -scores[top]))], chunk_doc_ids, k)
         if len(docs) == k:
             return docs, False
+        pool *= 2
     return first_docs(np.argsort(-scores, kind="stable"), chunk_doc_ids, k), True
 
 
@@ -310,10 +316,9 @@ class Retriever:
     def _condition_index(self) -> ConditionIndex:
         pos = {d: i for i, d in enumerate(self.doc_names)}
         docs = [None] * len(self.doc_names)
-        with (ROOT / self.cfg.paths.corpus).open(encoding="utf-8") as f:
-            for doc in map(json.loads, f):
-                if doc["doc_id"] in pos:
-                    docs[pos[doc["doc_id"]]] = doc
+        for doc in corpus_meta(self.cfg):
+            if doc["doc_id"] in pos:
+                docs[pos[doc["doc_id"]]] = doc
         c = self.cfg.conditions
         law_min = c.law_min_chars if c.get("agenda_law") else None
         return ConditionIndex(docs, self.r.conditions.year_ref_offsets, law_min)
