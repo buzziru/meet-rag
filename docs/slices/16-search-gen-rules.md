@@ -8,7 +8,7 @@
 | B-6 | `search.py:26-35`, `:212`, `generate.py:51-84`, `g2.py:67-77`, `:120` | D-05 청크 선택과 청크 본문 읽기를 `rag.retrieve` 한 곳에 둔다. 청크 파일 이름도 한 곳에 둔다 |
 | B-7 | `src/rag/rewrite.py:22`, `src/rag/gen_eval/judge.py:34`, `src/rag/gen_eval/checks.py:5` | 검색이 생성 모듈을, 생성 평가가 생성 모듈을 import하지 않게 한다. judge가 공유하는 조건 정규식을 judge 레시피에 남긴다 |
 | C-3 | `generate.py:160-179`, `retrieve.py:356-366` | 생성에서 `retriever.rewrite`가 켜져 있으면 멈추고, 쓰지 않는 `explain`의 `rewrite` 인자를 지운다 |
-| C-6 | `configs/prompt/v1.yaml:7`, `v2.yaml:9`, `configs/config.yaml:230` | 생성 프롬프트와 판정의 거부 문구가 어긋나면 멈춘다(결정 사항 1) |
+| C-6 | `configs/prompt/v1.yaml:7`, `v2.yaml:9`, `configs/config.yaml:230` | 거부 문구를 프롬프트 파일 한 곳에 두고 판정이 그 값을 읽는다(결정 사항 1) |
 
 ## 만드는 것
 
@@ -42,10 +42,13 @@
 
 ### 거부 문구 (C-6)
 
-결정 사항 1에 따른다. 권고 (a)면:
+결정 사항 1 (b)에 따른다.
 
-- `rag.gen_eval.judge`가 시작할 때 생성 기록 레시피의 `prompt_version`으로 `configs/prompt/<버전>.yaml`을 읽고, 그 `system`에 `gen_eval.refusal`이 들어 있지 않으면 멈춘다(공백 차이는 `refusal_split`과 같게 무시)
-- 테스트가 `configs/prompt/*.yaml` 전부에 대해 같은 조건을 확인한다
+- `configs/prompt/v1.yaml`·`v2.yaml`에 `refusal: 제공된 회의록에서 답을 찾지 못했습니다`를 두고, `system`의 거부 지시는 OmegaConf 상대 참조 `"${.refusal}."`로 그 값을 넣는다. 모델이 받는 메시지(system, user, 근거 서식)는 글자 하나까지 지금과 같아야 한다. `build_messages`는 바꾸지 않는다
+- 두 파일 머리의 "기록을 남긴 버전은 고치지 않고 새 파일을 만든다"에, 이 변경이 내용을 바꾸지 않은 예외(S16, 사용자 결정)라는 것을 적는다
+- `configs/config.yaml`의 `gen_eval.refusal`을 지운다. judge는 `cfg.prompt.refusal`을 읽는다. 생성 기록 경로 `paths.gen_runs`에 `${prompt.version}`이 들어 있어 judge 실행 config의 프롬프트가 그 기록을 만든 버전이다. judge 레시피의 `refusal` 키는 그대로 두고 값만 이 출처로 바꾼다
+- 테스트: `configs/prompt/*.yaml` 전부가 `refusal` 키를 갖고, 해석한 `system`에 그 문구가 들어 있다
+- 이 변경으로 v1·v2의 `prompt_sha256`이 달라진다. 기존 S14 생성 기록(v1, 20건)은 지금 코드로 이어 쓰거나 다시 채점할 수 없고, 그 커밋의 코드로 재현한다. 생성 베이스라인은 새 실행이라 영향이 없다
 
 ### 테스트 (B-13)
 
@@ -57,8 +60,8 @@
 
 ## 결정 사항
 
-1. **거부 문구를 어디에 둘지 (C-6).** 지금 문구는 `configs/prompt/v1.yaml`·`v2.yaml`의 `system` 본문과 `configs/config.yaml`의 `gen_eval.refusal`에 따로 있다.
-   - (a) 권고. 문구는 지금 자리에 두고, judge가 생성에 쓴 프롬프트 파일에 `gen_eval.refusal`이 있는지 확인해 없으면 멈춘다. 프롬프트 파일을 고치지 않으므로 `prompt_sha256`이 그대로이고, 기존 S14 생성 기록(v1, 20건)을 다시 채점할 수 있다. 예: v3에서 거부 문구를 "근거에서 찾을 수 없습니다"로 바꾸고 `gen_eval.refusal`을 그대로 두면 judge 호출 전에 멈춘다. 문구가 두 곳에 남으므로 v3를 만들 때 두 곳을 같이 고친다
+1. **거부 문구를 어디에 둘지 (C-6).** 지금 문구는 `configs/prompt/v1.yaml`·`v2.yaml`의 `system` 본문과 `configs/config.yaml`의 `gen_eval.refusal`에 따로 있다. 결정: (b)(사용자 결정 2026-10-21). 생성 베이스라인을 아직 재지 않았고 이후 프롬프트 변경이 이어질 것이라, 문구가 두 곳에 있어 생길 수 있는 문제를 감수하지 않는다. 엄밀하게는 naive 때 정한 프롬프트로 베이스라인을 재야 하므로, 파일은 바뀌어도 모델이 받는 프롬프트의 내용과 형식은 지금과 같게 둔다
+   - (a) 문구는 지금 자리에 두고, judge가 생성에 쓴 프롬프트 파일에 `gen_eval.refusal`이 있는지 확인해 없으면 멈춘다. 프롬프트 파일을 고치지 않으므로 `prompt_sha256`이 그대로이고, 기존 S14 생성 기록(v1, 20건)을 다시 채점할 수 있다. 예: v3에서 거부 문구를 "근거에서 찾을 수 없습니다"로 바꾸고 `gen_eval.refusal`을 그대로 두면 judge 호출 전에 멈춘다. 문구가 두 곳에 남으므로 v3를 만들 때 두 곳을 같이 고친다
    - (b) 프롬프트 파일에 `refusal` 키를 두고 `system`이 그 값을 넣어 쓰며, judge는 생성 기록의 프롬프트에서 문구를 읽는다. `gen_eval.refusal`은 지운다. 문구가 한 곳이 되지만 v1·v2 파일 내용이 바뀌어 `prompt_sha256`이 달라진다. 기존 S14 기록과 새 기록은 레시피가 달라 같은 파일에 이어 쓸 수 없고, "기록을 남긴 버전은 고치지 않는다"(v2 머리 주석) 규칙의 예외가 된다
 
 ## 완료 기준
@@ -66,14 +69,16 @@
 1. `uv run pytest -q`, `uv run ruff check .` 통과
 2. 결과 불변(검색): `uv run python -m rag.search +exp=exp017 index.scope=dev-small`, `… index.scope=full`, `… index.scope=full search.queries=multidoc`가 각각 기존 순위 파일과 "같은 내용, 그대로 둠"으로 끝난다. 후보 쌍도 `search.mode=rerank-pairs`로 dev-small을 다시 내 기존 파일과 "같은 내용"으로 끝난다
 3. 결과 불변(생성 근거): 기존 생성 기록 `data/gen_eval/runs/hybrid-cond-filter-law-ms256-k20-ce-v1-dev-small.jsonl` 20건의 qid로 `Pipeline.retrieve`만 불러(생성 API는 부르지 않는다) 근거의 (`doc_id`, `index`, `chunk_id`, `score`) 목록이 기록과 같다
-4. 멈춤: `rag.generate +exp=exp013 ask.qid=<dev qid>`가 API 호출 전에 rewrite로 멈춘다
-5. `rag.rewrite`·`rag.gen_eval.judge`가 `rag.generate`를 import하지 않는다(`grep`)
-6. test 분할 질의를 읽는 명령은 돌리지 않는다. 외부 API(생성·judge·재작성)는 호출하지 않는다
+4. 프롬프트 불변: `main`의 v1·v2 파일과 바꾼 파일로 같은 근거·질의를 `build_messages`에 넣으면 메시지가 글자까지 같다(한 번 비교하고 결과 절에 적는다)
+5. 멈춤: `rag.generate +exp=exp013 ask.qid=<dev qid>`가 API 호출 전에 rewrite로 멈춘다
+6. `rag.rewrite`·`rag.gen_eval.judge`가 `rag.generate`를 import하지 않는다(`grep`)
+7. test 분할 질의를 읽는 명령은 돌리지 않는다. 외부 API(생성·judge·재작성)는 호출하지 않는다
 
 ## 수정 허용 파일
 
 - `src/rag/retrieve.py`, `search.py`, `generate.py`, `g2.py`, `rewrite.py`, `index.py`, `bm25.py`, `llm.py`(새 파일)
-- `src/rag/gen_eval/judge.py`, `checks.py`(결정 사항 1이 (b)면 `configs/prompt/v1.yaml`·`v2.yaml`, `configs/config.yaml`의 `gen_eval.refusal`)
+- `src/rag/gen_eval/judge.py`, `checks.py`
+- `configs/prompt/v1.yaml`·`v2.yaml`(`refusal` 키와 참조, 머리 주석), `configs/config.yaml`(`gen_eval.refusal` 삭제)
 - `tests/test_search.py`, `test_generate.py`, `test_g2.py`, `test_rewrite.py`, `test_gen_eval.py`, `test_fusion.py`, 새 테스트 파일 `tests/test_exp_configs.py`
 - `docs/slices/16-search-gen-rules.md`, `docs/PLAN.md`, `docs/reviews/2026-10-code-review.md`(진행 표시)
 
