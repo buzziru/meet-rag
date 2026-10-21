@@ -34,6 +34,22 @@ def diff_table(base: pd.DataFrame, cand: pd.DataFrame, gold: pd.DataFrame, break
     return rows
 
 
+def check_pair(single: dict, base: Path, cand: Path) -> None:
+    """single-doc 결과가 같은 실험의 비교인지 순위 파일 이름으로 본다(S18).
+
+    rag.search는 순위 파일을 `<인덱스>-<설정 이름>-<평가 층>.csv`로 쓴다. single-doc 결과의
+    base·cand 이름에서 `-dev-full.csv`를 뗀 것과 multi-doc 이름에서 `-multidoc.csv`를 뗀 것이
+    같아야 한다.
+    다른 실험의 결과를 넣으면 판정이 그 실험의 single-doc 단계로 정해진다.
+    """
+    for role, multi in [("base", base), ("cand", cand)]:
+        dev = Path(single[role]["run"]).name
+        if (not dev.endswith("-dev-full.csv") or not multi.name.endswith("-multidoc.csv")
+                or dev.removesuffix("-dev-full.csv") != multi.name.removesuffix("-multidoc.csv")):
+            raise SystemExit(f"--single의 {role} 순위 {dev}가 --{role} {multi.name}와 같은 "
+                             "실험이 아니다(이름에서 -dev-full.csv·-multidoc.csv를 뗀 부분이 다름)")
+
+
 def metadata_result(single: dict, rows: list[dict], min_gain: float) -> dict:
     """single-doc 비교 결과와 multi-doc 전체 행으로 메타데이터 가설을 판정한다(S18).
 
@@ -84,6 +100,7 @@ def main() -> None:
     }
     if args.single:
         single = json.loads(args.single.read_text(encoding="utf-8"))
+        check_pair(single, args.base, args.cand)
         result["metadata_verdict"] = {
             # 어느 single-doc 결과로 판정했는지 남긴다. 순위 파일처럼 경로와 sha256을 적는다
             "single": {"path": str(args.single), "sha256": sha256(args.single)},

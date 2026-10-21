@@ -18,6 +18,7 @@
 - `rag.eval_multi.compare`에 선택 인자 `--single <single-doc 비교 결과 JSON>`를 둔다. 주면 그 JSON의 `verdict`와 multi-doc 전체 행(`group: all`)의 `recall@5`·`complete@5`로 `metadata_verdict`를 계산해 결과에 `metadata_verdict`를 더한다. 주지 않으면 지금처럼 판정 라벨을 내지 않는다(SPEC "보조 관찰": 메타데이터 가설이 아니면 multi-doc에 판정 라벨을 붙이지 않는다). 결정 사항 1
 - single-doc 결과 JSON이 dev-full 비교(`layer`)이고 `verdict`가 있는지 읽을 때 본다. 아니면 멈춘다. `min_gain`은 single-doc 결과에 기록되지 않는다(`rag.eval.compare`는 보호 경로이고 이 조각에서 고치지 않는다). 그래서 기록된 차이·구간을 지금 `min_gain`으로 다시 판정해 기록된 `verdict`와 다르면 멈춘다. 예: `min_gain` 0.01일 때 채택(+1.5%p, 하한 > 0)으로 기록된 결과를 0.02인 config로 넣으면 다시 판정한 값이 보류라 멈춘다
 - 결과의 `metadata_verdict`에 읽은 single-doc 결과의 경로와 sha256을 남긴다(순위 파일과 같은 방식)
+- single-doc 결과가 같은 실험의 비교인지 순위 파일 이름으로 본다. `rag.search`의 이름 규칙(`<인덱스>-<설정 이름>-<평가 층>.csv`)에서 single-doc 결과의 base·cand 이름에서 `-dev-full.csv`를 뗀 것과 `--base`·`--cand`에서 `-multidoc.csv`를 뗀 것이 다르면 멈춘다(가이드 판단할 곳 2, 사용자 결정 2026-10-21). 예: EXP-008 순위 쌍에 EXP-003 결과를 넣으면 멈춘다. 이름을 손으로 바꾼 순위 파일은 같은 실험이어도 멈춘다
 
 예: EXP-008처럼 single-doc 보류, multi-doc Recall@5 +1.65%p [+0.91, +2.49], Complete@5 [+2.00, +4.83]이면 `{"verdict": "채택", "stage": "multi-doc"}`. multi-doc Recall@5 +0.8%p [+0.2, +1.4]이면 보류(D-35의 예).
 
