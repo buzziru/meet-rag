@@ -38,6 +38,13 @@ def test_retriever_score_fusion_replaces_dense_and_bm25(tmp_path):
     assert ret.candidates(row, tokens)[0] == ["b", "a", "c"]
 
 
+def test_condition_fuse_off_needs_score_fusion(tmp_path):
+    # RRF 결합에는 cc 목록이 없어 지금까지는 첫 질의에서 KeyError가 났다(S19)
+    fuse_off = "+retriever.conditions={enabled: true, min_fields: 1, filter: best, fuse: false}"
+    with pytest.raises(SystemExit, match="fusion.method=score"):
+        Retriever(_tmp_cfg(tmp_path, ["+exp=exp001", "retriever.bm25.name=test", fuse_off]))
+
+
 class _Counts:
     def __init__(self, counts):
         self.counts = counts

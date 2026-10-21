@@ -291,6 +291,12 @@ class Retriever:
     def __init__(self, cfg):
         self.cfg = cfg
         self.r = r = cfg.retriever
+        # fuse=false는 최다 일치 문서를 점수 결합 목록(cc) 뒤에 붙인다. RRF 결합에는 cc가 없어
+        # 첫 질의에서 KeyError가 나므로 인덱스를 읽기 전에 멈춘다(S19, 리뷰 B-8)
+        cond = r.get("conditions")
+        if (r.type == "hybrid" and cond and cond.enabled and not cond.get("fuse", True)
+                and r.fusion.get("method", "rrf") != "score"):
+            raise SystemExit("conditions.fuse=false는 fusion.method=score에서만 쓴다(EXP-016)")
         self.index_dir = index_path(cfg, cfg.chunking)
         self.dirs = dense_dirs(cfg)
         for d, c in zip(self.dirs, dense_chunkings(cfg), strict=True):
