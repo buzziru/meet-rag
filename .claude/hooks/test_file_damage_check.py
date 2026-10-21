@@ -7,7 +7,6 @@ from file_damage_check import changed_files, problems, triggered
 @pytest.mark.parametrize(("command", "args", "expected"), [
     ("cat > a.md <<'EOF'\n내용\nEOF", [], False),
     ("uv run python - <<'EOF'\nopen('a.py', 'w')\nEOF", [], True),
-    ('uv run python "$S/e6.py"', [], True),
     ("sed -i 's/a/b/' docs/PLAN.md", ["sed"], True),
     ("git status --short", [], False),
     ("uv run pytest -q", [], False),

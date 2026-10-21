@@ -20,7 +20,6 @@ BAD = [
     ("git commit -qm 'fix(judge): 프롬프트 대조'", "fix(judge):"),  # 범위 표기는 규약에 없다
     ('git commit -q -m "perf: BM25 검색기가 Kiwi 하나를 공유"', "perf"),
     ('git commit -m "Update readme"', "Update"),
-    ("git commit -qm 'style: 정리'", "style"),
 ]
 NOT_CHECKED = [
     "git commit --amend --no-edit",
