@@ -26,7 +26,7 @@
 - `basis.json`이 있으면 지금 설정으로 만든 값과 대조하고, 다르면 청크·임베딩을 건드리기 전에 멈춘다. 다른 설정으로 다시 만들려면 디렉터리를 지우거나 경로를 바꾼다
 - `chunks.jsonl`이 있는데 `basis.json`이 없으면(지금 있는 인덱스 전부) 멈춘다. `adopt_basis=true`를 주면 지금 설정으로 `basis.json`을 쓰고 이어 간다(결정 사항 1)
 - 있는 임베딩 조각을 건너뛸 때 조각의 행 수가 그 조각에 들어갈 청크 수와 같은지 본다(`np.load(mmap_mode="r")`). 다르면 멈춘다. `shard_size`를 바꿔 재개한 경우가 여기서 걸린다
-- `rag.retrieve.load_dense`: 인덱스마다 청크 수와 임베딩 행 수가 같은지 보고, `basis.json`의 임베딩 모델·revision·청킹·범위가 지금 config와 같은지 본다. 다르거나 `basis.json`이 없으면 멈춘다. 코퍼스 해시는 읽을 때 대조하지 않는다(인덱스를 만들 때만 본다)
+- `rag.retrieve.load_dense`는 인덱스마다 청크 수와 임베딩 행 수가 같은지 보고, `Retriever`는 인덱스를 읽기 전에 `basis.json`의 임베딩 모델·revision·청킹·범위가 지금 config와 같은지 본다. 다르거나 `basis.json`이 없으면 멈춘다. 코퍼스 해시는 읽을 때 대조하지 않는다(인덱스를 만들 때만 본다)
 
 ### 분할 파일 (A-3)
 
