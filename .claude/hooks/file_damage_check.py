@@ -48,8 +48,9 @@ def changed_files(root: Path = ROOT) -> list[str]:
     return paths
 
 
-def problems(paths: list[str], root: Path = ROOT) -> list[str]:
-    found = []
+def problems(paths: list[str], root: Path = ROOT) -> dict[str, list[str]]:
+    """파일별 손상 알림. 손상이 없는 파일은 넣지 않는다."""
+    found: dict[str, list[str]] = {}
     for rel in paths:
         path = root / rel
         if not path.is_file():
@@ -58,28 +59,54 @@ def problems(paths: list[str], root: Path = ROOT) -> list[str]:
         if b"\0" in raw:  # 이진 파일
             continue
         if b"\r\n" in raw:
-            found.append(f"{rel}: 줄바꿈에 CRLF가 있다(저장소 규약은 LF). "
-                         "스크립트로 쓸 때 open(..., newline='\\n')")
+            found.setdefault(rel, []).append(f"{rel}: 줄바꿈에 CRLF가 있다(저장소 규약은 LF). "
+                                             "스크립트로 쓸 때 open(..., newline='\\n')")
         if rel.endswith(".py"):
             try:
                 ast.parse(raw.decode("utf-8"), filename=rel)
             except (SyntaxError, UnicodeDecodeError) as e:
                 line = getattr(e, "lineno", "?")
-                found.append(f"{rel}:{line}: 파이썬 구문 오류({e.__class__.__name__}). "
-                             "heredoc 안 문자열의 이스케이프가 실제 줄바꿈으로 들어갔는지 본다")
+                found.setdefault(rel, []).append(
+                    f"{rel}:{line}: 파이썬 구문 오류({e.__class__.__name__}). "
+                    "heredoc 안 문자열의 이스케이프가 실제 줄바꿈으로 들어갔는지 본다")
     return found
+
+
+def unreported(found: dict[str, list[str]], root: Path, state: Path) -> list[str]:
+    """이미 알린 손상(같은 파일, 같은 수정 시각·크기)을 빼고 알림을 돌려준다.
+
+    작업트리 전체를 보므로, 기억하지 않으면 남아 있는 손상을 python 명령마다 다시 알린다
+    (PR #126 리뷰). 명령 전 상태를 저장하는 훅을 더하지 않고, 알린 것만 git 디렉터리에 적는다.
+    파일이 다시 바뀌었는데 여전히 깨져 있으면 새 손상으로 다시 알린다.
+    """
+    keys = {}
+    for rel in found:
+        st = (root / rel).stat()
+        keys[rel] = f"{rel}:{st.st_mtime_ns}:{st.st_size}"
+    seen = set(json.loads(state.read_text(encoding="utf-8"))) if state.exists() else set()
+    if keys or seen:  # 고친 파일은 기억에서 지운다
+        state.write_text(json.dumps(sorted(keys.values())), encoding="utf-8")
+    return [m for rel, msgs in found.items() if keys[rel] not in seen for m in msgs]
+
+
+def state_path(root: Path = ROOT) -> Path:
+    """알린 손상을 적는 파일. 워크트리에서는 .git이 파일이라 git 디렉터리를 물어 찾는다."""
+    git_dir = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], cwd=root,
+                             capture_output=True, text=True, encoding="utf-8").stdout.strip()
+    return Path(git_dir) / "claude-file-damage-seen.json"
 
 
 def main() -> int:
     data = json.loads(sys.stdin.buffer.read().decode("utf-8"))
     if not triggered(data.get("tool_input", {}).get("command", ""), sys.argv[1:]):
         return 0
-    found = problems(changed_files())
+    found = unreported(problems(changed_files()), ROOT, state_path())
     if not found:
         return 0
     msg = ["[파일 손상 검사] 이 Bash 명령 뒤 작업트리에서 아래를 찾았다. "
            "고친 파일이면 Edit 도구로 바로잡는다.",
-           *found, "이 명령과 관계없는 기존 변경이면 무시하고 사용자에게 한 줄로 알린다."]
+           *found, "이 명령과 관계없는 기존 변경이면 무시하고 사용자에게 한 줄로 알린다. "
+           "같은 손상은 파일이 다시 바뀔 때까지 다시 알리지 않는다."]
     sys.stderr.buffer.write(("\n".join(msg) + "\n").encode("utf-8"))
     return 2
 

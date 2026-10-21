@@ -1,7 +1,8 @@
+import json
 import subprocess
 
 import pytest
-from file_damage_check import changed_files, problems, triggered
+from file_damage_check import changed_files, problems, triggered, unreported
 
 
 @pytest.mark.parametrize(("command", "args", "expected"), [
@@ -23,9 +24,26 @@ def test_reports_broken_python_and_crlf(tmp_path):
     (tmp_path / "broken.py").write_text('x = "a\nb"\n', encoding="utf-8", newline="\n")
     (tmp_path / "crlf.py").write_bytes(b"x = 1\r\ny = 2\r\n")  # S16: write_text가 CRLF로 씀
     found = problems(["broken.py", "crlf.py"], tmp_path)
-    assert len(found) == 2
-    assert found[0].startswith("broken.py:1: 파이썬 구문 오류")
-    assert found[1].startswith("crlf.py: 줄바꿈에 CRLF")
+    assert list(found) == ["broken.py", "crlf.py"]
+    assert found["broken.py"][0].startswith("broken.py:1: 파이썬 구문 오류")
+    assert found["crlf.py"][0].startswith("crlf.py: 줄바꿈에 CRLF")
+
+
+def test_same_damage_is_reported_once(tmp_path):
+    # 남아 있는 손상을 python 명령마다 다시 알리지 않는다(PR #126 리뷰)
+    state = tmp_path / "seen.json"
+    broken = tmp_path / "a.py"
+    broken.write_text("x = (\n", encoding="utf-8", newline="\n")
+
+    def check():
+        return unreported(problems(["a.py"], tmp_path), tmp_path, state)
+
+    assert len(check()) == 1
+    assert check() == []  # 같은 파일, 같은 수정 시각·크기
+    broken.write_text("x = ((\n", encoding="utf-8", newline="\n")  # 다시 고쳤는데 여전히 깨짐
+    assert len(check()) == 1
+    broken.write_text("x = 1\n", encoding="utf-8", newline="\n")  # 고침
+    assert check() == [] and json.loads(state.read_text(encoding="utf-8")) == []
 
 
 def test_normal_escapes_and_binary_pass(tmp_path):
@@ -33,7 +51,7 @@ def test_normal_escapes_and_binary_pass(tmp_path):
                                     newline="\n")
     (tmp_path / "doc.md").write_text("범위 1\\~2분\n", encoding="utf-8", newline="\n")
     (tmp_path / "emb.npy").write_bytes(b"\x93NUMPY\0\r\n")
-    assert problems(["ok.py", "doc.md", "emb.npy", "missing.py"], tmp_path) == []
+    assert problems(["ok.py", "doc.md", "emb.npy", "missing.py"], tmp_path) == {}
 
 
 def test_changed_files_lists_modified_new_and_renamed_not_deleted(tmp_path):
