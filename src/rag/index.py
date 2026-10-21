@@ -4,6 +4,7 @@
 명세는 docs/slices/04-index.md. 인자는 Hydra override (예: chunking.chunk_tokens=512).
 """
 
+import hashlib
 import json
 import os
 import sys
@@ -28,6 +29,65 @@ if os.environ.get("HF_HOME") and not Path(os.environ["HF_HOME"]).is_absolute():
 def load_cfg(overrides=()):
     with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
         return compose(config_name="config", overrides=list(overrides))
+
+
+OVERWRITE_HINT = "retriever.run_name·경로를 확인하고, 바꾸려면 search.overwrite=true"
+
+
+def write_guarded(path: Path, text: str, overwrite: bool, hint: str = OVERWRITE_HINT) -> str:
+    """실험 산출물(순위·후보 쌍·점수·지문·분할 파일)을 쓴다. 같은 경로에 내용이 다른 파일이 있으면
+    overwrite가 아닐 때 멈춘다(S12, S15).
+
+    run_name을 빠뜨린 실행이 과거 실험 기록(판정 기준 등)을 되돌릴 수 없게 덮어쓰지 않게 한다.
+    """
+    if path.exists() and not overwrite:
+        if path.read_text(encoding="utf-8") == text:
+            return "같은 내용, 그대로 둠"
+        raise SystemExit(f"{path}에 내용이 다른 파일이 있다. {hint}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+    return "씀"
+
+
+def refuse_existing(path: Path, overwrite: bool) -> None:
+    """작업 전에 출력이 이미 있으면 멈춘다. 다시 만들면 내용이 달라지는 산출물(채점, 측정, judge
+    기록)은 끝에 write_guarded로 멈추면 작업 시간을 잃으므로 시작할 때 본다(S15, PR #122 리뷰)."""
+    if path.exists() and not overwrite:
+        raise SystemExit(f"{path}가 있다. 덮어쓰려면 search.overwrite=true")
+
+
+def file_sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def check_basis(path: Path, expect: dict) -> None:
+    """산출물을 만든 설정(지문 파일 path)이 expect와 같은지 본다. expect의 키만 대조한다(S15)."""
+    if not path.exists():
+        raise SystemExit(f"{path}가 없다. 산출물을 만든 설정을 실행 기록과 "
+                         "대조한 뒤 adopt_basis=true로 지문을 쓴다(S15)")
+    have = json.loads(path.read_text(encoding="utf-8"))
+    diff = sorted(k for k in expect if have.get(k) != expect[k])
+    if diff:
+        raise SystemExit(f"{path}의 지문이 지금 설정과 다르다({', '.join(diff)})")
+
+
+def index_basis(cfg, chunking) -> dict:
+    """인덱스를 읽을 때 대조하는 지문. 만들 때는 index_build_basis로 더 많이 대조한다."""
+    return {"model": cfg.embedding.model_name, "revision": cfg.embedding.get("revision"),
+            "chunking": OmegaConf.to_container(OmegaConf.create(chunking), resolve=True),
+            "scope": cfg.index.scope}
+
+
+def index_build_basis(cfg) -> dict:
+    small = cfg.index.scope == "dev-small"
+    return {**index_basis(cfg, cfg.chunking), "max_docs": cfg.index.max_docs,
+            "shard_size": cfg.index.shard_size,
+            "corpus_sha256": file_sha256(ROOT / cfg.paths.corpus),
+            "dev_small_sha256": file_sha256(ROOT / cfg.paths.dev_small_docs) if small else None}
 
 
 def index_path(cfg, chunking) -> Path:
@@ -73,14 +133,19 @@ def token_batches(lengths, max_batch_tokens: int, max_batch_size: int) -> list[l
 
 def embed_shards(texts, lengths, out_dir: Path, shard_size: int, encode, max_batch_tokens,
                  max_batch_size) -> int:
-    """청크를 shard_size개씩 임베딩해 out_dir/part-NNNNN.npy로 쓴다. 있는 조각은 건너뛴다."""
+    """청크를 shard_size개씩 임베딩해 out_dir/part-NNNNN.npy로 쓴다. 있는 조각은 행 수만 보고
+    건너뛴다(shard_size를 바꿔 재개하면 행 수가 달라 멈춘다, S15)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     made = 0
     for k, start in enumerate(range(0, len(texts), shard_size)):
         path = out_dir / f"part-{k:05d}.npy"
-        if path.exists():
-            continue
         part_texts = texts[start : start + shard_size]
+        if path.exists():
+            rows = np.load(path, mmap_mode="r").shape[0]
+            if rows != len(part_texts):
+                raise SystemExit(f"{path.name}의 행 수 {rows}가 조각 {k}의 청크 수 "
+                                 f"{len(part_texts)}와 다르다. index.shard_size를 확인한다")
+            continue
         part_lens = lengths[start : start + shard_size]
         emb = None
         for batch in token_batches(part_lens, max_batch_tokens, max_batch_size):
@@ -126,6 +191,26 @@ def main() -> None:
     index_dir = index_path(cfg, ch)
     index_dir.mkdir(parents=True, exist_ok=True)
     started = time.time()
+    chunks_path = index_dir / "chunks.jsonl"
+    basis_path = index_dir / "basis.json"
+    basis = index_build_basis(cfg)
+    if cfg.adopt_basis:  # 지문 없는 기존 인덱스에 지문만 쓰고 끝낸다. 모델을 불러오지 않는다
+        if not chunks_path.exists():
+            raise SystemExit(f"{chunks_path}가 없다")
+        with chunks_path.open(encoding="utf-8") as f:
+            n_rows = sum(1 for _ in f)
+        n_emb = sum(np.load(p, mmap_mode="r").shape[0]
+                    for p in sorted((index_dir / "emb").glob("part-*.npy")))
+        if n_rows != n_emb:  # 행 수가 다른 인덱스에는 지문을 쓰지 않는다
+            raise SystemExit(f"청크 {n_rows}개와 임베딩 {n_emb}행이 다르다")
+    if not basis_path.exists() and (cfg.adopt_basis or not chunks_path.exists()):
+        # 새 인덱스이거나, 지문 없는 기존 인덱스를 지금 설정으로 만들었다고 사용자가 확인한 경우
+        basis_path.write_text(json.dumps(basis, ensure_ascii=False, indent=2) + "\n",
+                              encoding="utf-8")
+    check_basis(basis_path, basis)
+    if cfg.adopt_basis:
+        print(f"지문 확인 -> {basis_path} (청크 {n_rows:,}개)")
+        return
 
     if cfg.index.chunk_only:  # 청크만 만든다. 모델 없이 같은 토크나이저만 불러온다(EXP-012)
         from transformers import AutoTokenizer
@@ -135,7 +220,6 @@ def main() -> None:
     else:
         model = load_model(cfg, ch.chunk_tokens + 2)  # 특수 토큰 2개
         tokenizer = model.tokenizer
-    chunks_path = index_dir / "chunks.jsonl"
     if not chunks_path.exists():
         rows = []
         chunker = make_chunker(ch, tokenizer)
@@ -159,6 +243,8 @@ def main() -> None:
                         index_dir / "emb", cfg.index.shard_size, encoder(model, cfg),
                         cfg.embedding.max_batch_tokens, cfg.embedding.max_batch_size)
     emb = load_embeddings(index_dir)
+    if len(emb) != len(rows):
+        raise SystemExit(f"청크 {len(rows)}개와 임베딩 {len(emb)}행이 다르다")
     meta_path = index_dir / "meta.json"
     before = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
     meta = {

@@ -25,7 +25,8 @@ from langsmith import traceable
 from langsmith.run_trees import get_cached_client
 from sentence_transformers import CrossEncoder
 
-from rag.index import ROOT, load_cfg  # .env를 읽는다
+from rag.index import ROOT, load_cfg, refuse_existing, write_guarded  # .env를 읽는다
+from rag.retrieve import rerank_basis, rerank_basis_path
 
 
 def load_model(rr) -> CrossEncoder:
@@ -40,6 +41,23 @@ def read_pairs(path: Path) -> list[dict]:
         return [json.loads(line) for line in f]
 
 
+def write_basis(cfg, overwrite: bool) -> str:
+    """점수 파일 옆에 만든 설정(지문)을 쓴다. 읽는 쪽(rag.retrieve)은 device·dtype을 보지 않는다."""
+    rr = cfg.retriever.rerank
+    basis = rerank_basis(cfg)
+    if rr.backend != "jev":
+        basis |= {"device": rr.device, "dtype": rr.dtype}
+    text = json.dumps(basis, ensure_ascii=False, indent=2) + "\n"
+    return write_guarded(rerank_basis_path(cfg), text, overwrite)
+
+
+def write_scores(cfg, rows: list[dict]) -> None:
+    text = "".join(json.dumps(r) + "\n" for r in rows)
+    state = write_guarded(ROOT / cfg.paths.rerank_scores, text, cfg.search.overwrite)
+    print(f"{len(rows):,} scores -> {cfg.paths.rerank_scores} ({state}), "
+          f"basis {write_basis(cfg, cfg.search.overwrite)}")
+
+
 def score(cfg) -> None:
     rr = cfg.retriever.rerank
     pairs = read_pairs(ROOT / cfg.paths.rerank_pairs)
@@ -47,12 +65,9 @@ def score(cfg) -> None:
     start = time.perf_counter()
     scores = model.predict([(p["query"], p["text"]) for p in pairs], batch_size=rr.batch_size)
     elapsed = time.perf_counter() - start
-    out = ROOT / cfg.paths.rerank_scores
-    with out.open("w", encoding="utf-8", newline="\n") as f:
-        for p, s in zip(pairs, scores, strict=True):
-            f.write(json.dumps({"qid": p["qid"], "doc_id": p["doc_id"], "score": float(s)}) + "\n")
-    print(f"{len(pairs):,} pairs -> {cfg.paths.rerank_scores} ({elapsed:.1f}s, "
-          f"{len(pairs) / elapsed:.1f} pairs/s)")
+    write_scores(cfg, [{"qid": p["qid"], "doc_id": p["doc_id"], "score": float(s)}
+                       for p, s in zip(pairs, scores, strict=True)])
+    print(f"{elapsed:.1f}s, {len(pairs) / elapsed:.1f} pairs/s")
 
 
 def latency(cfg) -> None:
@@ -73,9 +88,9 @@ def latency(cfg) -> None:
               "n_queries": len(t), "pairs_per_query": len(picked[1]),
               "mean": float(t.mean()), "p50": float(np.percentile(t, 50)),
               "p95": float(np.percentile(t, 95)), "max": float(t.max())}
-    out = ROOT / cfg.paths.rerank_latency
-    out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(result, ensure_ascii=False))
+    state = write_guarded(ROOT / cfg.paths.rerank_latency, json.dumps(result, indent=2) + "\n",
+                          cfg.search.overwrite)
+    print(json.dumps(result, ensure_ascii=False), f"({state})")
 
 
 def jev_body(group: list[dict], jv) -> dict:
@@ -121,13 +136,9 @@ def jev_score(cfg) -> None:
                                groups))
     finally:  # 호출이 중간에 실패해도 보낸 요청의 추적은 남긴다
         get_cached_client().flush()
-    out = ROOT / cfg.paths.rerank_scores
-    with out.open("w", encoding="utf-8", newline="\n") as f:
-        for g, rec in zip(groups, recs, strict=True):
-            answers = rec["response"]["answers"]
-            for i, p in enumerate(g):
-                row = {"qid": p["qid"], "doc_id": p["doc_id"], "score": answers[f"c{i}"]["score"]}
-                f.write(json.dumps(row) + "\n")
+    write_scores(cfg, [{"qid": p["qid"], "doc_id": p["doc_id"],
+                        "score": rec["response"]["answers"][f"c{i}"]["score"]}
+                       for g, rec in zip(groups, recs, strict=True) for i, p in enumerate(g)])
     t = np.array([r["latency"] for r in recs])
     usage = [r["response"]["usage"] for r in recs]
     result = {"backend": "jev", "model": jv.model, "n_queries": len(recs),
@@ -135,19 +146,27 @@ def jev_score(cfg) -> None:
               "cost": sum(u.get("cost") or 0 for u in usage),
               "latency_mean": float(t.mean()), "latency_p50": float(np.percentile(t, 50)),
               "latency_p95": float(np.percentile(t, 95)), "latency_max": float(t.max())}
-    out = ROOT / cfg.paths.rerank_latency
-    out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    print(f"{len(groups):,} queries -> {cfg.paths.rerank_scores}")
-    print(json.dumps(result))
+    state = write_guarded(ROOT / cfg.paths.rerank_latency, json.dumps(result, indent=2) + "\n",
+                          cfg.search.overwrite)
+    print(json.dumps(result), f"({state})")
 
 
 def main() -> None:
     cfg = load_cfg(sys.argv[1:])
     rr = cfg.retriever.rerank
-    if rr.backend == "jev":
-        jev_score(cfg)
-    else:
-        {"score": score, "latency": latency}[rr.mode](cfg)
+    if cfg.adopt_basis:  # 지문 없는 기존 점수 파일에 지문만 쓴다. 채점하지 않는다(S15)
+        if not (ROOT / cfg.paths.rerank_scores).exists():
+            raise SystemExit(f"{cfg.paths.rerank_scores}가 없다")
+        print(f"{rerank_basis_path(cfg)} ({write_basis(cfg, False)})")
+    else:  # 채점·측정 전에 출력이 있는지 본다(다시 하면 값이 조금씩 달라 끝에서 멈춘다)
+        outs = (["rerank_scores", "rerank_latency"] if rr.backend == "jev"
+                else ["rerank_scores" if rr.mode == "score" else "rerank_latency"])
+        for key in outs:
+            refuse_existing(ROOT / cfg.paths[key], cfg.search.overwrite)
+        if rr.backend == "jev":
+            jev_score(cfg)
+        else:
+            {"score": score, "latency": latency}[rr.mode](cfg)
 
 
 if __name__ == "__main__":

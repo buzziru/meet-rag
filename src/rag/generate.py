@@ -22,7 +22,7 @@ from omegaconf import OmegaConf
 from openai import OpenAI
 
 from rag.conditions import build_extractor
-from rag.index import ROOT, encoder, load_cfg, load_model
+from rag.index import ROOT, encoder, file_sha256, load_cfg, load_model
 from rag.retrieve import Retriever, chunks_by_doc, read_rerank_scores
 
 CONTEXT_META = ["date", "committee_name", "meeting_number", "session_number", "original"]
@@ -101,7 +101,8 @@ def git_state() -> tuple[str, bool]:
 
 
 def recipe(cfg, index_meta: dict, stream: bool) -> dict:
-    """같은 결과를 다시 만드는 데 필요한 설정 전부."""
+    """같은 결과를 다시 만드는 데 필요한 설정 전부. 조건 추출 설정(conditions, name_titles)과
+    재정렬 점수 파일 해시도 검색 결과를 바꾸므로 넣는다(S15)."""
     prompt = OmegaConf.to_container(cfg.prompt, resolve=True)
     commit, dirty = git_state()
     g = cfg.generator
@@ -111,6 +112,9 @@ def recipe(cfg, index_meta: dict, stream: bool) -> dict:
         "index": [f"{n}/{cfg.index.scope}" for n in index_meta["names"]],
         "n_chunks": index_meta["n_chunks"],
         "retriever": OmegaConf.to_container(cfg.retriever, resolve=True),
+        "conditions": OmegaConf.to_container(cfg.conditions, resolve=True),
+        "name_titles": list(cfg.ingest.name_titles),
+        "rerank_scores_sha256": index_meta.get("rerank_scores_sha256"),
         "context_docs": g.context_docs,
         "prompt_version": prompt["version"],
         "prompt_sha256": hashlib.sha256(
@@ -140,8 +144,9 @@ class Pipeline:
         # 재정렬 점수는 EXP-017이 Colab에서 만든 파일을 읽는다. 실시간 재정렬은 배포 SLICE(S14)
         r = cfg.retriever
         use_rerank = self.retriever.hybrid and r.get("rerank") and r.rerank.enabled
-        self.rerank_scores = (read_rerank_scores(ROOT / cfg.paths.rerank_scores)
-                              if use_rerank else None)
+        self.rerank_scores = read_rerank_scores(cfg) if use_rerank else None
+        self.index_meta["rerank_scores_sha256"] = (
+            file_sha256(ROOT / cfg.paths.rerank_scores) if use_rerank else None)
 
     def dev_query(self, qid: str) -> tuple[str, np.ndarray]:
         """dev 질의 원문과 S5 캐시 임베딩. dev만 담은 paths.queries_dev만 읽는다."""

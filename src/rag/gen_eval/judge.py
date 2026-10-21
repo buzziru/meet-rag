@@ -30,9 +30,9 @@ from rag.gen_eval.checks import (
     metadata_mismatches,
     refusal_split,
 )
-from rag.gen_eval.common import eval_qids, load_refs, read_jsonl
-from rag.index import ROOT, load_cfg
-from rag.search import write_guarded
+from rag.gen_eval.common import eval_qids, load_refs, read_jsonl, stable
+from rag.generate import git_state
+from rag.index import ROOT, load_cfg, refuse_existing, write_guarded
 
 RELEVANCE = {"답함": 1.0, "일부": 0.5, "답하지 않음": 0.0}
 
@@ -67,15 +67,22 @@ def format_contexts(contexts: list[dict]) -> str:
                        f"{c['session_number']}\n{c['text']}" for c in contexts)
 
 
-def judge_recipe(cfg, gen_recipe: dict) -> dict:
-    j = cfg.judge
+def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
+    """judge 설정, 코드 판정 설정(gen_eval), judge 실행 커밋, 생성 기록의 커밋 목록(S15).
+
+    생성 레시피는 커밋을 빼고(stable) 비교하므로, 커밋이 다른 생성 기록이 섞였는지는
+    gen_commits를 보고 판단한다(S15 결정 사항 2)."""
+    j, g = cfg.judge, cfg.gen_eval
     prompt = OmegaConf.to_container(j.prompt, resolve=True)
     return {"name": j.name, "model": j.model, "base_url": j.base_url,
             "params": OmegaConf.to_container(j.params),
             "extra_body": OmegaConf.to_container(j.extra_body) if j.extra_body else None,
             "step_params": OmegaConf.to_container(j.step_params) if j.get("step_params") else None,
             "prompt_version": prompt["version"], "prompt_sha256": sha(prompt),
-            "gen_recipe_sha256": sha(gen_recipe)}
+            "refusal": g.refusal, "filler_phrases": list(g.filler_phrases),
+            "chunk_key_min": g.chunk_key_min, "git_commit": git_state()[0],
+            "gen_commits": sorted({r["git_commit"] for r in gen_recipes}),
+            "gen_recipe_sha256": sha(stable(gen_recipes[0]))}
 
 
 class Judge:
@@ -220,16 +227,17 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
 
 def main() -> None:
     cfg = load_cfg(["index.scope=full", *sys.argv[1:]])
+    refuse_existing(ROOT / cfg.paths.gen_judge, cfg.search.overwrite)  # judge 호출 전에 본다
     gens = {r["qid"]: r for r in read_jsonl(ROOT / cfg.paths.gen_runs)}
     qids = [q for q in eval_qids(cfg) if q in gens]  # 표본 순서. 아직 생성하지 않은 qid는 뺀다
     refs = load_refs(cfg, qids)
     with (ROOT / cfg.paths.corpus).open(encoding="utf-8") as f:
         committees = {committee_base(json.loads(line)["committee_name"]) for line in f} - {""}
-    recipes = {sha(gens[q]["recipe"]) for q in qids}
+    recipes = {sha(stable(gens[q]["recipe"])) for q in qids}  # 이어 쓰기(done_qids)와 같은 규칙
     if len(recipes) != 1:
         raise SystemExit("생성 기록의 레시피가 여럿이다")
-    rec = judge_recipe(cfg, gens[qids[0]]["recipe"])
-    judge = Judge(cfg, session=f"meet-rag-judge-{sha(rec)[:16]}")
+    rec = judge_recipe(cfg, [gens[q]["recipe"] for q in qids])
+    judge = Judge(cfg, session=f"meet-rag-judge-{sha(stable(rec))[:16]}")
 
     def one(qid):
         return judge_record(judge, gens[qid], refs[qid], cfg, committees,

@@ -16,7 +16,7 @@ import pandas as pd
 
 from rag.conditions import build_extractor
 from rag.eval.metrics import load_gold
-from rag.index import ROOT, encoder, load_cfg, load_model
+from rag.index import ROOT, encoder, load_cfg, load_model, write_guarded
 from rag.retrieve import Retriever, chunks_by_doc, final_order, read_rerank_scores
 from rag.rewrite import needs_rewrite, rewrite_queries, signals
 
@@ -141,22 +141,6 @@ def embed_vm_queries(cfg) -> None:
     print(f"{len(qids)} queries -> {files['emb'].relative_to(ROOT)}")
 
 
-def write_guarded(path: Path, text: str, overwrite: bool) -> str:
-    """실험 산출물(순위 파일, 재정렬 후보 쌍)을 쓴다. 같은 경로에 내용이 다른 파일이 있으면
-    overwrite가 아닐 때 멈춘다(S12).
-
-    run_name을 빠뜨린 실행이 과거 실험 기록(판정 기준 등)을 되돌릴 수 없게 덮어쓰지 않게 한다.
-    """
-    if path.exists() and not overwrite:
-        if path.read_text(encoding="utf-8") == text:
-            return "같은 내용, 그대로 둠"
-        raise SystemExit(f"{path.relative_to(ROOT)}에 내용이 다른 파일이 있다. "
-                         "retriever.run_name·경로를 확인하고, 바꾸려면 search.overwrite=true")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8", newline="\n")
-    return "씀"
-
-
 def write_run(path: Path, rows: list[dict], overwrite: bool) -> str:
     """순위 파일(qid, rank, doc_id)을 쓴다."""
     return write_guarded(path, pd.DataFrame(rows).to_csv(index=False, lineterminator="\n"),
@@ -204,7 +188,7 @@ def search(cfg) -> None:
         texts = dict(zip(qids, query_texts, strict=True))
         picks = []
     if use_rerank:
-        rerank_scores = read_rerank_scores(ROOT / cfg.paths.rerank_scores)
+        rerank_scores = read_rerank_scores(cfg)
     use_rewrite = bool(r.get("rewrite") and r.rewrite.enabled)
     if use_rewrite and (export_pairs or use_rerank):
         raise SystemExit("retriever.rewrite는 재정렬(rerank-pairs, rerank)과 함께 쓰지 않는다")

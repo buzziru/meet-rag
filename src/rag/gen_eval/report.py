@@ -91,7 +91,9 @@ def main() -> None:
     for name, k, ref in refusal_table(rows):
         print(f"| {name} | {k} | {rate(ref, k)} |")
 
-    print(f"\n정답 청크에 든 핵심 진술 비율(잠정 경계 {cfg.gen_eval.chunk_key_min} 이상을 "
+    # 경계는 judge가 채점에 쓴 값이다. S15 전 기록에는 없다
+    key_min = rows[0]["judge_recipe"].get("chunk_key_min", "기록 없음")
+    print(f"\n정답 청크에 든 핵심 진술 비율(잠정 경계 {key_min} 이상을 "
           "'있음'으로 본다)\n\n| 비율 | 질의 | 거부 |\n| ---: | ---: | ---: |")
     for ratio, k, ref in chunk_ratio_table(rows):
         print(f"| {ratio:.2f} | {k} | {rate(ref, k)} |")

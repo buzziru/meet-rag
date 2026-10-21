@@ -12,7 +12,7 @@ import numpy as np
 
 from rag.bm25 import BM25Retriever
 from rag.conditions import ConditionIndex
-from rag.index import ROOT, index_path
+from rag.index import ROOT, check_basis, file_sha256, index_basis, index_path, load_embeddings
 
 
 def first_docs(order: np.ndarray, chunk_doc_ids: np.ndarray, k: int) -> list[str]:
@@ -131,8 +131,28 @@ def rerank_top(docs: list[str], scores: dict[str, float], depth: int) -> list[st
     return sorted(docs[:depth], key=lambda d: -scores[d]) + docs[depth:]
 
 
-def read_rerank_scores(path: Path) -> dict[str, dict[str, float]]:
-    """재정렬 점수 파일(rag.rerank)을 qid → 문서별 점수로 읽는다."""
+def rerank_basis_path(cfg) -> Path:
+    scores = ROOT / cfg.paths.rerank_scores
+    return scores.with_name(scores.name + ".basis.json")
+
+
+def rerank_basis(cfg) -> dict:
+    """재정렬 점수를 읽을 때 대조하는 지문(S15). device·dtype은 rag.rerank가 기록만 한다.
+    EXP-017 점수는 Colab cuda·float16으로 만들었고 config 기본값은 로컬 cpu·float32다."""
+    rr = cfg.retriever.rerank
+    if rr.backend == "jev":
+        b = {"backend": "jev", "model": rr.jev.model, "instructions": rr.jev.instructions,
+             "levels": list(rr.jev.levels)}
+    else:
+        b = {"backend": rr.backend, "model": rr.model, "revision": rr.revision,
+             "max_length": rr.max_length}
+    return {**b, "pairs_sha256": file_sha256(ROOT / cfg.paths.rerank_pairs)}
+
+
+def read_rerank_scores(cfg) -> dict[str, dict[str, float]]:
+    """재정렬 점수 파일(rag.rerank)을 지문을 대조한 뒤 qid → 문서별 점수로 읽는다."""
+    check_basis(rerank_basis_path(cfg), rerank_basis(cfg))
+    path = ROOT / cfg.paths.rerank_scores
     scores: dict[str, dict[str, float]] = {}
     with path.open(encoding="utf-8") as f:
         for x in map(json.loads, f):
@@ -170,21 +190,28 @@ def read_doc_ids(index_dir: Path) -> np.ndarray:
         return np.array([json.loads(line)["doc_id"] for line in f])
 
 
-def dense_dirs(cfg) -> list[Path]:
-    """dense 검색 인덱스 디렉터리. 기본 청킹 뒤에 retriever.extra_chunks를 붙인다(EXP-011)."""
+def dense_chunkings(cfg) -> list:
+    """dense 검색 인덱스의 청킹 설정. 기본 청킹 뒤에 retriever.extra_chunks를 붙인다(EXP-011)."""
     extra = cfg.retriever.get("extra_chunks") or []
     keys = set(cfg.chunking)
     for c in extra:  # 빠진 키를 기본 청킹 값으로 채우면 다른 인덱스를 조용히 고르게 된다
         if not hasattr(c, "keys") or set(c) != keys:
             raise ValueError(f"extra_chunks 항목은 {sorted(keys)} 키를 모두 적는다: {c}")
-    return [index_path(cfg, c) for c in [cfg.chunking, *extra]]
+    return [cfg.chunking, *extra]
+
+
+def dense_dirs(cfg) -> list[Path]:
+    return [index_path(cfg, c) for c in dense_chunkings(cfg)]
 
 
 def load_dense(dirs: list[Path]) -> tuple[np.ndarray, np.ndarray]:
-    """dense 청크의 문서 id와 임베딩. 인덱스 순서대로 이어 붙인다."""
-    ids = np.concatenate([read_doc_ids(d) for d in dirs])
-    parts = [p for d in dirs for p in sorted((d / "emb").glob("part-*.npy"))]
-    return ids, np.concatenate([np.load(p) for p in parts])
+    """dense 청크의 문서 id와 임베딩. 인덱스 순서대로 이어 붙인다. 인덱스마다 청크 수와 임베딩
+    행 수가 다르면 멈춘다(행이 밀리면 다른 문서의 임베딩과 짝지어진다, S15)."""
+    ids, embs = [read_doc_ids(d) for d in dirs], [load_embeddings(d) for d in dirs]
+    for d, i, e in zip(dirs, ids, embs, strict=True):
+        if len(i) != len(e):
+            raise SystemExit(f"{d}: 청크 {len(i)}개와 임베딩 {len(e)}행이 다르다")
+    return np.concatenate(ids), np.concatenate(embs)
 
 
 class Retriever:
@@ -195,6 +222,8 @@ class Retriever:
         self.r = r = cfg.retriever
         self.index_dir = index_path(cfg, cfg.chunking)
         self.dirs = dense_dirs(cfg)
+        for d, c in zip(self.dirs, dense_chunkings(cfg), strict=True):
+            check_basis(d / "basis.json", index_basis(cfg, c))
         self.dense_ids, self.chunk_emb = load_dense(self.dirs)
         self.hybrid = r.type == "hybrid"
         self.depth = r.fusion.depth if self.hybrid else r.top_k

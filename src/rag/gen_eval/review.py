@@ -14,7 +14,7 @@ import sys
 import pandas as pd
 
 from rag.gen_eval.common import load_refs, read_jsonl
-from rag.index import ROOT, load_cfg
+from rag.index import ROOT, load_cfg, refuse_existing
 
 CRITERIA = {"faithfulness": "충실성", "relevance": "답변 관련성", "inclusion": "핵심 답변 포함도",
             "answer_in_chunk": "청크에 핵심 답 있음"}
@@ -53,6 +53,7 @@ def main() -> None:
     cfg = load_cfg(["index.scope=full", *overrides])
     names = list(cfg.gen_eval.review.judges)
     out = ROOT / cfg.gen_eval.review.out
+    refuse_existing(out.with_suffix(".csv"), cfg.search.overwrite)  # 사람이 채운 검수 칸(S15)
     judged = {n: {r["qid"]: r for r in read_jsonl(ROOT / load_cfg(
         ["index.scope=full", *overrides, f"judge={n}"]).paths.gen_judge)} for n in names}
     gens = {r["qid"]: r for r in read_jsonl(ROOT / cfg.paths.gen_runs)}
