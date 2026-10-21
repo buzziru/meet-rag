@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from rag.eval_multi.compare import check_pair, diff_table, metadata_result
+from rag.eval_multi.compare import check_single, diff_table, metadata_result
 from rag.eval_multi.metrics import load_gold, metric_table, per_query, ranked_docs
 
 KS = [5, 10]
@@ -121,22 +121,35 @@ def test_metadata_result_uses_overall_recall_and_complete():
     assert out["recall@5"] == {"diff": 0.5, "ci": [0.5, 0.5]}
     reject = {"layer": "dev-full", "diff": -0.02, "ci": [-0.03, -0.01], "verdict": "기각"}
     assert metadata_result(reject, rows, 0.01)["stage"] == "single-doc"
-    with pytest.raises(SystemExit, match="dev-full"):
-        metadata_result({**hold, "layer": "dev-small"}, rows, 0.01)
 
 
-def test_check_pair_matches_run_names_across_layers():
-    p = "data/runs/kure-v1-fixed-512-64-"
-    single = {"base": {"run": p + "hybrid-cond-filter-dev-full.csv"},
-              "cand": {"run": p + "hybrid-cond-filter-law-dev-full.csv"}}
-    check_pair(single, Path(p + "hybrid-cond-filter-multidoc.csv"),
-               Path(p + "hybrid-cond-filter-law-multidoc.csv"))
+P = "data/runs/kure-v1-fixed-512-64-"
+MULTI = (Path(P + "hybrid-cond-filter-multidoc.csv"),
+         Path(P + "hybrid-cond-filter-law-multidoc.csv"))
+
+
+def single_json(base, cand, layer="dev-full"):
+    return {"layer": layer, "diff": 0.0, "ci": [0.0, 0.0], "verdict": "보류",
+            "base": {"run": P + base}, "cand": {"run": P + cand}}
+
+
+def test_check_single_matches_run_names_across_layers():
+    check_single(single_json("hybrid-cond-filter-dev-full.csv",
+                             "hybrid-cond-filter-law-dev-full.csv"), *MULTI)
     # EXP-003의 single-doc 결과를 EXP-008의 multi-doc 순위와 섞으면 멈춘다
-    other = {"base": {"run": p + "hybrid-dev-full.csv"},
-             "cand": {"run": p + "hybrid-cond-dev-full.csv"}}
     with pytest.raises(SystemExit, match="실험이 아니다"):
-        check_pair(other, Path(p + "hybrid-cond-filter-multidoc.csv"),
-                   Path(p + "hybrid-cond-filter-law-multidoc.csv"))
+        check_single(single_json("hybrid-dev-full.csv", "hybrid-cond-dev-full.csv"), *MULTI)
+
+
+@pytest.mark.parametrize("bad", [
+    {"diffs": [], "frozen_sha256": "x"},  # multi-doc 비교 결과를 잘못 넣음(전에는 KeyError)
+    single_json("hybrid-cond-filter-dev-small.csv", "hybrid-cond-filter-law-dev-small.csv",
+                layer="dev-small"),  # 층이 다름(전에는 "같은 실험이 아니다")
+    [],
+])
+def test_check_single_reports_wrong_input_before_name_check(bad):
+    with pytest.raises(SystemExit, match="dev-full 결과 JSON이어야 한다"):
+        check_single(bad, *MULTI)
 
 
 def test_metadata_result_stops_when_single_verdict_used_other_min_gain():

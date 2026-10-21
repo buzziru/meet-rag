@@ -73,3 +73,4 @@
 - 출력 불변: EXP-008 쌍을 `--single` 없이 `main`의 `rag/eval_multi/compare.py`와 이 브랜치 코드로 돌린 출력이 바이트까지 같다
 - 지시서와 달라진 것: single-doc 결과 JSON에 `min_gain`이 기록되지 않아(`rag.eval.compare`는 수정 허용 밖) `min_gain` 값을 직접 대조하지 않는다. 대신 기록된 차이·구간을 지금 `min_gain`으로 다시 판정해 기록된 판정과 다르면 멈춘다(가이드 판단할 곳 1, 승인한 지시서의 의도를 되살림). single-doc 모듈은 바꾸지 않아 과거 실험의 single-doc 평가 재현에 영향이 없다
 - 감사 P10 보고(어느 single-doc 결과로 판정했는지 남지 않음): 결과에 경로와 sha256을 남긴다
+- 입력 확인 순서(PR #129 리뷰): 이름 짝 확인이 형식 확인보다 먼저 돌아, `rag.eval.compare` 출력이 아닌 JSON은 KeyError, 층이 다른 결과는 "같은 실험이 아니다"로 멈췄다. 형식 확인(dev-full, `verdict`·`diff`·`ci`·`base.run`·`cand.run`)과 이름 짝 확인을 `check_single` 하나로 묶어 형식을 먼저 본다. 예: multi-doc 비교 결과를 `--single`로 넣으면 "--single은 rag.eval.compare의 dev-full 결과 JSON이어야 한다"로 멈춘다(실측)

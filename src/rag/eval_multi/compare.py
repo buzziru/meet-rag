@@ -34,14 +34,20 @@ def diff_table(base: pd.DataFrame, cand: pd.DataFrame, gold: pd.DataFrame, break
     return rows
 
 
-def check_pair(single: dict, base: Path, cand: Path) -> None:
-    """single-doc 결과가 같은 실험의 비교인지 순위 파일 이름으로 본다(S18).
+def check_single(single, base: Path, cand: Path) -> None:
+    """--single 입력이 rag.eval.compare의 dev-full 결과이고 같은 실험의 비교인지 본다(S18).
 
-    rag.search는 순위 파일을 `<인덱스>-<설정 이름>-<평가 층>.csv`로 쓴다. single-doc 결과의
-    base·cand 이름에서 `-dev-full.csv`를 뗀 것과 multi-doc 이름에서 `-multidoc.csv`를 뗀 것이
-    같아야 한다.
-    다른 실험의 결과를 넣으면 판정이 그 실험의 single-doc 단계로 정해진다.
+    형식을 먼저 본다. 다른 JSON을 넣으면 뒤의 이름 대조가 없는 칸을 읽어 KeyError가 나거나,
+    층이 다른 결과가 "같은 실험이 아니다"로 멈춰 원인을 가리키지 못한다(PR #129 리뷰).
+    이름 대조: rag.search는 순위 파일을 `<인덱스>-<설정 이름>-<평가 층>.csv`로 쓴다. single-doc
+    결과의 base·cand 이름에서 `-dev-full.csv`를 뗀 것과 multi-doc 이름에서 `-multidoc.csv`를 뗀
+    것이 같아야 한다. 다른 실험의 결과를 넣으면 판정이 그 실험의 single-doc 단계로 정해진다.
     """
+    if not (isinstance(single, dict) and single.get("layer") == "dev-full"
+            and all(k in single for k in ("verdict", "diff", "ci"))
+            and all(isinstance(single.get(r), dict) and "run" in single[r]
+                    for r in ("base", "cand"))):
+        raise SystemExit("--single은 rag.eval.compare의 dev-full 결과 JSON이어야 한다")
     for role, multi in [("base", base), ("cand", cand)]:
         dev = Path(single[role]["run"]).name
         if (not dev.endswith("-dev-full.csv") or not multi.name.endswith("-multidoc.csv")
@@ -53,12 +59,10 @@ def check_pair(single: dict, base: Path, cand: Path) -> None:
 def metadata_result(single: dict, rows: list[dict], min_gain: float) -> dict:
     """single-doc 비교 결과와 multi-doc 전체 행으로 메타데이터 가설을 판정한다(S18).
 
-    single-doc 결과가 dev-full 판정(rag.eval.compare 출력)이 아니면 멈춘다. 그 결과에는 min_gain이
-    기록되지 않으므로, 기록된 차이·구간을 지금 min_gain으로 다시 판정해 기록된 판정과 다르면 멈춘다
+    입력 형식은 check_single이 먼저 본다. single-doc 결과에는 min_gain이 기록되지 않으므로,
+    기록된 차이·구간을 지금 min_gain으로 다시 판정해 기록된 판정과 다르면 멈춘다
     (판정 기준이 바뀐 뒤 옛 결과를 넣은 경우).
     """
-    if single.get("layer") != "dev-full" or "verdict" not in single:
-        raise SystemExit("--single은 rag.eval.compare의 dev-full 결과 JSON이어야 한다")
     if verdict(single["diff"], *single["ci"], min_gain) != single["verdict"]:
         raise SystemExit(f"--single의 판정 {single['verdict']}이 지금 min_gain {min_gain}으로 "
                          "다시 판정한 값과 다르다. 지금 config로 rag.eval.compare를 다시 돌린다")
@@ -100,7 +104,7 @@ def main() -> None:
     }
     if args.single:
         single = json.loads(args.single.read_text(encoding="utf-8"))
-        check_pair(single, args.base, args.cand)
+        check_single(single, args.base, args.cand)
         result["metadata_verdict"] = {
             # 어느 single-doc 결과로 판정했는지 남긴다. 순위 파일처럼 경로와 sha256을 적는다
             "single": {"path": str(args.single), "sha256": sha256(args.single)},
