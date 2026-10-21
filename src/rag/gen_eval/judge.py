@@ -132,7 +132,9 @@ class Judge:
                 model=self.j.model, messages=messages, extra_body=extra, **params)
             saved = {"content": r.choices[0].message.content,
                      "usage": r.usage.model_dump() if r.usage else None}
-            path.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
+            # 빈 응답과 끝나지 않은 응답(잘림 등)은 저장하지 않아 다시 실행하면 다시 묻는다(D-42)
+            if saved["content"] and r.choices[0].finish_reason == "stop":
+                path.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
             with self.lock:
                 self.calls += 1
         return parse_json(saved["content"]), saved["usage"]

@@ -243,7 +243,8 @@ def test_judge_step_params_override_request_and_cache(tmp_path):
     def create(**kw):
         sent.append(kw)
         msg = SimpleNamespace(content='{"ok": 1}')
-        return SimpleNamespace(choices=[SimpleNamespace(message=msg)], usage=None)
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason="stop")],
+                               usage=None)
 
     j = object.__new__(Judge)
     j.j = SimpleNamespace(model="m")
@@ -259,6 +260,34 @@ def test_judge_step_params_override_request_and_cache(tmp_path):
     assert sent[0]["extra_body"] == {"thinking": {"type": "enabled"}}
     assert "reasoning_effort" not in sent[1] and sent[1]["extra_body"] == j.extra
     assert len(list(tmp_path.iterdir())) == 2
+
+
+def test_judge_does_not_cache_empty_or_unfinished(tmp_path):
+    import threading
+    from types import SimpleNamespace
+
+    from rag.gen_eval.judge import Judge
+
+    replies = [("", "stop"), ('{"ok": 1', "length"), ('{"ok": 1}', "stop")]
+    sent = []
+
+    def create(**kw):
+        content, finish = replies[len(sent)]
+        sent.append(kw)
+        choice = SimpleNamespace(message=SimpleNamespace(content=content), finish_reason=finish)
+        return SimpleNamespace(choices=[choice], usage=None)
+
+    j = object.__new__(Judge)
+    j.j = SimpleNamespace(model="m")
+    j.prompt = {"relevance": SimpleNamespace(system="sys", user="{x}")}
+    j.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    j.params, j.extra, j.step = {}, None, {}
+    j.cache, j.lock, j.calls, j.hits = tmp_path, threading.Lock(), 0, 0
+    assert j.ask("relevance", x="a")[0] is None  # 빈 응답: 저장 안 함
+    assert j.ask("relevance", x="a")[0] is None  # 잘린 응답: 저장 안 함
+    assert j.ask("relevance", x="a")[0] == {"ok": 1}
+    assert j.ask("relevance", x="a")[0] == {"ok": 1}  # 네 번째는 저장 응답
+    assert len(sent) == 3 and j.hits == 1 and len(list(tmp_path.iterdir())) == 1
 
 
 def test_judge_recipe_records_code_checks_and_ignores_gen_commit():
