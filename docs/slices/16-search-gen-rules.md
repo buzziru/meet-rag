@@ -31,7 +31,7 @@
 
 - `split_thought`·`answer_start`(Gemma 사고 과정 분리)를 새 모듈 `rag.llm`으로 옮긴다. `rag.rewrite`(검색)와 `rag.generate`가 여기서 import한다
 - `git_state`를 `rag.generate`에서 `rag.index`(공용 모듈)로 옮긴다. `rag.gen_eval.judge`가 생성 모듈을 import하지 않게 된다. `write_guarded`는 S15에서 옮겼다
-- `rag.gen_eval.checks`는 조건 정규식(`DATE`, `DOC_DATE`)을 계속 import하고, `judge_recipe`에 두 정규식의 패턴 문자열을 넣는다. 검색 개선으로 `conditions.DATE`를 바꾸면 judge 레시피가 달라져 이전 judge 결과와 섞이지 않는다. 정규식을 복사해 떼어 내지 않는 것은 같은 규칙이 두 곳에 생기기 때문이다(리뷰 제안)
+- `rag.gen_eval.checks`는 조건 정규식(`DATE`, `DOC_DATE`)을 계속 import하고, `judge_recipe`에 두 정규식의 패턴 문자열을 넣는다. 검색 개선으로 `conditions.DATE`를 바꾸면 judge 레시피의 패턴이 달라져, 어느 패턴으로 판정한 결과인지 기록에 남는다(judge 레시피를 비교하는 코드는 없고, judge 출력이 이미 있으면 시작할 때 멈춘다). 정규식을 복사해 떼어 내지 않는 것은 같은 규칙이 두 곳에 생기기 때문이다(리뷰 제안)
 - 과거 위치를 위한 재수출은 두지 않는다
 
 ### 생성의 재작성 설정 (C-3)
@@ -47,7 +47,7 @@
 
 - `configs/prompt/v1.yaml`·`v2.yaml`에 `refusal: 제공된 회의록에서 답을 찾지 못했습니다`를 두고, `system`의 거부 지시는 OmegaConf 상대 참조 `"${.refusal}."`로 그 값을 넣는다. 모델이 받는 메시지(system, user, 근거 서식)는 글자 하나까지 지금과 같아야 한다. `build_messages`는 바꾸지 않는다
 - 두 파일 머리의 "기록을 남긴 버전은 고치지 않고 새 파일을 만든다"에, 이 변경이 내용을 바꾸지 않은 예외(S16, 사용자 결정)라는 것을 적는다
-- `configs/config.yaml`의 `gen_eval.refusal`을 지운다. judge는 `cfg.prompt.refusal`을 읽는다. 생성 기록 경로 `paths.gen_runs`에 `${prompt.version}`이 들어 있어 judge 실행 config의 프롬프트가 그 기록을 만든 버전이다. judge 레시피의 `refusal` 키는 그대로 두고 값만 이 출처로 바꾼다
+- `configs/config.yaml`의 `gen_eval.refusal`을 지운다. judge는 `cfg.prompt.refusal`을 읽는다. 생성 기록 경로 `paths.gen_runs`에 `${prompt.version}`이 들어 있어 judge 실행 config의 프롬프트가 그 기록을 만든 버전이다. judge 레시피의 `refusal` 키는 그대로 두고 값만 이 출처로 바꾼다. 같은 버전 이름의 파일이 생성 뒤 바뀌었을 수 있으므로, judge는 시작할 때 생성 기록 레시피의 `prompt_sha256`을 `cfg.prompt`의 해시와 대조해 다르면 멈춘다(`check_prompt`, 감사 보고 반영). 그래서 judge가 읽는 문구는 생성 기록을 만든 프롬프트의 것이다. 예: v2로 생성한 뒤 `v2.yaml`의 `refusal`만 바꾸고 judge를 돌리면 "생성 기록의 프롬프트(v2)가 지금 prompt 설정과 다르다"로 judge 호출 전에 멈춘다
 - 테스트: `configs/prompt/*.yaml` 전부가 `refusal` 키를 갖고, 해석한 `system`에 그 문구가 들어 있다
 - 이 변경으로 v1·v2의 `prompt_sha256`이 달라진다. 기존 S14 생성 기록(v1, 20건)은 지금 코드로 이어 쓰거나 다시 채점할 수 없고, 그 커밋의 코드로 재현한다. 생성 베이스라인은 새 실행이라 영향이 없다
 
@@ -107,3 +107,4 @@
 - 멈춤: `rag.generate +exp=exp013 ask.qid=x`가 "생성은 retriever.rewrite를 지원하지 않는다"로 멈춘다
 - `rag.rewrite`·`rag.gen_eval.judge`에 `from rag.generate`가 없다
 - exp 전체 조합: 17개 모두 합성 인덱스로 최종 순위를 내고 `explain`과 같다. B-8의 `fuse: false`·`rrf` 조합은 어느 exp에도 없어 닿지 않았다
+- 감사 보고 반영: judge가 거부 문구를 지금 `cfg.prompt`에서 읽으면서 생성 기록의 프롬프트와 같은지 보지 않아, 결정 사항 1 (b)의 "생성 기록의 프롬프트에서 읽는다"와 어긋났다. `check_prompt`를 더해 `prompt_sha256`이 다르면 멈춘다. 기존 S14 v1 기록 20건은 이제 이 검사에서 멈춘다(이미 감수한 `prompt_sha256` 변경의 결과)

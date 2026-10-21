@@ -12,6 +12,7 @@ from rag.gen_eval.checks import (
 )
 from rag.gen_eval.common import done_qids, sample_qids
 from rag.gen_eval.judge import (
+    check_prompt,
     faithfulness,
     inclusion,
     judge_recipe,
@@ -270,6 +271,19 @@ def test_judge_recipe_records_code_checks_and_ignores_gen_commit():
     assert rec["gen_recipe_sha256"] == judge_recipe(cfg, [{**a, "git_commit": "C"}])[
         "gen_recipe_sha256"]
     assert judge_recipe(cfg, [{**a, "model": "n"}])["gen_recipe_sha256"] != rec["gen_recipe_sha256"]
+
+
+def test_check_prompt_stops_when_generation_prompt_differs():
+    from omegaconf import OmegaConf
+
+    from rag.generate import recipe
+    meta = {"names": ["idx"], "n_chunks": 3}
+    gen = recipe(load_cfg(["index.scope=full", "prompt=v1"]), meta, stream=False)
+    check_prompt(load_cfg(["index.scope=full", "prompt=v1"]), gen)  # 생성과 같은 프롬프트
+    changed = OmegaConf.merge(load_cfg(["index.scope=full", "prompt=v1"]),
+                              {"prompt": {"refusal": "다른 거부 문구"}})
+    with pytest.raises(SystemExit, match="v1"):  # 버전 이름은 같고 거부 문구만 다르다
+        check_prompt(changed, gen)
 
 
 def test_review_stops_when_filled_csv_exists(tmp_path, monkeypatch):

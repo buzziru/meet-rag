@@ -66,6 +66,14 @@ def format_contexts(contexts: list[dict]) -> str:
                        f"{c['session_number']}\n{c['text']}" for c in contexts)
 
 
+def check_prompt(cfg, gen_recipe: dict) -> None:
+    """생성 기록을 만든 프롬프트가 지금 cfg.prompt와 같은지 본다. 거부 문구(cfg.prompt.refusal)를
+    이 프롬프트에서 읽으므로, 버전 이름이 같아도 내용이 다르면 멈춘다(S16)."""
+    if gen_recipe["prompt_sha256"] != sha(OmegaConf.to_container(cfg.prompt, resolve=True)):
+        raise SystemExit(f"생성 기록의 프롬프트({gen_recipe['prompt_version']})가 지금 prompt "
+                         "설정과 다르다. 생성에 쓴 프롬프트 파일로 채점한다")
+
+
 def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
     """judge 설정, 코드 판정 설정(gen_eval, 프롬프트의 거부 문구), judge 실행 커밋, 생성 기록의
     커밋 목록(S15).
@@ -240,6 +248,7 @@ def main() -> None:
     recipes = {sha(stable(gens[q]["recipe"])) for q in qids}  # 이어 쓰기(done_qids)와 같은 규칙
     if len(recipes) != 1:
         raise SystemExit("생성 기록의 레시피가 여럿이다")
+    check_prompt(cfg, gens[qids[0]]["recipe"])
     rec = judge_recipe(cfg, [gens[q]["recipe"] for q in qids])
     judge = Judge(cfg, session=f"meet-rag-judge-{sha(stable(rec))[:16]}")
 
