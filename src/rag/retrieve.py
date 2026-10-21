@@ -18,6 +18,7 @@ from rag.index import (
     CHUNKS,
     ROOT,
     check_basis,
+    corpus_meta,
     file_sha256,
     index_basis,
     index_path,
@@ -315,10 +316,9 @@ class Retriever:
     def _condition_index(self) -> ConditionIndex:
         pos = {d: i for i, d in enumerate(self.doc_names)}
         docs = [None] * len(self.doc_names)
-        with (ROOT / self.cfg.paths.corpus).open(encoding="utf-8") as f:
-            for doc in map(json.loads, f):
-                if doc["doc_id"] in pos:
-                    docs[pos[doc["doc_id"]]] = doc
+        for doc in corpus_meta(self.cfg):
+            if doc["doc_id"] in pos:
+                docs[pos[doc["doc_id"]]] = doc
         c = self.cfg.conditions
         law_min = c.law_min_chars if c.get("agenda_law") else None
         return ConditionIndex(docs, self.r.conditions.year_ref_offsets, law_min)

@@ -21,7 +21,7 @@ from omegaconf import OmegaConf
 from openai import OpenAI
 
 from rag.conditions import build_extractor
-from rag.index import ROOT, encoder, file_sha256, git_state, load_cfg, load_model
+from rag.index import ROOT, corpus_meta, encoder, file_sha256, git_state, load_cfg, load_model
 from rag.llm import answer_start, split_thought
 from rag.retrieve import ChunkStore, Retriever, best_chunks, chunks_by_doc, read_rerank_scores
 
@@ -75,10 +75,9 @@ class Pipeline:
         self.store = ChunkStore(self.retriever.dirs)
         self.extractor = build_extractor(cfg) if self.retriever.use_cond else None
         self.index_meta = {"names": self.store.names, "n_chunks": int(self.store.bounds[-1])}
-        # 근거에 붙일 회의 정보. 시작할 때 한 번 읽는다(질의마다 코퍼스를 읽지 않는다, PR #71)
-        with (ROOT / cfg.paths.corpus).open(encoding="utf-8") as f:
-            self.doc_meta = {d["doc_id"]: {k: d[k] for k in CONTEXT_META}
-                             for d in map(json.loads, f)}
+        # 근거에 붙일 회의 정보. 시작할 때 한 번 읽는다(질의마다 코퍼스를 읽지 않는다, PR #71).
+        # 조건 색인·추출기가 읽은 코퍼스를 같이 쓴다(S17)
+        self.doc_meta = {d["doc_id"]: {k: d[k] for k in CONTEXT_META} for d in corpus_meta(cfg)}
         self.client = wrap_openai(OpenAI(base_url=cfg.generator.base_url,
                                          api_key=os.environ[cfg.generator.api_key_env]))
         self._model = None
