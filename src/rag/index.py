@@ -190,8 +190,24 @@ def embed_shards(texts, lengths, out_dir: Path, shard_size: int, encode, max_bat
     return made
 
 
+def embedding_parts(index_dir: Path) -> list[np.ndarray]:
+    """부분 파일을 순서대로 메모리 매핑으로 연다. 읽기는 stack_rows가 한다."""
+    return [np.load(p, mmap_mode="r") for p in sorted((index_dir / "emb").glob("part-*.npy"))]
+
+
+def stack_rows(parts: list[np.ndarray]) -> np.ndarray:
+    """부분 배열을 순서대로 이어 붙인다. 전체 크기 배열에 바로 읽어 넣어, 다 읽은 뒤
+    이어 붙일 때 생기는 사본(전체 인덱스 약 1.3GB)을 만들지 않는다(S20)."""
+    out = np.empty((sum(len(p) for p in parts), *parts[0].shape[1:]), dtype=parts[0].dtype)
+    start = 0
+    for p in parts:
+        out[start:start + len(p)] = p
+        start += len(p)
+    return out
+
+
 def load_embeddings(index_dir: Path) -> np.ndarray:
-    return np.concatenate([np.load(p) for p in sorted((index_dir / "emb").glob("part-*.npy"))])
+    return stack_rows(embedding_parts(index_dir))
 
 
 def load_model(cfg, max_seq_length: int):

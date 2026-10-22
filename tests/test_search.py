@@ -16,6 +16,7 @@ from rag.retrieve import (
     load_dense,
     rank_docs,
     rank_with_pool,
+    read_doc_ids,
     rerank_top,
     rrf,
     top_docs,
@@ -182,7 +183,7 @@ def test_rrf_weights_favor_weighted_list():
 
 def _write_index(d, doc_ids, emb):
     (d / "emb").mkdir(parents=True)
-    lines = [json.dumps({"doc_id": x}) for x in doc_ids]
+    lines = [json.dumps({"chunk_id": i, "doc_id": x}) for i, x in enumerate(doc_ids)]
     (d / "chunks.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
     np.save(d / "emb" / "part-00000.npy", emb)
 
@@ -226,7 +227,8 @@ def test_write_run_refuses_different_content(tmp_path):
 
 def _write_text_index(d, rows, emb):
     (d / "emb").mkdir(parents=True)
-    lines = [json.dumps({"doc_id": doc, "text": text}, ensure_ascii=False) for doc, text in rows]
+    lines = [json.dumps({"chunk_id": i, "doc_id": doc, "text": text}, ensure_ascii=False)
+             for i, (doc, text) in enumerate(rows)]
     (d / "chunks.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
     np.save(d / "emb" / "part-00000.npy", np.asarray(emb, dtype=np.float32))
 
@@ -282,6 +284,22 @@ def test_retriever_explain_records_stage_ranks(tmp_path):
     assert docs == ret.candidates(row, tokens)[0][:2]
     assert [s["dense_rank"] for s in stages] == [{"a": 1, "b": 2, "c": 3}[d] for d in docs]
     assert stages[0]["rrf_score"] >= stages[1]["rrf_score"] and "bm25_rank" in stages[0]
+
+
+def test_read_doc_ids_matches_full_parse(tmp_path):
+    # 본문에 따옴표·역슬래시·doc_id 문자열이 들어도 줄 앞부분만 읽은 값이 json.loads와 같다(S20)
+    rows = [{"chunk_id": 0, "doc_id": "d1", "start": 0, "text": '그는 "doc_id": "x" 라고 \\ 썼다'},
+            {"chunk_id": 1, "doc_id": 'd"2\\', "start": 5, "text": "끝"}]
+    lines = [json.dumps(r, ensure_ascii=False) for r in rows]
+    (tmp_path / "chunks.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    assert read_doc_ids(tmp_path).tolist() == [r["doc_id"] for r in rows]
+
+
+def test_read_doc_ids_stops_when_format_differs(tmp_path):
+    for row in [{"doc_id": "d1", "chunk_id": 0}, {"chunk_id": 3, "doc_id": "d1"}]:
+        (tmp_path / "chunks.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+        with pytest.raises(SystemExit, match=":1: 줄이"):
+            read_doc_ids(tmp_path)
 
 
 def test_load_dense_stops_when_rows_differ(tmp_path):
