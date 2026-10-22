@@ -467,3 +467,9 @@
 - 확인: `main`과 이 코드의 결과 JSON 5개(EXP-017 dev-small·dev-full 채점, EXP-014 대 EXP-017 비교, 같은 쌍의 multi-doc 채점·비교)가 `gold_sha256`을 빼면 같다
 - 같은 조각의 보호 경로 밖 변경: 질의 임베딩 캐시 지문(`queries-*.npz.basis.json`, 리뷰 C-11)과 생성 레시피의 `embedding_revision`·`query_prompt`, G1 원본 표본 덮어쓰기 방지(`docs/slices/21-eval-guards.md`)
 - 날짜: 2026-10-22
+
+## D-46 HF 모델·토크나이저는 revision을 고정한다
+- 결정: HF에서 받는 모델·토크나이저(임베딩, 리랭커 등)는 `configs/`에 revision(40자리 커밋 해시)을 고정하고, 불러오는 코드는 `revision=`을 넘긴다. CLAUDE.md 금지 절에 적고 `tests/test_revisions.py`가 점검한다(기본 설정과 `configs/exp/*` 전부의 `embedding.revision`·cross-encoder 리랭커 `revision`, `src/`의 HF 로딩 호출). API로 부르는 생성·judge 모델은 제공자가 버전을 고정해 주지 않아 같은 방식으로 고정할 수 없고, 모델 이름과 제공자를 레시피·기록에 남긴다
+- kure-v1: 기본 설정 `embedding.revision`을 `8b418a58414668e75532ed045c22d9ca018ae2b2`로 고정했다. HF `nlpai-lab/KURE-v1`의 `main` 최신 커밋(2026-09-07)이 이것이고 그 뒤 바뀌지 않아, kure-v1 산출물(2026-10-01\~08)은 모두 이 커밋으로 만들었다. 프로젝트 HF 캐시의 스냅샷도 이것 하나다. 재현 임베딩으로는 확인하지 않았다(사용자 결정). 질의 캐시 지문 3개(`data/index/kure-v1/queries-*.npz.basis.json`)의 revision도 같은 값으로 고쳤다. snowflake-ko(EXP-009)와 리랭커(EXP-005·017)는 이미 고정돼 있었다
+- 이유: kure-v1은 revision 없이 불러 `main`이 바뀌면 같은 설정이 다른 가중치를 받는다. 고정 누락은 새 모델을 들일 때마다 반복될 수 있어 테스트로 점검한다(사용자 결정 2026-10-22, PR #136 리뷰)
+- 날짜: 2026-10-22
