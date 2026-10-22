@@ -119,7 +119,7 @@ class Extractor:
         return {k: list(dict.fromkeys(v)) for k, v in found.items() if v}
 
 
-def doc_values(doc: dict, law_min_chars: int | None = None) -> dict[str, set[str]]:
+def doc_values(doc: dict, law_min_chars: int | None = None) -> dict[str, set[str] | frozenset[str]]:
     """문서 하나에서 조건 필드마다 맞는 값의 집합. 날짜는 연·연-월·연-월-일을 모두 담는다.
 
     law_min_chars가 있으면 안건 항목의 법률명을 `law` 필드로 더한다(EXP-008).
