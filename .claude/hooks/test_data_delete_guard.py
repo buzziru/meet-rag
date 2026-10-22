@@ -80,6 +80,21 @@ def test_worktree_session_deleting_original_data_asks(repo, session, command):
     assert out and out[0] == "ask"
 
 
+@pytest.mark.parametrize("command", [
+    'bash -c "rm -rf {r}/data/gen_eval"',  # 다른 셸에 넘긴 삭제도 명령이다
+    "powershell -NoProfile -Command \"Remove-Item -Recurse -Force '{r}/data/gen_eval'\"",
+])
+def test_wrapped_shell_deletion_asks(repo, session, command):
+    out = decide(command.format(r=repo.as_posix()), repo, session)
+    assert out and out[0] == "ask"
+
+
+@windows
+def test_wrapped_shell_through_link_is_denied(repo):
+    out = run(f'bash -c "rm -rf {repo.as_posix()}/wt2"', repo)
+    assert out and out[0] == "deny"
+
+
 @pytest.mark.parametrize("command", DATA_DELETES)
 def test_main_checkout_data_deletion_is_not_asked(repo, command):
     # 막으려는 것은 분리된 세션의 임의 삭제다. 메인 체크아웃의 data/ 삭제는 그대로 둔다

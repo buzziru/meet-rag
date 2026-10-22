@@ -40,6 +40,10 @@ PY_DELETE = re.compile(r"\b(?:shutil\.rmtree|os\.remove|os\.unlink|os\.rmdir)\b"
 DATA_TEXT = re.compile(r"(?:^|[\s\"'(=/\\])data[/\\]")
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n\s*\2\b", re.DOTALL)
 SPACED_QUOTE = re.compile(r"\"[^\"]*\s[^\"]*\"|'[^']*\s[^']*'")  # 공백이 든 따옴표 문자열
+# 다른 셸에 넘긴 문자열(bash -c "…", powershell -Command "…", cmd /c "…")은 명령이다
+SHELL_ARG = re.compile(r"(?:\b(?:bash|sh)(?:\.exe)?\s+-c"
+                       r"|\bpowershell(?:\.exe)?(?:\s+-\w+)*?\s+-Command|\bpwsh(?:\.exe)?\s+-(?:c|Command)|\bcmd(?:\.exe)?\s+/[cCkK])\s+([\"'])(.*?)\1",
+                       re.IGNORECASE | re.DOTALL)
 SCAN_LIMIT = 50_000  # 링크를 찾으려고 훑는 항목 수 상한. 넘으면 확인을 띄운다
 SAFE = ("링크만 지우려면 PowerShell `(Get-Item <링크>).Delete()`나 cmd `rmdir <링크>`(/s 없이)를 "
         "쓰고, 링크를 모두 지운 뒤 디렉터리를 지운다")
@@ -113,7 +117,9 @@ def expand(tok: str, cwd: Path) -> list[str]:
 
 def decide(command: str, cwd: Path, root: Path = ROOT) -> tuple[str, str] | None:
     """(permissionDecision, 이유) 또는 None(그대로 둠)."""
-    text = SPACED_QUOTE.sub(" ", HEREDOC.sub(" ", command))  # 커밋 메시지·문서 본문은 명령이 아니다
+    body = HEREDOC.sub(" ", command)
+    # 커밋 메시지·문서 본문은 명령이 아니다. 다른 셸에 넘긴 문자열은 명령으로 다시 붙인다
+    text = "\n".join([SPACED_QUOTE.sub(" ", body)] + [m.group(2) for m in SHELL_ARG.finditer(body)])
     if not DELETE.search(text) and not PY_DELETE.search(command):  # Python 코드는 따옴표 안에 있다
         return None
     worktree = (root / ".git").is_file()
