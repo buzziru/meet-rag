@@ -10,6 +10,7 @@ from rag.index import (
     index_path,
     load_cfg,
     load_embeddings,
+    stack_rows,
     token_batches,
 )
 from rag.index import main as index_main
@@ -43,6 +44,14 @@ def test_embed_shards_keeps_order_and_resumes(tmp_path):
                         encode=lambda t: calls.append(t) or fake_encode(t), **args) == 1
     assert sum(len(c) for c in calls) == 3  # 지운 조각만 다시 만든다
     assert np.array_equal(load_embeddings(tmp_path), full)
+
+
+def test_stack_rows_matches_concatenate():
+    # 전체 크기 배열에 바로 읽어 넣어도 값·dtype·행 순서가 이어 붙인 결과와 같다(S20)
+    rng = np.random.default_rng(0)
+    parts = [rng.random((n, 4), dtype=np.float32) for n in (3, 1, 5)]
+    out = stack_rows(parts)
+    assert out.dtype == np.float32 and np.array_equal(out, np.concatenate(parts))
 
 
 def test_embed_shards_stops_when_shard_size_changes(tmp_path):

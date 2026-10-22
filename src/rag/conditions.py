@@ -9,6 +9,7 @@ import json
 import re
 import sys
 from collections import Counter
+from functools import cache
 
 from rag.index import ROOT, corpus_meta, load_cfg
 from rag.meta_dict import build as build_meta_dict
@@ -32,8 +33,12 @@ SUB_ITEM = re.compile(r"^[가-힣]\.")  # `가.` 같은 하위 항목 번호
 LAW_SEP = r"[\sㆍ·․‧]"  # 법률명 안에서 무시하는 공백·가운뎃점
 
 
-def agenda_laws(agenda: str, min_chars: int) -> set[str]:
+@cache
+def agenda_laws(agenda: str, min_chars: int) -> frozenset[str]:
     """안건 문자열의 법률명. 공백·가운뎃점을 지운 형태로, min_chars자 미만은 버린다.
+
+    같은 회의의 문서는 안건이 같아(문서 38,516개, 안건 5,822개) 결과를 기억한다. 조건 색인과
+    추출기가 같은 집합을 받으므로 고칠 수 없는 frozenset으로 돌려준다(S20).
 
     Args:
         agenda: 문서의 `agenda` 필드.
@@ -48,7 +53,7 @@ def agenda_laws(agenda: str, min_chars: int) -> set[str]:
             name = SUB_ITEM.sub("", re.sub(LAW_SEP, "", m.group(1)))
             if len(name) >= min_chars:
                 out.add(name)
-    return out
+    return frozenset(out)
 
 
 def full_year(y4, y2) -> str:
@@ -114,7 +119,7 @@ class Extractor:
         return {k: list(dict.fromkeys(v)) for k, v in found.items() if v}
 
 
-def doc_values(doc: dict, law_min_chars: int | None = None) -> dict[str, set[str]]:
+def doc_values(doc: dict, law_min_chars: int | None = None) -> dict[str, set[str] | frozenset[str]]:
     """문서 하나에서 조건 필드마다 맞는 값의 집합. 날짜는 연·연-월·연-월-일을 모두 담는다.
 
     law_min_chars가 있으면 안건 항목의 법률명을 `law` 필드로 더한다(EXP-008).
@@ -177,11 +182,13 @@ def build_extractor(cfg) -> Extractor:
     """
     c = cfg.conditions
     laws = set()
+    # 문서마다 OmegaConf 값을 읽으면 그것만 수 초가 걸려 반복문 전에 한 번 읽는다(S20)
+    law_min = c.law_min_chars if c.get("agenda_law") else None
 
     def docs():
         for doc in corpus_meta(cfg):  # 조건 색인과 같이 한 번만 읽는다(S17)
-            if c.get("agenda_law"):  # 법률명 사전은 코퍼스 안건에서만 만든다(EXP-008)
-                laws.update(agenda_laws(doc.get("agenda", ""), c.law_min_chars))
+            if law_min is not None:  # 법률명 사전은 코퍼스 안건에서만 만든다(EXP-008)
+                laws.update(agenda_laws(doc.get("agenda", ""), law_min))
             yield doc
 
     meta_dict = build_meta_dict(docs())

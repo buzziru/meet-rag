@@ -165,6 +165,9 @@ def test_agenda_laws():
     assert agenda_laws(agenda, 3) == {
         "은행법", "인터넷전문은행설립및운영에관한특례법", "416세월호참사피해구제특별법"}
     assert agenda_laws("1. 업무보고가. 보건복지부", 3) == set()
+    # 같은 안건은 기억한 결과를 돌려주고, 받은 쪽이 고칠 수 없다(S20)
+    assert agenda_laws(agenda, 3) is agenda_laws(agenda, 3)
+    assert isinstance(agenda_laws(agenda, 3), frozenset)
 
 
 def test_law_extract_allows_spaces_and_blocks_longer_names():

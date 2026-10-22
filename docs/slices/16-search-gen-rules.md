@@ -104,6 +104,7 @@
 - 결과 불변(검색): `rag.search +exp=exp017`의 dev-small·dev-full·multi-doc 순위와 dev-small 후보 쌍(`search.mode=rerank-pairs`, 20,780쌍)이 모두 "같은 내용, 그대로 둠". E-1 뒤 dev-small을 다시 돌려 같은 결과
 - 결과 불변(생성 근거): 기존 생성 기록(v1, 20건)의 qid로 `Pipeline.retrieve`만 불러 근거 dict 전체(문서·청크·점수·단계 기록·본문·회의 정보)가 20건 모두 같다. LangSmith 추적은 끄고(`LANGSMITH_TRACING=false`), 생성 API는 부르지 않았다
 - 프롬프트 불변: `main`의 v1·v2 파일과 바꾼 파일로 같은 근거·질의를 `build_messages`에 넣은 메시지가 두 버전 모두 같다. 해석한 `system`에 `refusal` 문구가 들어 있다
+- full 후보 쌍(2026-10-22, 이슈 #133): `rag.search +exp=exp017 index.scope=full search.mode=rerank-pairs`(60,320쌍)와 `… search.queries=multidoc`(12,000쌍)이 기존 파일과 "같은 내용, 그대로 둠". `ChunkStore.texts`가 full 인덱스에서도 같은 본문을 읽는다
 - 멈춤: `rag.generate +exp=exp013 ask.qid=x`가 "생성은 retriever.rewrite를 지원하지 않는다"로 멈춘다
 - `rag.rewrite`·`rag.gen_eval.judge`에 `from rag.generate`가 없다
 - exp 전체 조합: 17개 모두 합성 인덱스로 최종 순위를 내고 `explain`과 같다. B-8의 `fuse: false`·`rrf` 조합은 어느 exp에도 없어 닿지 않았다

@@ -8,6 +8,7 @@
 """
 
 import json
+from json.decoder import scanstring
 from pathlib import Path
 
 import numpy as np
@@ -19,10 +20,11 @@ from rag.index import (
     ROOT,
     check_basis,
     corpus_meta,
+    embedding_parts,
     file_sha256,
     index_basis,
     index_path,
-    load_embeddings,
+    stack_rows,
 )
 
 
@@ -257,8 +259,18 @@ class ChunkStore:
 
 
 def read_doc_ids(index_dir: Path) -> np.ndarray:
-    with (index_dir / CHUNKS).open(encoding="utf-8") as f:
-        return np.array([json.loads(line)["doc_id"] for line in f])
+    """청크 줄의 doc_id. rag.index가 `chunk_id`(줄 번호), `doc_id` 순으로 쓰므로 줄 앞부분만 읽고
+    본문은 파싱하지 않는다(전체 인덱스 하나에 2.1초 → 0.4초, S20). 본문은 줄 끝에 있고 따옴표가
+    `\\"`로 쓰여 이 머리와 겹치지 않는다. 쓰는 형식이 바뀌어 머리가 다르면 멈춘다."""
+    path = index_dir / CHUNKS
+    ids = []
+    with path.open(encoding="utf-8") as f:
+        for n, line in enumerate(f):
+            head = f'{{"chunk_id": {n}, "doc_id": "'
+            if not line.startswith(head):
+                raise SystemExit(f"{path}:{n + 1}: 줄이 {head!r}로 시작하지 않는다")
+            ids.append(scanstring(line, len(head))[0])
+    return np.array(ids)
 
 
 def dense_chunkings(cfg) -> list:
@@ -278,11 +290,11 @@ def dense_dirs(cfg) -> list[Path]:
 def load_dense(dirs: list[Path]) -> tuple[np.ndarray, np.ndarray]:
     """dense 청크의 문서 id와 임베딩. 인덱스 순서대로 이어 붙인다. 인덱스마다 청크 수와 임베딩
     행 수가 다르면 멈춘다(행이 밀리면 다른 문서의 임베딩과 짝지어진다, S15)."""
-    ids, embs = [read_doc_ids(d) for d in dirs], [load_embeddings(d) for d in dirs]
-    for d, i, e in zip(dirs, ids, embs, strict=True):
-        if len(i) != len(e):
-            raise SystemExit(f"{d}: 청크 {len(i)}개와 임베딩 {len(e)}행이 다르다")
-    return np.concatenate(ids), np.concatenate(embs)
+    ids, parts = [read_doc_ids(d) for d in dirs], [embedding_parts(d) for d in dirs]
+    for d, i, ps in zip(dirs, ids, parts, strict=True):
+        if len(i) != sum(len(p) for p in ps):
+            raise SystemExit(f"{d}: 청크 {len(i)}개와 임베딩 {sum(len(p) for p in ps)}행이 다르다")
+    return np.concatenate(ids), stack_rows([p for ps in parts for p in ps])
 
 
 class Retriever:
