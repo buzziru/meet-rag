@@ -5,6 +5,9 @@
   핵심 답변 포함도(핵심 진술 추출 → 답변 포함 판정), 정답 문서 근거 청크의 핵심 답(같은
   핵심 진술 → 청크 포함 판정, D-40). 전체 거부 답변은 근거 청크 판정만 하고, 부분 거부 답변은
   거부 문장을 뺀 내용을 채점한다(S14b, D-41)
+- 질의 항목 단위 거부 평가(gen_eval.item_eval): 질의를 항목으로 나눠 항목마다 근거의 정보 상태와
+  답변의 처리를 판정하고, 맞는 처리인지는 코드가 정한다(S14c, D-41 결정 2~4). 모든 답변에 한다.
+  gen_eval.item_cases를 주면 생성 기록 대신 판정 확인 사례를 이 평가로만 채점한다
 judge 응답은 요청 본문 해시로 paths.gen_judge_cache에 저장해 다시 실행할 때 쓴다
 (같은 입력이면 API를 부르지 않는다). 명세는 docs/slices/14-gen-eval.md.
 인자는 Hydra override(예: +exp=exp017 gen_eval.n=20).
@@ -25,8 +28,11 @@ from openai import OpenAI
 
 from rag.conditions import DATE, DOC_DATE, committee_base
 from rag.gen_eval.checks import (
+    HANDLINGS,
+    STATES,
     citation_check,
     gold_position,
+    item_outcome,
     metadata_mismatches,
     refusal_split,
 )
@@ -83,16 +89,19 @@ def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
     그 패턴을 남긴다. 검색 쪽에서 바꾸면 이전 judge 결과와 레시피가 달라진다(S16)."""
     j, g = cfg.judge, cfg.gen_eval
     prompt = OmegaConf.to_container(j.prompt, resolve=True)
-    return {"name": j.name, "model": j.model, "base_url": j.base_url,
+    rec = {"name": j.name, "model": j.model, "base_url": j.base_url,
             "params": OmegaConf.to_container(j.params),
             "extra_body": OmegaConf.to_container(j.extra_body) if j.extra_body else None,
             "step_params": OmegaConf.to_container(j.step_params) if j.get("step_params") else None,
             "prompt_version": prompt["version"], "prompt_sha256": sha(prompt),
             "refusal": cfg.prompt.refusal, "filler_phrases": list(g.filler_phrases),
             "check_patterns": {"date": DATE.pattern, "doc_date": DOC_DATE.pattern},
-            "chunk_key_min": g.chunk_key_min, "git_commit": git_state()[0],
-            "gen_commits": sorted({r["git_commit"] for r in gen_recipes}),
-            "gen_recipe_sha256": sha(stable(gen_recipes[0]))}
+            "chunk_key_min": g.chunk_key_min, "item_eval": g.item_eval,
+            "git_commit": git_state()[0]}
+    if gen_recipes:  # 판정 확인 사례(합성 답변)에는 생성 기록이 없다(S14c)
+        rec |= {"gen_commits": sorted({r["git_commit"] for r in gen_recipes}),
+                "gen_recipe_sha256": sha(stable(gen_recipes[0]))}
+    return rec
 
 
 class Judge:
@@ -202,6 +211,32 @@ def inclusion(judge: Judge, answer: str, ks: dict | None) -> dict:
             "key_statements": ks["keys"]}
 
 
+def item_eval(judge: Judge, question: str, answer: str, contexts: list[dict]) -> dict:
+    """질의 항목 단위 거부 평가(S14c, D-41 결정 2~4). 항목과 정보 상태는 답변 없이 근거로 정하고,
+    처리는 근거 없이 답변으로 정한다. 맞는 처리인지는 코드가 정한다(checks.item_outcome).
+    값이 정해진 값 밖이거나 처리의 항목 번호가 항목 단계와 다르면 형식 오류로 판단 불가다."""
+    it, u1 = judge.ask("items", question=question, contexts=format_contexts(contexts))
+    items = it.get("items") if it else None
+    if (not isinstance(items, list) or not items
+            or not all(isinstance(i, dict) and isinstance(i.get("item"), str)
+                       and i.get("state") in STATES and isinstance(i.get("speaker_unclear"), bool)
+                       for i in items)):
+        return {"error": "items 형식 오류", "usage": [u1]}
+    listed = [{"n": k, "item": i["item"]} for k, i in enumerate(items, 1)]
+    hd, u2 = judge.ask("item_handling", question=question, answer=answer,
+                       items=json.dumps(listed, ensure_ascii=False))
+    handling = hd.get("handling") if hd else None
+    if (not isinstance(handling, list)
+            or [h.get("n") if isinstance(h, dict) else None for h in handling]
+            != [x["n"] for x in listed]
+            or not all(h.get("handling") in HANDLINGS for h in handling)):
+        return {"error": "item_handling 형식 오류", "items": items, "usage": [u1, u2]}
+    rows = [{**i, "handling": h["handling"], "handling_reason": h.get("reason"),
+             "outcome": item_outcome(i["state"], h["handling"])}
+            for i, h in zip(items, handling, strict=True)]
+    return {"items": rows, "usage": [u1, u2]}
+
+
 @traceable(name="judge_record", process_inputs=lambda i: {"qid": i["gen"]["qid"]})
 def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) -> dict:
     """생성 기록 하나의 코드 판정과 judge 채점.
@@ -229,6 +264,8 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
             out["chunk_keys"] = chunk
             if chunk["score"] is not None:
                 out["answer_in_chunk"] = chunk["score"] >= g.chunk_key_min
+    if g.item_eval:  # 거부 여부와 관계없이 답변 전체로 본다(S14c)
+        out["item_eval"] = item_eval(judge, gen["query"], answer, contexts)
     if kind == "full":  # 전체 거부는 거부 집계로만 본다(초안 "거부 답변의 처리")
         return out
     out["citations"] = citation_check(rest, len(contexts), list(g.filler_phrases))
@@ -239,8 +276,40 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
     return out
 
 
+def check_item_steps(cfg) -> None:
+    """항목 평가를 켰는데 judge 지시 파일에 두 단계가 없으면 judge 호출 전에 멈춘다(S14c, ADR-0056).
+    없으면 첫 생성 기록에서 원인을 알 수 없는 KeyError가 난다."""
+    missing = [s for s in ("items", "item_handling") if s not in cfg.judge.prompt]
+    if cfg.gen_eval.item_eval and missing:
+        raise SystemExit(f"gen_eval.item_eval=true인데 judge 지시 {cfg.judge.prompt.version}에 "
+                         f"{', '.join(missing)} 단계가 없다. j_v7 이후 지시를 쓰거나 "
+                         "gen_eval.item_eval=false로 실행한다")
+
+
+def judge_cases(cfg) -> None:
+    """판정 확인 사례(S14c)를 항목 평가로만 채점한다. 사례 줄은 case·query·answer·contexts를 담는다.
+    결과는 judge 지시·설정에 따라 달라지므로 출력이 있으면 시작할 때 멈춘다."""
+    src = ROOT / cfg.gen_eval.item_cases
+    out = src.with_suffix(".judge.jsonl")
+    refuse_existing(out, cfg.search.overwrite)
+    cases = read_jsonl(src)
+    rec = judge_recipe(cfg, [])  # 합성 답변이라 생성 기록이 없다
+    judge = Judge(cfg, session=f"meet-rag-judge-{sha(stable(rec))[:16]}")
+    with ThreadPoolExecutor(cfg.judge.concurrency) as ex:
+        rows = list(ex.map(lambda c: {"case": c["case"], **item_eval(
+            judge, c["query"], c["answer"], c["contexts"])}, cases))
+    get_cached_client().flush()
+    text = "".join(json.dumps({**r, "judge_recipe": rec}, ensure_ascii=False) + "\n" for r in rows)
+    out.write_text(text, encoding="utf-8", newline="\n")
+    print(f"사례 {len(rows)}개, API 호출 {judge.calls}회, 저장된 응답 {judge.hits}회 -> {out}")
+
+
 def main() -> None:
     cfg = load_cfg(["index.scope=full", *sys.argv[1:]])
+    check_item_steps(cfg)
+    if cfg.gen_eval.item_cases:
+        judge_cases(cfg)
+        return
     refuse_existing(ROOT / cfg.paths.gen_judge, cfg.search.overwrite)  # judge 호출 전에 본다
     gens = {r["qid"]: r for r in read_jsonl(ROOT / cfg.paths.gen_runs)}
     qids = [q for q in eval_qids(cfg) if q in gens]  # 표본 순서. 아직 생성하지 않은 qid는 뺀다

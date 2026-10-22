@@ -4,7 +4,9 @@ defaults:
   - retriever: dense
   - generator: openrouter
   - prompt: v2
-  - judge: deepseek_go_mixed  # j_v5, 기본 사고 과정 끔 + verdicts·key_statements만 low(D-40, 2026-10-20)
+  - judge: deepseek_go_mixed  # 기본 사고 과정 끔 + verdicts·key_statements·items만 low(D-40, S14c)
+  # j_v7 = j_v5 + 질의 항목 단위 거부 평가 두 단계(S14c). 기존 단계는 같아 저장 응답을 그대로 쓴다
+  - override judge/prompt: j_v7
   - _self_
 
 # 분할·표본 추출용. 값은 docs/SPEC.md와 같다
@@ -233,6 +235,13 @@ gen_eval:
   # 있다고 본다. 거부 교차 집계에 쓴다(S14 결정 5, 사용자 결정 2026-10-19). 근거가 부족한 잠정값이라
   # report가 비율 분포를 함께 남기고, 그 분포를 근거로 나중에 정한다(PR #106 코멘트, 2026-10-20)
   chunk_key_min: 0.5
+  # 질의 항목 단위 거부 평가(S14c, D-41 결정 2~4). 켜면 모든 생성 기록에 judge 단계 items·item_handling을
+  # 더 부른다(질의당 2회). judge 지시 파일에 두 단계가 없으면 judge 호출 전에 멈춘다.
+  # 키 이름 items는 DictConfig.items 메서드와 겹쳐 속성으로 읽으면 늘 참이 되므로 쓰지 않는다
+  item_eval: true
+  # 판정 확인 사례(S14c): 생성 기록 대신 합성 답변 사례 파일(jsonl)을 항목 평가로만 채점한다. 결과는
+  # 같은 이름의 .judge.jsonl에 쓴다. 질의 원문이 있어 data/ 아래에 둔다
+  item_cases: null
   # 내용 없는 문장(인사말, 도입 문장)의 문구. 이 문구가 든 문장은 인용 검사의 문장 수에서 빼고
   # 따로 센다. 생성 프롬프트 v2도 이런 문장을 쓰지 말라고 지시한다(PR #106 코멘트, 2026-10-20)
   filler_phrases: [다음과 같습니다, 아래와 같습니다, 감사합니다, 안녕하십니까]

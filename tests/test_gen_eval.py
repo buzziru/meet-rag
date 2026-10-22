@@ -4,17 +4,23 @@ import sys
 import pytest
 
 from rag.gen_eval.checks import (
+    HANDLINGS,
+    OUTCOMES,
+    STATES,
     citation_check,
     gold_position,
+    item_outcome,
     metadata_mismatches,
     refusal_split,
     sentences,
 )
 from rag.gen_eval.common import done_qids, sample_qids
 from rag.gen_eval.judge import (
+    check_item_steps,
     check_prompt,
     faithfulness,
     inclusion,
+    item_eval,
     judge_recipe,
     judge_record,
     key_presence,
@@ -24,7 +30,13 @@ from rag.gen_eval.judge import (
     render,
 )
 from rag.gen_eval.judge import main as judge_main
-from rag.gen_eval.report import chunk_ratio_table, criterion, refusal_table
+from rag.gen_eval.report import (
+    case_agreement,
+    chunk_ratio_table,
+    criterion,
+    item_summary,
+    refusal_table,
+)
 from rag.gen_eval.review import main as review_main
 from rag.index import load_cfg
 
@@ -150,10 +162,11 @@ def gen(answer, contexts):
             "provider": "p", "first_token_s": 0.1, "total_s": 0.2}
 
 
-def judge_cfg():
+def judge_cfg(item_eval=False):
     from omegaconf import OmegaConf
     return OmegaConf.create({"prompt": {"refusal": REFUSAL},
-                             "gen_eval": {"chunk_key_min": 0.5, "filler_phrases": FILLERS}})
+                             "gen_eval": {"chunk_key_min": 0.5, "filler_phrases": FILLERS,
+                                          "item_eval": item_eval}})
 
 
 def test_judge_record_checks_chunk_with_key_statements_even_for_refusal():
@@ -195,6 +208,98 @@ def test_partial_refusal_scores_content_without_refused_sentence():
     assert stub.seen["relevance"]["answer"] == "A 위원은 B를 제안했습니다[1]."
     assert stub.seen["key_checks"]["answer"] == PARTIAL
     assert out["citations"]["n_sentences"] == 1
+
+
+def items_reply(*states, unclear=False):
+    return {"items": [{"item": f"항목{k}", "reason": "r", "state": s, "evidence": [1],
+                       "speaker_unclear": unclear} for k, s in enumerate(states, 1)]}
+
+
+def handling_reply(*handlings):
+    return {"handling": [{"n": k, "reason": "r", "handling": h}
+                         for k, h in enumerate(handlings, 1)]}
+
+
+def test_item_outcome_follows_rules():
+    # 맞는 처리는 상태마다 하나(D-41 결정 2), 틀린 처리는 유형을 나눈다(결정 사항 2 (a))
+    assert item_outcome("있음", "답함") == "맞음"
+    assert item_outcome("일부", "부분임을 밝히고 답함") == "맞음"
+    assert item_outcome("없음", "거부") == "맞음"
+    assert item_outcome("있음", "다루지 않음") == "누락"  # (ㄱ)
+    assert item_outcome("없음", "다루지 않음") == "무언 생략"  # (ㄴ)
+    assert item_outcome("일부", "거부") == "과잉 거부"  # (ㄷ)
+    assert item_outcome("일부", "답함") == "안내 없이 부분 답함"
+    assert item_outcome("없음", "답함") == "근거 없이 답함"
+    # 모호·회피는 상황을 밝혔는지만 본다(D-41 결정 3, S14c 결정 사항 4)
+    for s in ("모호", "회피"):
+        assert item_outcome(s, "상황을 밝히고 답함") == "상황 전달"
+        rest = [h for h in HANDLINGS if h != "상황을 밝히고 답함"]
+        assert {item_outcome(s, h) for h in rest} == {"상황 미전달"}
+    # 있음·일부·없음에서 상황을 밝히고 답함은 답함과 같다
+    assert all(item_outcome(s, "상황을 밝히고 답함") == item_outcome(s, "답함")
+               for s in STATES[:3])
+    assert set(OUTCOMES) == {(s, h) for s in STATES[:3] for h in HANDLINGS
+                             if h != "상황을 밝히고 답함"}
+
+
+def test_item_eval_judges_each_item_and_format_errors():
+    stub = RecordingJudge({"items": items_reply("있음", "없음", unclear=True),
+                           "item_handling": handling_reply("답함", "다루지 않음")})
+    out = item_eval(stub, "q", "답변", [ctx(1)])
+    assert [i["outcome"] for i in out["items"]] == ["맞음", "무언 생략"]
+    assert out["items"][0]["speaker_unclear"] is True
+    assert "답변" not in stub.seen["items"].values()  # 정보 상태는 답변 없이 정한다
+    assert json.loads(stub.seen["item_handling"]["items"]) == [
+        {"n": 1, "item": "항목1"}, {"n": 2, "item": "항목2"}]
+    bad_state = StubJudge({"items": items_reply("있음", "애매")})
+    assert item_eval(bad_state, "q", "a", [ctx(1)])["error"] == "items 형식 오류"
+    assert item_eval(StubJudge({"items": {"items": []}}), "q", "a", [ctx(1)])["error"] == \
+        "items 형식 오류"
+    for reply in [handling_reply("답함"),  # 항목 수가 다르다
+                  {"handling": [{"n": 2, "handling": "답함"}, {"n": 1, "handling": "답함"}]},
+                  handling_reply("답함", "모름")]:
+        stub = StubJudge({"items": items_reply("있음", "없음"), "item_handling": reply})
+        assert item_eval(stub, "q", "a", [ctx(1)])["error"] == "item_handling 형식 오류"
+
+
+def test_judge_record_runs_item_eval_for_full_refusal():
+    stub = StubJudge({"items": items_reply("없음"), "item_handling": handling_reply("거부")})
+    ref = {"doc_id": "none", "answer_comment": "발언"}
+    out = judge_record.__wrapped__(stub, gen(REFUSAL, [ctx(1)]), ref, judge_cfg(True), set())
+    assert out["refusal"] == "full" and out["item_eval"]["items"][0]["outcome"] == "맞음"
+    assert "item_eval" not in judge_record.__wrapped__(stub, gen(REFUSAL, [ctx(1)]), ref,
+                                                       judge_cfg(False), set())
+
+
+def test_check_item_steps_stops_without_item_steps():
+    check_item_steps(load_cfg(["index.scope=full"]))  # 기본 j_v7에는 두 단계가 있다
+    with pytest.raises(SystemExit, match="items, item_handling 단계가 없다"):
+        check_item_steps(load_cfg(["index.scope=full", "judge/prompt=j_v5"]))
+    check_item_steps(load_cfg(["index.scope=full", "judge/prompt=j_v5",
+                               "gen_eval.item_eval=false"]))
+
+
+def test_item_summary_and_case_agreement():
+    def row(*pairs):
+        return {"item_eval": {"items": [
+            {"state": s, "handling": h, "outcome": item_outcome(s, h), "speaker_unclear": False}
+            for s, h in pairs]}}
+    rows = [row(("있음", "답함"), ("모호", "거부")),
+            row(("일부", "거부"), ("회피", "상황을 밝히고 답함")),
+            {"item_eval": {"error": "items 형식 오류"}}, {}]
+    s = item_summary(rows)
+    assert s["accuracy"] == (1, 2) and s["outcomes"]["상황 미전달"] == 1
+    assert s["situation"] == (1, 2)
+    assert s["queries"] == 3 and s["errors"] == 1 and s["wrong_queries"] == 1
+    assert s["table"]["모호", "거부"] == 1
+    cases = [{"case": "c1", "expected": [{"state": "있음", "handling": "답함"}]},
+             {"case": "c2", "expected": [{"state": "없음", "handling": "거부"}] * 2}]
+    results = [{"case": "c1", "items": [{"state": "일부", "handling": "답함",
+                                         "outcome": "안내 없이 부분 답함"}]},
+               {"case": "c2", "items": [{"state": "없음", "handling": "거부", "outcome": "맞음"}]}]
+    agree, notes = case_agreement(cases, results)
+    assert agree["항목"] == 1 and agree["state"] == 0 and agree["handling"] == 1
+    assert agree["항목 수 다른 사례"] == 1 and len(notes) == 3
 
 
 def test_report_criterion_and_refusal_table():

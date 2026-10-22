@@ -17,3 +17,9 @@ step_params:
     extra_body:
       thinking:
         type: enabled
+  # 발언자 세 갈래는 조건부 규칙이라 사고 과정을 켠다(S14c). item_handling은 기본(끔)
+  items:
+    reasoning_effort: low
+    extra_body:
+      thinking:
+        type: enabled
