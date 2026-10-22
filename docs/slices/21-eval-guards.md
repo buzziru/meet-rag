@@ -89,7 +89,7 @@ A-3·D-3의 eval 모듈은 보호 경로(CLAUDE.md 금지 절: `src/rag/eval/`, 
 - `src/rag/index.py`, `src/rag/retrieve.py`, `src/rag/search.py`, `src/rag/generate.py`, `src/rag/gen_eval/generate.py` (`retrieve.py`는 구현 때 더했다. 캐시 읽기 함수를 생성·검색이 함께 쓰는 곳에 두었다. 감사 지적으로 목록을 맞춤)
 - `tests/test_eval.py`, `tests/test_eval_multi.py`, `tests/test_sample_review.py`, `tests/test_search.py`, `tests/test_generate.py`, `tests/test_index.py`
 - `configs/config.yaml`(`embedding.revision`), `tests/test_revisions.py` (PR #136 사용자 리뷰 1로 더함)
-- `docs/slices/21-eval-guards.md`, `docs/slices/05-retrieve.md`(VM 절차 한 줄), `docs/DECISIONS.md`(D-45), `docs/PLAN.md`, `CLAUDE.md`(명령 줄에 `--overwrite`)
+- `docs/slices/21-eval-guards.md`, `docs/slices/05-retrieve.md`(VM 절차 한 줄), `docs/DECISIONS.md`(D-45), `docs/PLAN.md`, `CLAUDE.md`(명령 줄에 `--overwrite`, 금지 절에 revision 고정 규약(PR #136 사용자 리뷰 1, D-46))
 
 ## 범위 밖
 
