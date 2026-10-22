@@ -39,7 +39,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 ## 문서
 
 - 성공 기준·평가 프로토콜: `docs/SPEC.md`
-- 베이스라인 조각·실험 백로그: `docs/PLAN.md`
+- 베이스라인 조각·실험 백로그: `docs/PLAN.md`(진행 중·대기 항목과 최신 순서), 완료 기록: `docs/PLAN-done.md`
 - 조각 지시서: `docs/slices/NN-이름.md`
 - 실험 지시서: `docs/experiments/EXP-NNN.md` (config는 `configs/exp/expNNN.yaml`)
 - 실험 결과 요약: `docs/EXPERIMENTS.md`
@@ -53,7 +53,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 
 1. 끝난 실행이 있으면 평가하고 EXP 문서의 결과·결론을 채운다
 2. 판정한 실험을 EXPERIMENTS.md에 한 줄 추가하고, 채택이면 DECISIONS.md를 갱신한다
-3. PLAN.md 백로그 상태를 갱신하고 우선순위를 다시 정한다
+3. PLAN.md 백로그 상태를 갱신하고 우선순위를 다시 정한다. 끝난 항목(완료·채택·예외 채택·기각·닫음·대체)과 바뀐 "다음 순서"의 이전 줄은 문장을 고치지 않고 `docs/PLAN-done.md`의 같은 절로 옮긴다
 
 핸드오프는 사용자가 요청할 때 한다.
 
