@@ -52,17 +52,38 @@ def test_link_only_operations_pass(repo, command):
     assert run(command.format(r=repo.as_posix()), repo) is None
 
 
-@pytest.mark.parametrize("command", [
+@pytest.fixture
+def session(repo, tmp_path):
+    """원본 repo의 worktree에서 도는 하위 세션의 루트(.git이 gitdir 파일)."""
+    (repo / ".git" / "worktrees" / "w").mkdir(parents=True)
+    wt = tmp_path / "wt_session"
+    wt.mkdir()
+    (wt / ".git").write_text(f"gitdir: {(repo / '.git' / 'worktrees' / 'w').as_posix()}\n",
+                             encoding="utf-8")
+    return wt
+
+
+DATA_DELETES = [
     "rm {r}/data/gen_eval/x.json",
     "rm -rf data/gen_eval",  # cwd 기준 상대 경로
     "Remove-Item {r}/data/gen_eval/x.json",
     "rm data/gen_eval/없는파일.json",  # 아직 없어도 data/ 아래면 확인
     "git clean -fdx",
     "python -c \"import os; os.remove('data/gen_eval/x.json')\"",
-])
-def test_data_deletion_asks(repo, command):
-    out = run(command.format(r=repo.as_posix()), repo)
+]
+
+
+@pytest.mark.parametrize("command", DATA_DELETES)
+def test_worktree_session_deleting_original_data_asks(repo, session, command):
+    # 하위 세션은 <원본>/.claude/worktrees/<이름>에서 돈다. .git 파일로 원본 data/를 찾는다
+    out = decide(command.format(r=repo.as_posix()), repo, session)
     assert out and out[0] == "ask"
+
+
+@pytest.mark.parametrize("command", DATA_DELETES)
+def test_main_checkout_data_deletion_is_not_asked(repo, command):
+    # 막으려는 것은 분리된 세션의 임의 삭제다. 메인 체크아웃의 data/ 삭제는 그대로 둔다
+    assert run(command.format(r=repo.as_posix()), repo) is None
 
 
 @pytest.mark.parametrize("command", [
@@ -74,9 +95,20 @@ def test_data_deletion_asks(repo, command):
     "git status && uv run ruff check --format=full .",
     "git clean -fd",  # 추적하지 않는 파일만, 무시 파일(data/)은 남긴다
     "grep -n 'rm -rf' docs/x.md",
+    # 커밋 메시지·heredoc 본문에 적힌 삭제 명령은 명령이 아니다
+    'git commit -q -m "fix: rm -rf {r}/wt2/* 에서 data/ 링크를 보지 못함"',
+    "cat > x.md <<'EOF'\nrm -rf {r}/wt2\ngit worktree remove --force {r}/wt2\nEOF",
 ])
-def test_other_commands_pass(repo, command):
+def test_other_commands_pass(repo, session, command):
     assert run(command.format(r=repo.as_posix()), repo) is None
+    assert decide(command.format(r=repo.as_posix()), repo, session) is None
+
+
+@windows
+def test_wildcard_reaches_link_inside(repo):
+    # 셸이 wt2/*를 펼치면 wt2/data(junction)가 재귀 삭제 대상이 된다
+    out = run(f"rm -rf {repo.as_posix()}/wt2/*", repo)
+    assert out and out[0] == "deny"
 
 
 def test_git_bash_drive_path():

@@ -75,6 +75,18 @@
             "if": "Bash(*-delete*)",
             "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/data_delete_guard.py\"",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "if": "Bash(*rd *)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/data_delete_guard.py\"",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "if": "Bash(*ri *)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/data_delete_guard.py\"",
+            "timeout": 30
           }
         ]
       },
@@ -144,6 +156,18 @@
           {
             "type": "command",
             "if": "PowerShell(*-delete*)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/data_delete_guard.py\"",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(*rd *)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/data_delete_guard.py\"",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(*ri *)",
             "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/data_delete_guard.py\"",
             "timeout": 30
           }

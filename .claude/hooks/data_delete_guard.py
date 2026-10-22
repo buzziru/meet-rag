@@ -5,12 +5,17 @@
 `data/gen_eval`·`data/conditions`를 지웠다(섀도 복사본으로만 되살림).
 
 - 링크(junction·심볼릭 링크)를 만드는 것과 링크만 지우는 비재귀 명령은 그대로 둔다
-- 재귀 삭제·`git worktree remove`의 대상이 링크이거나 안에 링크가 있으면 막는다(deny)
-- `data/` 아래(링크를 따라간 위치 포함)를 지우는 명령, `git clean -x/-X`, `data/` 경로가 든
-  Python 삭제 호출은 사용자 확인을 띄운다(ask)
-명령 해석은 낱말 단위 근사다. 놓치는 형태가 있어도 위임 지시 규칙(meet-rag 스킬)이 함께 막는다.
+- 재귀 삭제·`git worktree remove`의 대상이 링크이거나 안에 링크가 있으면 막는다(deny). 링크를
+  따라가 원본을 지우는 경우만 막고, 링크를 먼저 지우면 통과한다. 세션과 관계없이 건다
+- worktree에서 도는 세션(`.git`이 파일)이 `data/`(원본 포함, 링크를 따라간 위치 포함)를 지우는
+  명령, `git clean -x/-X`, `data/` 경로가 든 Python 삭제 호출은 사용자 확인을 띄운다(ask).
+  메인 체크아웃의 `data/` 삭제는 그대로 둔다. 막으려는 것은 분리된 세션의 임의 삭제다(사용자
+  결정 2026-10-22)
+따옴표 안의 공백이 든 문자열(커밋 메시지 등)과 heredoc 본문은 명령으로 보지 않는다. 명령 해석은
+낱말 단위 근사다. 놓치는 형태가 있어도 위임 지시 규칙(meet-rag 스킬)이 함께 막는다.
 """
 
+import glob
 import json
 import os
 import re
@@ -33,6 +38,8 @@ CLEAN_IGNORED = re.compile(r"\bgit\s+clean\b[^\n;&|]*\s-[a-zA-Z]*[xX]")
 PY_DELETE = re.compile(r"\b(?:shutil\.rmtree|os\.remove|os\.unlink|os\.rmdir)\b"
                        r"|\.unlink\(|\.rmdir\(")
 DATA_TEXT = re.compile(r"(?:^|[\s\"'(=/\\])data[/\\]")
+HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n\s*\2\b", re.DOTALL)
+SPACED_QUOTE = re.compile(r"\"[^\"]*\s[^\"]*\"|'[^']*\s[^']*'")  # 공백이 든 따옴표 문자열
 SCAN_LIMIT = 50_000  # 링크를 찾으려고 훑는 항목 수 상한. 넘으면 확인을 띄운다
 SAFE = ("링크만 지우려면 PowerShell `(Get-Item <링크>).Delete()`나 cmd `rmdir <링크>`(/s 없이)를 "
         "쓰고, 링크를 모두 지운 뒤 디렉터리를 지운다")
@@ -82,13 +89,37 @@ def tokens(command: str) -> list[str]:
         return command.split()
 
 
+def data_dirs(root: Path) -> list[Path]:
+    """보호할 data/ 목록. worktree에서 돌면 원본 저장소의 data/도 넣는다. worktree의 `.git`은
+    `gitdir: <원본>/.git/worktrees/<이름>` 파일이라 원본을 거기서 찾는다(하위 세션은
+    `.claude/worktrees/<이름>`에서 돌고, 원본 data/를 절대 경로로 지울 수 있다)."""
+    dirs = [Path(os.path.normpath(root / "data"))]
+    git = root / ".git"
+    if git.is_file():
+        m = re.match(r"gitdir:\s*(.+)", git.read_text(encoding="utf-8").strip())
+        if m:
+            common = Path(m.group(1).strip()).parents[1]  # <원본>/.git
+            dirs.append(Path(os.path.normpath(common.parent / "data")))
+    return dirs
+
+
+def expand(tok: str, cwd: Path) -> list[str]:
+    """셸 와일드카드(`wt/*`)를 펼친다. 셸이 펼친 뒤 실행하므로 대상은 펼친 경로들이다."""
+    if not re.search(r"[*?]", tok):
+        return [tok]
+    pattern = str(to_path(tok, cwd))
+    return glob.glob(pattern, include_hidden=True) or [tok]
+
+
 def decide(command: str, cwd: Path, root: Path = ROOT) -> tuple[str, str] | None:
     """(permissionDecision, 이유) 또는 None(그대로 둠)."""
-    if not DELETE.search(command):
+    text = SPACED_QUOTE.sub(" ", HEREDOC.sub(" ", command))  # 커밋 메시지·문서 본문은 명령이 아니다
+    if not DELETE.search(text) and not PY_DELETE.search(command):  # Python 코드는 따옴표 안에 있다
         return None
-    data = Path(os.path.normpath(root / "data"))
+    worktree = (root / ".git").is_file()
+    data = data_dirs(root)
     ask = []
-    for seg in SEP.split(command):
+    for seg in SEP.split(text):
         verb = DELETE.search(seg)
         if not verb:
             continue
@@ -97,35 +128,38 @@ def decide(command: str, cwd: Path, root: Path = ROOT) -> tuple[str, str] | None
         out = check_targets(targets, bool(RECURSIVE.search(seg)), cwd, data, ask)
         if out:
             return out
-    if CLEAN_IGNORED.search(command):
+    if not worktree:  # 메인 체크아웃의 data/ 삭제는 확인하지 않는다
+        return None
+    if CLEAN_IGNORED.search(text):
         ask.append("git clean -x/-X: git이 추적하지 않는 data/를 지운다")
-    if PY_DELETE.search(command) and DATA_TEXT.search(command):
+    if PY_DELETE.search(command) and DATA_TEXT.search(command):  # 코드는 따옴표 안에 있다
         ask.append("data/ 경로가 든 Python 삭제 호출")
     if ask:
-        return "ask", ("공유 data/를 지울 수 있는 명령이다. data/는 git으로 추적하지 않아 "
+        return "ask", ("worktree 세션이 공유 data/를 지우려 한다. data/는 git으로 추적하지 않아 "
                        "되돌릴 수 없다. 대상: " + "; ".join(ask[:5])
                        + ". 사용자가 대상과 이유를 확인한 뒤 실행한다")
     return None
 
 
-def check_targets(targets: list[str], recursive: bool, cwd: Path, data: Path,
+def check_targets(targets: list[str], recursive: bool, cwd: Path, data: list[Path],
                   ask: list[str]) -> tuple[str, str] | None:
     """삭제 대상 낱말을 본다. 막을 대상이면 ("deny", 이유), 확인할 대상은 ask에 더한다."""
-    for tok in targets:
+    for tok in [x for t in targets for x in expand(t, cwd)]:
         if tok.startswith(("-", "/")) and not re.match(r"^/[a-zA-Z](/|$)", tok):
             continue  # 플래그(-r, /s). Git Bash 드라이브 경로(/c/...)는 대상이다
         if not re.search(r"[\w.~]", tok):
             continue
         p = to_path(tok, cwd)
         if not (p.exists() or is_link(p)):
-            if under(p, data):
+            if any(under(p, d) for d in data):
                 ask.append(str(p))
             continue
         if is_link(p):
             if recursive:
                 return "deny", f"`{p}`는 링크다. 재귀 삭제는 링크를 따라가 원본을 지운다. {SAFE}"
             continue  # 링크만 지우는 비재귀 명령
-        if under(p, data) or under(Path(os.path.realpath(p)), data):
+        real = Path(os.path.realpath(p))
+        if any(under(p, d) or under(real, d) for d in data):
             ask.append(str(p))
         elif recursive and p.is_dir():
             found, capped = links_inside(p)

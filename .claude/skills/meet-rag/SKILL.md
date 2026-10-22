@@ -55,7 +55,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 
 `data/`는 모든 worktree와 세션이 함께 쓰는 원본이다. AI Hub 재배포 제한과 크기 때문에 git으로 추적하지 않아, 지우면 revert로 되돌릴 수 없다. judge 캐시·생성 기록처럼 유료 호출 결과는 다시 만들면 비용이 들고 값도 달라진다.
 
-- `data/` 안의 파일·디렉터리를 지우거나 옮기지 않는다. 지워야 하면(잘못 저장한 캐시 등) 대상과 이유를 사용자에게 보이고 확인받는다. `data_delete_guard` 훅이 이런 명령에서 사용자 확인을 띄운다(ADR-0058)
+- worktree로 분리된 세션(하위 세션)은 원본 `data/` 안의 파일·디렉터리를 지우거나 옮기지 않는다. 지워야 하면(잘못 저장한 캐시 등) 대상과 이유를 사용자에게 보이고 확인받는다. `data_delete_guard` 훅이 worktree에서 도는 세션의 `data/` 삭제 명령에 사용자 확인을 띄운다. 메인 체크아웃의 `data/` 삭제는 막지 않는다(ADR-0058, 사용자 결정 2026-10-22)
 - worktree의 산출물(감사·생성·judge 결과)을 원본 `data/`와 잇는 junction·심볼릭 링크는 만들어도 된다. 링크를 없앨 때는 링크만 지우는 명령을 쓴다(PowerShell `(Get-Item <링크>).Delete()`, cmd `rmdir <링크>`). 링크가 든 디렉터리를 재귀 삭제하거나 `git worktree remove`로 지우면 명령이 링크를 따라가 원본을 지운다. 훅이 이 명령을 막는다. 2026-10-22 S21 하위 세션이 임시 worktree에 `data/` junction을 두고 `git worktree remove --force`로 정리해 원본 `data/gen_eval` 669개와 `data/conditions` 4개가 지워졌고, Windows 섀도 복사본으로만 되살렸다
 - 하위 세션·서브에이전트에 일을 넘길 때(start_session, Agent) 지시에 위 두 항목을 그대로 적고, 지금 진행 중인 다른 작업이 `data/` 아래에서 쓰는 파일(예: 검수 문서, judge 캐시)을 함께 알린다. 위임받은 쪽은 이 스킬을 모를 수 있어, 지시에 없으면 지킬 수 없다(전역 위임 규칙: 필요한 규칙과 제약은 위임 프롬프트에 직접 넣는다)
 
