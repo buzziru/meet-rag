@@ -24,7 +24,10 @@ def sample_qids(dev_qids: list[str], seed: int, n: int) -> list[str]:
 def main() -> None:
     with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
         cfg = compose(config_name="config")
-    splits = pd.read_csv(ROOT / cfg.paths.splits, dtype=str)
+    path = ROOT / cfg.paths.g1_sample
+    if path.exists():  # G1 검수본의 원본 표본. 다른 표본으로 덮어쓰지 않는다(S21, 리뷰 D-4)
+        raise SystemExit(f"{path}가 있다. 다시 뽑으려면 파일을 옮긴다")
+    splits =pd.read_csv(ROOT / cfg.paths.splits, dtype=str)
     picked = set(sample_qids(splits.loc[splits["split"] == "dev", "qid"].tolist(),
                              cfg.seed, cfg.g1_sample_size))
 
@@ -45,7 +48,6 @@ def main() -> None:
     out = pd.DataFrame(rows).sort_values("qid")
     out.insert(2, "meeting_name", out["doc_id"].map(meeting))
     out[REVIEW_COLUMNS] = ""
-    path = ROOT / cfg.paths.g1_sample
     path.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(path, index=False, encoding="utf-8-sig", lineterminator="\n")  # Excel 한글
     print(f"{len(out)} dev queries -> {cfg.paths.g1_sample}")

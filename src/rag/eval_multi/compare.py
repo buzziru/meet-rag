@@ -12,8 +12,9 @@ from pathlib import Path
 import pandas as pd
 
 from rag.eval.bootstrap import metadata_verdict, paired_bootstrap, verdict
+from rag.eval.score import OVERWRITE_HINT
 from rag.eval_multi.metrics import load_gold, per_query, ranked_docs, read_run, sha256
-from rag.index import ROOT, load_cfg
+from rag.index import ROOT, load_cfg, write_guarded
 
 
 def diff_table(base: pd.DataFrame, cand: pd.DataFrame, gold: pd.DataFrame, breakdowns,
@@ -80,6 +81,7 @@ def main() -> None:
     p.add_argument("--base", type=Path, required=True)
     p.add_argument("--cand", type=Path, required=True)
     p.add_argument("--out", type=Path)
+    p.add_argument("--overwrite", action="store_true")
     p.add_argument("--single", type=Path, help="메타데이터 가설: rag.eval.compare 결과 JSON")
     args = p.parse_args()
 
@@ -112,7 +114,7 @@ def main() -> None:
     text = json.dumps(result, ensure_ascii=False, indent=2)
     print(text)
     if args.out:
-        args.out.write_text(text, encoding="utf-8")
+        print(f"-> {args.out} ({write_guarded(args.out, text, args.overwrite, OVERWRITE_HINT)})")
 
 
 if __name__ == "__main__":

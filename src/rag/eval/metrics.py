@@ -23,6 +23,16 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def gold_sha256(cfg, layer: str) -> dict[str, str]:
+    """평가 층의 질의 구성과 정답을 정하는 파일(분할, 질의, dev-small 문서 목록)의 sha256.
+
+    채점 결과에 남겨 분할·질의가 바뀐 뒤의 점수를 과거 결과와 구분한다(S21, 리뷰 A-3).
+    회의명만 주는 코퍼스는 넣지 않는다(해시에 채점마다 약 2.6초).
+    """
+    keys = ["splits", "queries"] + (["dev_small_docs"] if layer == "dev-small" else [])
+    return {cfg.paths[k]: sha256(ROOT / cfg.paths[k]) for k in keys}
+
+
 def load_gold(cfg, layer: str, allow_test: bool = False) -> pd.DataFrame:
     """평가 층의 질의별 정답 doc_id, qna_type, meeting_name, conference_number (index: qid)."""
     if layer not in LAYERS:

@@ -182,3 +182,37 @@ def test_load_gold_reads_frozen_fields(tmp_path):
     assert gold.loc["md-conf-0001", "gold"] == frozenset({"d1", "d2"})
     assert list(gold.columns) == ["type", "pool_id", "gold"]
     assert len(gold) == 1
+
+
+def test_score_and_compare_out_are_guarded(tmp_path, monkeypatch, capsys):
+    from rag.eval_multi import compare, score
+    from rag.index import load_cfg
+    frozen = tmp_path / "frozen.jsonl"
+    frozen.write_text("".join(json.dumps(
+        {"qid": f"q{i}", "pool_id": f"p{i}", "type": "conf", "query": "질의",
+         "gold_doc_ids": [f"d{i}"], "answer": "…"}) + "\n" for i in range(2)), encoding="utf-8")
+    cfg = load_cfg([f"paths.multidoc_frozen='{frozen.as_posix()}'"])
+    monkeypatch.setattr(score, "load_cfg", lambda: cfg)
+    monkeypatch.setattr(compare, "load_cfg", lambda: cfg)
+    runs = {}
+    for name, at in [("a", {"q0": {1: "d0"}, "q1": {}}), ("b", {"q0": {}, "q1": {2: "d1"}})]:
+        runs[name] = tmp_path / f"{name}.csv"
+        make_run(at).to_csv(runs[name], index=False)
+    for module, first, other in [
+        (score, ["--run", str(runs["a"])], ["--run", str(runs["b"])]),
+        (compare, ["--base", str(runs["a"]), "--cand", str(runs["b"])],
+         ["--base", str(runs["b"]), "--cand", str(runs["a"])]),
+    ]:
+        out = tmp_path / f"{module.__name__}.json"
+        monkeypatch.setattr("sys.argv", ["x", *first, "--out", str(out)])
+        module.main()
+        before = out.read_text(encoding="utf-8")
+        module.main()  # 같은 내용
+        assert "그대로 둠" in capsys.readouterr().out
+        monkeypatch.setattr("sys.argv", ["x", *other, "--out", str(out)])
+        with pytest.raises(SystemExit, match="--overwrite"):
+            module.main()
+        assert out.read_text(encoding="utf-8") == before
+        monkeypatch.setattr("sys.argv", ["x", *other, "--out", str(out), "--overwrite"])
+        module.main()
+        assert out.read_text(encoding="utf-8") != before
