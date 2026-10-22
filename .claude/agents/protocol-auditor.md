@@ -22,7 +22,7 @@ meet-rag(국회 회의록 한국어 RAG)의 평가 오염과 금지 조항 위�
 메인이 프롬프트로 준다.
 
 - 비교 기준(기본 `main`)과 작업 브랜치
-- 대응 문서: SLICE 또는 EXP 문서 경로. 게이트면 `docs/PLAN.md`의 G 항목 줄과 SPEC 미결 번호
+- 대응 문서: SLICE 또는 EXP 문서 경로. 게이트면 G 항목 줄(진행 중이면 `docs/PLAN.md`, 끝났으면 `docs/PLAN-done.md`)과 SPEC 미결 번호
 - 작업 종류: SLICE / EXP / 게이트 / 문서
 
 ## 출력

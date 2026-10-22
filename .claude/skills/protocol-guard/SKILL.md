@@ -45,8 +45,8 @@ diff에서 찾을 코드 경로:
 
 ### P3. 보호 경로 수정
 
-- `configs/eval/`는 항상 보호된다
-- `src/rag/eval/`는 S3 완료 후, `src/rag/eval_multi/`와 `configs/config.yaml`의 `multidoc.eval` 키는 S9 완료 후, `data/splits/`는 S2 완료 후 보호된다. G3 동결 세트를 정하는 `configs/multidoc/g3_exclude.yaml`과 `paths.multidoc_frozen` 키는 동결(D-15) 후 보호된다. multi-doc 채점이나 세트가 바뀌면 EXP마다 보고하는 multi-doc 관찰을 기준선(D-16)과 비교할 수 없다. 완료 여부는 `docs/PLAN.md` 체크 상태로 판단한다
+- 항상 보호된다: `configs/eval/`, `src/rag/eval/`, `src/rag/eval_multi/`와 `configs/config.yaml`의 `multidoc.eval` 키, `data/splits/`, G3 동결 세트를 정하는 `configs/multidoc/g3_exclude.yaml`과 `paths.multidoc_frozen` 키. CLAUDE.md 금지 절과 같은 목록이다. multi-doc 채점이나 세트가 바뀌면 EXP마다 보고하는 multi-doc 관찰을 기준선(D-16)과 비교할 수 없다. 처음에는 S2·S3·S9 완료와 G3 동결(D-15) 뒤부터 보호했으나 모두 끝나 조건을 지웠다(ADR-0057)
+- 앞으로 어떤 작업이 끝난 뒤부터 보호되는 경로가 생기면, 완료 여부는 그 항목이 `docs/PLAN-done.md`에 있는지로 판단한다. 끝난 항목은 완료를 처리하는 커밋에서 PLAN-done으로 옮기므로 PLAN-done이 완료의 유일한 근거다(ADR-0057)
 - `docs/SPEC.md`의 평가 프로토콜 절 수정
 
 보호 경로를 바꿨으면, 사용자 승인 기록과 `docs/DECISIONS.md` 항목이 같은 diff에 있는지 확인한다. 둘 다 있으면 통과이고 기록만 남긴다.
