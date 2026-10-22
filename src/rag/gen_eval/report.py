@@ -13,7 +13,7 @@ from collections import Counter
 
 import numpy as np
 
-from rag.gen_eval.checks import HANDLINGS, STATES, item_outcome
+from rag.gen_eval.checks import HANDLINGS, SITUATION, STATES, item_outcome
 from rag.gen_eval.common import read_jsonl
 from rag.index import ROOT, load_cfg
 
@@ -68,19 +68,25 @@ def chunk_ratio_table(rows: list[dict]) -> list[tuple[float, int, int]]:
     return [(k, ratios[k], refusals[k]) for k in sorted(ratios)]
 
 
+# 틀린 처리 유형이 아닌 판정. 상황 미전달은 거부 정확도 밖이라 따로 센다
+NOT_WRONG = ("맞음", "상황 전달", "상황 미전달")
+
+
 def item_summary(rows: list[dict]) -> dict:
-    """질의 항목 단위 거부 평가의 집계(S14c). 거부 정확도는 모호·회피(상황 미전달)를 뺀 항목 중
-    맞는 처리의 비율이다(D-41 결정 3). 판단 불가는 judge 형식 오류로 항목이 없는 질의다."""
+    """질의 항목 단위 거부 평가의 집계(S14c). 거부 정확도는 모호·회피 항목을 뺀 항목 중 맞는
+    처리의 비율이고, 모호·회피는 상황 전달·미전달로 따로 센다(D-41 결정 3, S14c 결정 사항 4).
+    판단 불가는 judge 형식 오류로 항목이 없는 질의다."""
     evals = [r["item_eval"] for r in rows if r.get("item_eval")]
     items = [i for e in evals for i in e.get("items") or []]
     outcomes = Counter(i["outcome"] for i in items)
-    judged = [i for i in items if i["outcome"] != "상황 미전달"]
+    judged = [i for i in items if i["state"] not in SITUATION]
     return {"table": Counter((i["state"], i["handling"]) for i in items),
             "outcomes": outcomes, "accuracy": (outcomes["맞음"], len(judged)),
+            "situation": (outcomes["상황 전달"], len(items) - len(judged)),
             "speaker_unclear": sum(i["speaker_unclear"] for i in items),
             "queries": len(evals), "errors": sum(1 for e in evals if "error" in e),
             "wrong_queries": sum(1 for e in evals if any(
-                i["outcome"] not in ("맞음", "상황 미전달") for i in e.get("items") or []))}
+                i["outcome"] not in NOT_WRONG for i in e.get("items") or []))}
 
 
 def case_agreement(cases: list[dict], results: list[dict]) -> tuple[Counter, list[str]]:
@@ -119,11 +125,11 @@ def print_items(rows: list[dict]) -> None:
     for st in STATES:
         print(f"| {st} | " + " | ".join(str(s["table"][st, h]) for h in HANDLINGS) + " |")
     print(f"\n거부 정확도(모호·회피 뺀 항목 중 맞는 처리) {rate(*s['accuracy'])}, "
-          f"상황 미전달 {s['outcomes']['상황 미전달']}, "
+          f"모호·회피 항목 중 상황 전달 {rate(*s['situation'])}, "
           f"발언자 구분 불가 항목 {s['speaker_unclear']}\n")
     print("| 틀린 처리 유형 | 항목 |\n| --- | ---: |")
     for name, k in s["outcomes"].most_common():
-        if name not in ("맞음", "상황 미전달"):
+        if name not in NOT_WRONG:
             print(f"| {name} | {k} |")
 
 

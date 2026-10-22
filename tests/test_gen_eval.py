@@ -230,9 +230,16 @@ def test_item_outcome_follows_rules():
     assert item_outcome("일부", "거부") == "과잉 거부"  # (ㄷ)
     assert item_outcome("일부", "답함") == "안내 없이 부분 답함"
     assert item_outcome("없음", "답함") == "근거 없이 답함"
-    # 모호·회피는 처리와 관계없이 상황 미전달(D-41 결정 3)
-    assert {item_outcome(s, h) for s in ("모호", "회피") for h in HANDLINGS} == {"상황 미전달"}
-    assert set(OUTCOMES) == {(s, h) for s in STATES[:3] for h in HANDLINGS}
+    # 모호·회피는 상황을 밝혔는지만 본다(D-41 결정 3, S14c 결정 사항 4)
+    for s in ("모호", "회피"):
+        assert item_outcome(s, "상황을 밝히고 답함") == "상황 전달"
+        rest = [h for h in HANDLINGS if h != "상황을 밝히고 답함"]
+        assert {item_outcome(s, h) for h in rest} == {"상황 미전달"}
+    # 있음·일부·없음에서 상황을 밝히고 답함은 답함과 같다
+    assert all(item_outcome(s, "상황을 밝히고 답함") == item_outcome(s, "답함")
+               for s in STATES[:3])
+    assert set(OUTCOMES) == {(s, h) for s in STATES[:3] for h in HANDLINGS
+                             if h != "상황을 밝히고 답함"}
 
 
 def test_item_eval_judges_each_item_and_format_errors():
@@ -277,10 +284,12 @@ def test_item_summary_and_case_agreement():
         return {"item_eval": {"items": [
             {"state": s, "handling": h, "outcome": item_outcome(s, h), "speaker_unclear": False}
             for s, h in pairs]}}
-    rows = [row(("있음", "답함"), ("모호", "거부")), row(("일부", "거부")),
+    rows = [row(("있음", "답함"), ("모호", "거부")),
+            row(("일부", "거부"), ("회피", "상황을 밝히고 답함")),
             {"item_eval": {"error": "items 형식 오류"}}, {}]
     s = item_summary(rows)
     assert s["accuracy"] == (1, 2) and s["outcomes"]["상황 미전달"] == 1
+    assert s["situation"] == (1, 2)
     assert s["queries"] == 3 and s["errors"] == 1 and s["wrong_queries"] == 1
     assert s["table"]["모호", "거부"] == 1
     cases = [{"case": "c1", "expected": [{"state": "있음", "handling": "답함"}]},

@@ -94,10 +94,12 @@ def gold_position(contexts: list[dict], gold_doc: str) -> int | None:
 
 
 STATES = ("있음", "일부", "없음", "모호", "회피")
-HANDLINGS = ("답함", "부분임을 밝히고 답함", "거부", "다루지 않음")
-# (정보 상태, 처리) → 판정. 모호·회피는 처리와 관계없이 상황 미전달로 따로 세고 거부 정확도에서
-# 뺀다(D-41 결정 3). 나머지 세 상태의 맞는 처리는 하나씩이고(D-41 결정 2), 틀린 처리는 유형을
-# 나눠 센다(S14c 결정 사항 2 (a))
+HANDLINGS = ("답함", "부분임을 밝히고 답함", "상황을 밝히고 답함", "거부", "다루지 않음")
+# (정보 상태, 처리) → 판정. 있음·일부·없음의 맞는 처리는 하나씩이고(D-41 결정 2), 틀린 처리는
+# 유형을 나눠 센다(S14c 결정 사항 2 (a)). 모호·회피는 거부 정확도에서 빼고, 예정·검토 중·답을
+# 피함 같은 상황을 밝혔으면 상황 전달, 아니면 상황 미전달로 센다(D-41 결정 3, S14c 결정 사항 4).
+# 있음·일부·없음에 "상황을 밝히고 답함"이 나오면 "답함"과 같게 본다
+SITUATION = ("모호", "회피")
 OUTCOMES = {
     ("있음", "답함"): "맞음",
     ("있음", "부분임을 밝히고 답함"): "불필요한 부분 안내",
@@ -116,4 +118,6 @@ OUTCOMES = {
 
 def item_outcome(state: str, handling: str) -> str:
     """질의 항목 하나의 판정. 값은 STATES·HANDLINGS 안이어야 한다(judge 출력 확인 뒤 부른다)."""
-    return "상황 미전달" if state in ("모호", "회피") else OUTCOMES[state, handling]
+    if state in SITUATION:
+        return "상황 전달" if handling == "상황을 밝히고 답함" else "상황 미전달"
+    return OUTCOMES[state, "답함" if handling == "상황을 밝히고 답함" else handling]
