@@ -17,7 +17,17 @@ import pandas as pd
 from rag.conditions import build_extractor
 from rag.eval.metrics import load_gold
 from rag.index import ROOT, encoder, load_cfg, load_model, write_guarded
-from rag.retrieve import ChunkStore, Retriever, best_chunks, chunks_by_doc, read_rerank_scores
+from rag.retrieve import (
+    ChunkStore,
+    Retriever,
+    adopt_query_basis,
+    best_chunks,
+    chunks_by_doc,
+    query_basis_path,
+    read_query_emb,
+    read_rerank_scores,
+    save_query_emb,
+)
 from rag.rewrite import needs_rewrite, rewrite_queries, signals
 
 LAYERS = {"dev-small": "dev-small", "full": "dev-full"}  # index.scope → 평가 층
@@ -93,19 +103,15 @@ def read_texts(path: Path, qids: list[str]) -> list[str]:
     return [text[q] for q in qids]
 
 
-def save_query_emb(path: Path, qids: list[str], emb: np.ndarray) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(path, qids=np.array(qids), emb=emb)
-
-
 def query_embeddings(cfg, qids: list[str], text_path: Path, emb_path: Path) -> np.ndarray:
-    """캐시의 질의 목록이 같으면 캐시를, 아니면 로컬에서 임베딩해 캐시한다."""
+    """캐시의 지문과 질의 목록이 같으면 캐시를, 캐시가 없거나 질의 목록이 다르면 로컬에서 임베딩해
+    캐시한다. 지문이 없거나 다르면 멈춘다(S21)."""
     if emb_path.exists():
-        cached = np.load(emb_path)
-        if cached["qids"].tolist() == qids:
-            return cached["emb"]
+        cached_qids, emb = read_query_emb(cfg, emb_path)
+        if cached_qids == qids:
+            return emb
     emb = embed_queries(cfg, read_texts(text_path, qids))
-    save_query_emb(emb_path, qids, emb)
+    save_query_emb(cfg, emb_path, qids, emb)
     return emb
 
 
@@ -125,7 +131,7 @@ def embed_vm_queries(cfg) -> None:
     with files["vm"].open(encoding="utf-8") as f:
         rows = [json.loads(line) for line in f]
     qids = [r["qid"] for r in rows]
-    save_query_emb(files["emb"], qids, embed_queries(cfg, [r["query"] for r in rows]))
+    save_query_emb(cfg, files["emb"], qids, embed_queries(cfg, [r["query"] for r in rows]))
     print(f"{len(qids)} queries -> {files['emb'].relative_to(ROOT)}")
 
 
@@ -219,6 +225,10 @@ def search(cfg) -> None:
 
 def main() -> None:
     cfg = load_cfg(sys.argv[1:])
+    if cfg.adopt_basis:  # 지문 없는 기존 질의 임베딩 캐시에 지문만 쓰고 끝낸다(S21)
+        path = query_files(cfg)["emb"]
+        print(f"{query_basis_path(path).relative_to(ROOT)} ({adopt_query_basis(cfg, path)})")
+        return
     mode = cfg.search.mode
     if mode in ("export-queries", "embed-queries") and cfg.index.scope != "full":
         raise SystemExit(f"{mode}는 index.scope=full에서만 쓴다")
