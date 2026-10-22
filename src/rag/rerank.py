@@ -25,14 +25,14 @@ from langsmith import traceable
 from langsmith.run_trees import get_cached_client
 from sentence_transformers import CrossEncoder
 
-from rag.index import ROOT, load_cfg, refuse_existing, write_guarded  # .env를 읽는다
+from rag.index import ROOT, load_cfg, pinned, refuse_existing, write_guarded  # .env를 읽는다
 from rag.retrieve import rerank_basis, rerank_basis_path
 
 
 def load_model(rr) -> CrossEncoder:
     if rr.threads:
         torch.set_num_threads(rr.threads)
-    return CrossEncoder(rr.model, revision=rr.revision, max_length=rr.max_length,
+    return CrossEncoder(rr.model, revision=pinned(rr), max_length=rr.max_length,
                         device=rr.device, model_kwargs={"dtype": getattr(torch, rr.dtype)})
 
 

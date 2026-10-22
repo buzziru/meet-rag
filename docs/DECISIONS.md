@@ -463,3 +463,17 @@
   4. 생성 점수를 해석할 때 같은 세트의 검색 지표(Recall@5 등)를 함께 보고한다. 거부가 늘면 검색 탓인지 생성 탓인지 가려야 하는데 검색 지표는 dev-full 전체로 냈기 때문이다. 기존 순위 파일로 계산해 비용이 들지 않는다
   5. 작은 세트를 반복해 쓰는 데서 오는 낙관은 감수하고, 생성 단계 마지막 test 1회로 확인한다(D-35 "반복 사용의 확인"과 같은 구조)
 - 날짜: 2026-10-21
+
+## D-45 채점 결과에 정답 입력 해시를 남기고 `--out`을 덮어쓰지 않는다 (S21, 보호 경로 수정)
+- 결정: `rag.eval.score`·`compare`의 결과에 `gold_sha256`(분할 `paths.splits`, 질의 `paths.queries`, dev-small 층이면 `paths.dev_small_docs`의 sha256)을 더한다. 코퍼스는 회의명 층 나누기에만 쓰이고 해시에 채점마다 약 2.6초가 들어 넣지 않는다. `rag.eval.score`·`compare`, `rag.eval_multi.score`·`compare`의 `--out`은 `write_guarded`로 써 내용이 같으면 그대로 두고 다르면 멈추며, `--overwrite`일 때만 덮어쓴다. 지표 계산, 판정 규칙, bootstrap 설정, `configs/eval/`, `data/splits/`는 바꾸지 않았다
+- 승인: 보호 경로(`src/rag/eval/`, `src/rag/eval_multi/`) 수정은 S21 지시서 결정 사항 1로 받았다(사용자 결정 2026-10-22, 결정 사항 1\~7 추천안)
+- 이유: 분할·질의가 바뀐 뒤의 점수를 과거 결과와 구분할 기록이 없었고(코드 리뷰 2026-10 A-3), `--out`이 기존 결과를 확인 없이 덮어썼다(D-3). 생성 실험에서 평가를 반복하기 전에 고친다(이슈 #133)
+- 확인: `main`과 이 코드의 결과 JSON 5개(EXP-017 dev-small·dev-full 채점, EXP-014 대 EXP-017 비교, 같은 쌍의 multi-doc 채점·비교)가 `gold_sha256`을 빼면 같다
+- 같은 조각의 보호 경로 밖 변경: 질의 임베딩 캐시 지문(`queries-*.npz.basis.json`, 리뷰 C-11)과 생성 레시피의 `embedding_revision`·`query_prompt`, G1 원본 표본 덮어쓰기 방지(`docs/slices/21-eval-guards.md`)
+- 날짜: 2026-10-22
+
+## D-46 HF 모델·토크나이저는 revision을 고정한다
+- 결정: HF에서 받는 모델·토크나이저(임베딩, 리랭커 등)는 `configs/`에 revision(40자리 커밋 해시)을 고정하고, 불러오는 코드는 revision을 `rag.index.pinned(config 구역)`로만 넘긴다. `pinned`는 revision이 40자리 커밋 해시가 아니면 모델을 받기 전에 멈춘다. CLAUDE.md 금지 절에 적고 `tests/test_revisions.py`가 점검한다: `src/`의 HF 로딩 호출이 모두 `revision=pinned(...)`인지, 기본 설정과 `configs/exp/*` 전부의 `embedding.revision`·cross-encoder 리랭커 `revision`이 커밋 해시인지. 처음에는 config의 알려진 두 키와 `revision=` 키워드 유무만 봐서, 새 모델을 다른 config 키로 들이며 revision을 빠뜨리면 `.get("revision")`이 None을 넘겨 HF `main`을 받는데도 통과했다(PR #136 사용자 리뷰 2). 검사 위치를 모델을 받는 시점으로 옮겨 config 키와 관계없이 막는다. API로 부르는 생성·judge 모델은 제공자가 버전을 고정해 주지 않아 같은 방식으로 고정할 수 없고, 모델 이름과 제공자를 레시피·기록에 남긴다
+- kure-v1: 기본 설정 `embedding.revision`을 `8b418a58414668e75532ed045c22d9ca018ae2b2`로 고정했다. HF `nlpai-lab/KURE-v1`의 `main` 최신 커밋(2026-09-07)이 이것이고 그 뒤 바뀌지 않아, kure-v1 산출물(2026-10-01\~08)은 모두 이 커밋으로 만들었다. 프로젝트 HF 캐시의 스냅샷도 이것 하나다. 재현 임베딩으로는 확인하지 않았다(사용자 결정). 질의 캐시 지문 3개(`data/index/kure-v1/queries-*.npz.basis.json`)의 revision도 같은 값으로 고쳤다. snowflake-ko(EXP-009)와 리랭커(EXP-005·017)는 이미 고정돼 있었다
+- 이유: kure-v1은 revision 없이 불러 `main`이 바뀌면 같은 설정이 다른 가중치를 받는다. 고정 누락은 새 모델을 들일 때마다 반복될 수 있어 테스트로 점검한다(사용자 결정 2026-10-22, PR #136 리뷰)
+- 날짜: 2026-10-22

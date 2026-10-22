@@ -8,12 +8,12 @@
 import json
 import sys
 
-import numpy as np
 from langsmith.run_trees import get_cached_client
 
 from rag.gen_eval.common import done_qids, eval_qids
 from rag.generate import Pipeline, recipe
 from rag.index import ROOT, load_cfg
+from rag.retrieve import read_query_emb
 
 
 def main() -> None:
@@ -30,13 +30,13 @@ def main() -> None:
     keep = set(todo)
     with (ROOT / cfg.paths.queries_dev).open(encoding="utf-8") as f:
         texts = {q["qid"]: q["query"] for q in map(json.loads, f) if q["qid"] in keep}
-    cached = np.load(ROOT / cfg.paths.query_emb)
-    pos = {q: i for i, q in enumerate(cached["qids"].tolist())}
+    cached_qids, emb = read_query_emb(cfg, ROOT / cfg.paths.query_emb)
+    pos = {q: i for i, q in enumerate(cached_qids)}
 
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8", newline="\n") as f:
         for i, qid in enumerate(todo, 1):
-            rec = pipe.run(texts[qid], cached["emb"][pos[qid]], qid=qid, stream=True, echo=False)
+            rec = pipe.run(texts[qid], emb[pos[qid]], qid=qid, stream=True, echo=False)
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             f.flush()
             print(f"[{i}/{len(todo)}] {qid} provider={rec['provider']} "

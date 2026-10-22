@@ -23,7 +23,14 @@ from openai import OpenAI
 from rag.conditions import build_extractor
 from rag.index import ROOT, corpus_meta, encoder, file_sha256, git_state, load_cfg, load_model
 from rag.llm import answer_start, split_thought
-from rag.retrieve import ChunkStore, Retriever, best_chunks, chunks_by_doc, read_rerank_scores
+from rag.retrieve import (
+    ChunkStore,
+    Retriever,
+    best_chunks,
+    chunks_by_doc,
+    read_query_emb,
+    read_rerank_scores,
+)
 
 CONTEXT_META = ["date", "committee_name", "meeting_number", "session_number", "original"]
 
@@ -46,6 +53,9 @@ def recipe(cfg, index_meta: dict, stream: bool) -> dict:
     return {
         "git_commit": commit, "git_dirty": dirty,
         "embedding_model": cfg.embedding.model_name,
+        # 질의 임베딩 캐시 지문과 같은 값(S21). 경로(embedding.slug)만으로는 구분되지 않는다
+        "embedding_revision": cfg.embedding.get("revision"),
+        "query_prompt": cfg.embedding.get("query_prompt"),
         "index": [f"{n}/{cfg.index.scope}" for n in index_meta["names"]],
         "n_chunks": index_meta["n_chunks"],
         "retriever": OmegaConf.to_container(cfg.retriever, resolve=True),
@@ -93,8 +103,8 @@ class Pipeline:
             text = next((q["query"] for q in map(json.loads, f) if q["qid"] == qid), None)
         if text is None:
             raise SystemExit(f"dev 질의에 없는 qid: {qid}")
-        cached = np.load(ROOT / self.cfg.paths.query_emb)
-        return text, cached["emb"][cached["qids"].tolist().index(qid)]
+        qids, emb = read_query_emb(self.cfg, ROOT / self.cfg.paths.query_emb)
+        return text, emb[qids.index(qid)]
 
     def embed(self, query: str) -> np.ndarray:
         if self._model is None:

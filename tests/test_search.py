@@ -320,3 +320,47 @@ def test_retriever_checks_index_basis(tmp_path):
     (d / "basis.json").unlink()
     with pytest.raises(SystemExit, match="adopt_basis"):
         Retriever(cfg)
+
+
+def test_query_cache_basis_is_checked_on_read(tmp_path):
+    from omegaconf import OmegaConf
+
+    from rag.retrieve import (
+        adopt_query_basis,
+        query_basis_path,
+        read_query_emb,
+        save_query_emb,
+    )
+    cfg = load_cfg(["+exp=exp017"])
+    path = tmp_path / "queries-full.npz"
+    save_query_emb(cfg, path, ["q1", "q2"], np.eye(2, dtype=np.float32))
+    qids, emb = read_query_emb(cfg, path)  # 만든 설정과 같으면 읽는다
+    assert qids == ["q1", "q2"] and emb.shape == (2, 2)
+    for key, value in [("revision", "other"), ("query_prompt", "passage: ")]:
+        with pytest.raises(SystemExit, match=key):
+            read_query_emb(OmegaConf.merge(cfg, {"embedding": {key: value}}), path)
+
+    query_basis_path(path).unlink()  # 지문 없는 기존 캐시
+    with pytest.raises(SystemExit, match="adopt_basis"):
+        read_query_emb(cfg, path)
+    assert adopt_query_basis(cfg, path) == "씀"
+    assert adopt_query_basis(cfg, path) == "이미 있음, 같음"
+    with pytest.raises(SystemExit, match="query_prompt"):  # 다른 설정으로 받아들이지 않는다
+        adopt_query_basis(load_cfg([]), path)
+    with pytest.raises(SystemExit, match="없다"):
+        adopt_query_basis(cfg, tmp_path / "none.npz")
+
+
+def test_query_embeddings_reembeds_only_when_qids_differ(tmp_path, monkeypatch):
+    import rag.search as search
+    from rag.retrieve import save_query_emb
+    cfg = load_cfg([])
+    path = tmp_path / "queries-dev-small.npz"
+    save_query_emb(cfg, path, ["q1"], np.ones((1, 2), dtype=np.float32))
+    calls = []
+    monkeypatch.setattr(search, "read_texts", lambda _, qids: qids)
+    monkeypatch.setattr(search, "embed_queries",
+                        lambda _, texts: calls.append(texts) or np.zeros((len(texts), 2)))
+    assert search.query_embeddings(cfg, ["q1"], tmp_path, path).sum() == 2  # 캐시
+    assert search.query_embeddings(cfg, ["q1", "q2"], tmp_path, path).sum() == 0
+    assert calls == [["q1", "q2"]]

@@ -12,9 +12,9 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 평가 분할: `uv run python -m rag.splits` (→ `data/splits/`)
 - 값 사전: `uv run python -m rag.meta_dict` (확인용 파일. 검색·생성의 조건 추출은 실행 때 코퍼스에서 직접 만든다(S12), slices/10-speaker-fields.md)
 - 질의 조건: `uv run python -m rag.conditions [search.queries=summary_q|multidoc]` (→ `data/conditions/` 확인용 파일. 검색·생성은 실행 config의 추출기로 직접 뽑는다(S12), slices/11-query-conditions.md)
-- 채점: `uv run python -m rag.eval.score --run <순위.csv> --layer dev-small|dev-full [--out <결과.json>]` (순위 파일 열 `qid`, `rank`, `doc_id`)
-- 판정: `uv run python -m rag.eval.compare --base <기준.csv> --cand <후보.csv> [--out <결과.json>]` (dev-full 고정)
-- multi-doc 채점·비교: `uv run python -m rag.eval_multi.score --run <순위.csv> [--out <결과.json>]`, `rag.eval_multi.compare --base <기준.csv> --cand <후보.csv>` (순위는 `rag.search index.scope=full search.queries=multidoc`, slices/09-multidoc-eval.md)
+- 채점: `uv run python -m rag.eval.score --run <순위.csv> --layer dev-small|dev-full [--out <결과.json> [--overwrite]]` (순위 파일 열 `qid`, `rank`, `doc_id`)
+- 판정: `uv run python -m rag.eval.compare --base <기준.csv> --cand <후보.csv> [--out <결과.json> [--overwrite]]` (dev-full 고정)
+- multi-doc 채점·비교: `uv run python -m rag.eval_multi.score --run <순위.csv> [--out <결과.json> [--overwrite]]`, `rag.eval_multi.compare --base <기준.csv> --cand <후보.csv>` (순위는 `rag.search index.scope=full search.queries=multidoc`, slices/09-multidoc-eval.md)
 - 인덱스: `uv run python -m rag.index index.scope=dev-small|full [embedding.device=cuda embedding.dtype=float16]` (full은 Colab L4 약 21분. 옵션: slices/04-index.md)
 - 검색: `uv run python -m rag.search [index.scope=full]` (질의 임베딩 캐시가 없을 때: slices/05-retrieve.md)
 - test 1회(S13): 실행을 마쳤고 다시 돌리지 않는다. 절차·명령·결과는 slices/13-test-run.md, D-39
@@ -30,6 +30,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - test 분할의 질의를 읽거나 test 점수를 계산하지 않는다. test는 검색 단계와 생성 단계 종료 시 사용자 지시로 단계마다 1회만 실행한다. 검색 단계 1회는 S13에서 마쳤고(D-39), 생성 단계 1회는 SPEC 개정 초안(D-38)을 SPEC에 옮긴 뒤 한다
 - `docs/SPEC.md`의 평가 프로토콜은 사용자 승인 없이 바꾸지 않는다
 - 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다
+- HF에서 받는 모델·토크나이저(임베딩, 리랭커 등)는 `configs/`에 revision(커밋 해시)을 고정하고, 불러오는 코드는 revision을 `rag.index.pinned(...)`로만 넘긴다(커밋 해시가 아니면 받기 전에 멈춤). 고정하지 않으면 같은 설정이 다른 가중치를 받아 재현되지 않는다. `tests/test_revisions.py`가 점검한다. API로 부르는 생성·judge 모델은 고정할 수 없어 모델 이름과 제공자를 기록한다(D-46)
 - AI Hub 데이터(코퍼스·질의·라벨·분할)는 처리 목적으로 외부 API(Google AI Studio, OpenRouter, 생성 평가 judge용 opencode Go(D-38))와 Colab에 보낼 수 있다. 금지하는 것은 공개다: 저장소 커밋, 노트북·로그·문서처럼 저장소에 남는 곳에 질의 원문을 대량으로 남기기, 외부에서 내려받을 수 있게 두기(D-31). `test` 질의는 평가 프로토콜에 따라 검색 단계 종료 시 사용자 지시 1회 실행에서만 읽고 보낸다. 질의 전체처럼 많이 보내는 실행은 호출 수·소요 시간·비용을 보고하고 사용자 승인 후에 한다
 - 외부 GPU(Colab) 실행과 유료 API(OpenRouter) 호출은 예상 시간·비용을 보고하고 사용자 승인 후에만 한다. dev-small은 Jupyter 노트북(`notebooks/`)에서 자유롭게 실행하되, GPU가 필요한 dev-small 임베딩도 Colab 승인 대상이다
 - `data/`와 `.env`는 어떤 형태로도 커밋하지 않는다 (AI Hub 재배포 제한)

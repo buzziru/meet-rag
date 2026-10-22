@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from rag.eval.score import OVERWRITE_HINT
 from rag.eval_multi.metrics import (
     load_gold,
     metric_table,
@@ -13,13 +14,14 @@ from rag.eval_multi.metrics import (
     sha256,
     to_markdown,
 )
-from rag.index import ROOT, load_cfg
+from rag.index import ROOT, load_cfg, write_guarded
 
 
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--run", type=Path, required=True)
     p.add_argument("--out", type=Path)
+    p.add_argument("--overwrite", action="store_true")
     args = p.parse_args()
 
     cfg = load_cfg()
@@ -35,7 +37,8 @@ def main() -> None:
     if args.out:
         result = {"run": str(args.run), "run_sha256": digest, "frozen_sha256": frozen_digest,
                   "metrics": table.to_dict(orient="records")}
-        args.out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        text = json.dumps(result, ensure_ascii=False, indent=2)
+        print(f"-> {args.out} ({write_guarded(args.out, text, args.overwrite, OVERWRITE_HINT)})")
 
 
 if __name__ == "__main__":

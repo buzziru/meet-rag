@@ -167,6 +167,51 @@ def rerank_basis(cfg) -> dict:
     return {**b, "pairs_sha256": file_sha256(ROOT / cfg.paths.rerank_pairs)}
 
 
+def query_basis(cfg) -> dict:
+    """질의 임베딩 캐시를 읽을 때 대조하는 지문(S21, 리뷰 C-11). 캐시 경로에는 embedding.slug만
+    들어가 revision·질의 접두만 바꾸면 옛 캐시가 오류 없이 쓰인다."""
+    e = cfg.embedding
+    return {"model": e.model_name, "revision": e.get("revision"),
+            "query_prompt": e.get("query_prompt")}
+
+
+def query_basis_path(emb_path: Path) -> Path:
+    return emb_path.with_name(emb_path.name + ".basis.json")
+
+
+def write_query_basis(cfg, emb_path: Path) -> None:
+    query_basis_path(emb_path).write_text(
+        json.dumps(query_basis(cfg), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def save_query_emb(cfg, path: Path, qids: list[str], emb: np.ndarray) -> None:
+    """질의 임베딩 캐시와 그 지문을 함께 쓴다. VM에서 만들면 지문 파일도 내려받는다."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(path, qids=np.array(qids), emb=emb)
+    write_query_basis(cfg, path)
+
+
+def read_query_emb(cfg, path: Path) -> tuple[list[str], np.ndarray]:
+    """질의 임베딩 캐시를 지문을 대조한 뒤 (qid 목록, 임베딩)으로 읽는다.
+    캐시는 이 함수로만 읽는다."""
+    check_basis(query_basis_path(path), query_basis(cfg))
+    cached = np.load(path)
+    return cached["qids"].tolist(), cached["emb"]
+
+
+def adopt_query_basis(cfg, path: Path) -> str:
+    """지문 없는 기존 캐시에 지금 설정의 지문만 쓴다(adopt_basis, S15와 같은 방식).
+    캐시는 열지 않는다. 지문이 이미 있으면 같은지만 본다."""
+    if not path.exists():
+        raise SystemExit(f"{path}가 없다")
+    state = "이미 있음, 같음"
+    if not query_basis_path(path).exists():
+        write_query_basis(cfg, path)
+        state = "씀"
+    check_basis(query_basis_path(path), query_basis(cfg))
+    return state
+
+
 def read_rerank_scores(cfg) -> dict[str, dict[str, float]]:
     """재정렬 점수 파일(rag.rerank)을 지문을 대조한 뒤 qid → 문서별 점수로 읽는다."""
     check_basis(rerank_basis_path(cfg), rerank_basis(cfg))
