@@ -137,6 +137,8 @@ conditions:
 
 embedding:
   model_name: nlpai-lab/KURE-v1
+  # HF 커밋 고정(D-46). 2026-09-07 main. kure-v1 산출물(2026-10-01~08)은 모두 이 커밋으로 만들었다
+  revision: 8b418a58414668e75532ed045c22d9ca018ae2b2
   slug: kure-v1
   normalize: true
   device: cpu
