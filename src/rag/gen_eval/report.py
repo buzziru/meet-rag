@@ -1,7 +1,9 @@
 """judge 결과(paths.gen_judge)를 집계해 표로 낸다(S14).
 
 기준별 평균과 계산한 질의 수, 뺀 질의 수(이유별), 전체·부분 거부(S14b), 거부 교차 집계,
-인용·메타데이터 오류, 토큰·비용, 첫 토큰 시간을 낸다. 종합 지표와 기준 비교·판정은
+인용·메타데이터 오류, 토큰·비용, 첫 토큰 시간을 낸다. 항목 평가 결과가 있으면 정보 상태 × 처리 표,
+거부 정확도, 틀린 처리 유형을 낸다(S14c). gen_eval.item_cases를 주면 판정 확인 사례의 judge 결과를
+정답과 대조한다. 종합 지표와 기준 비교·판정은
 만들지 않는다(초안 결정 사항 2·3 이후).
 인자는 Hydra override(예: +exp=exp017 gen_eval.n=20).
 """
@@ -11,6 +13,7 @@ from collections import Counter
 
 import numpy as np
 
+from rag.gen_eval.checks import HANDLINGS, STATES, item_outcome
 from rag.gen_eval.common import read_jsonl
 from rag.index import ROOT, load_cfg
 
@@ -65,12 +68,86 @@ def chunk_ratio_table(rows: list[dict]) -> list[tuple[float, int, int]]:
     return [(k, ratios[k], refusals[k]) for k in sorted(ratios)]
 
 
+def item_summary(rows: list[dict]) -> dict:
+    """질의 항목 단위 거부 평가의 집계(S14c). 거부 정확도는 모호·회피(상황 미전달)를 뺀 항목 중
+    맞는 처리의 비율이다(D-41 결정 3). 판단 불가는 judge 형식 오류로 항목이 없는 질의다."""
+    evals = [r["item_eval"] for r in rows if r.get("item_eval")]
+    items = [i for e in evals for i in e.get("items") or []]
+    outcomes = Counter(i["outcome"] for i in items)
+    judged = [i for i in items if i["outcome"] != "상황 미전달"]
+    return {"table": Counter((i["state"], i["handling"]) for i in items),
+            "outcomes": outcomes, "accuracy": (outcomes["맞음"], len(judged)),
+            "speaker_unclear": sum(i["speaker_unclear"] for i in items),
+            "queries": len(evals), "errors": sum(1 for e in evals if "error" in e),
+            "wrong_queries": sum(1 for e in evals if any(
+                i["outcome"] not in ("맞음", "상황 미전달") for i in e.get("items") or []))}
+
+
+def case_agreement(cases: list[dict], results: list[dict]) -> tuple[Counter, list[str]]:
+    """판정 확인 사례(S14c)의 judge 결과와 정답의 일치. (항목별 일치 수, 어긋난 곳 설명).
+    judge가 질의를 정답과 다른 수의 항목으로 나눴으면 그 사례는 항목별로 비교하지 않는다."""
+    by_case = {r["case"]: r for r in results}
+    agree, notes = Counter(), []
+    for c in cases:
+        got = by_case[c["case"]]
+        if "error" in got:
+            notes.append(f"{c['case']}: {got['error']}")
+            agree["판단 불가 사례"] += 1
+            continue
+        if len(got["items"]) != len(c["expected"]):
+            notes.append(f"{c['case']}: 항목 수 정답 {len(c['expected'])}, "
+                         f"judge {len(got['items'])}")
+            agree["항목 수 다른 사례"] += 1
+            continue
+        for k, (e, g) in enumerate(zip(c["expected"], got["items"], strict=True), 1):
+            e = {**e, "outcome": item_outcome(e["state"], e["handling"])}
+            agree["항목"] += 1
+            for key in ("state", "handling", "outcome"):
+                same = e[key] == g[key]
+                agree[key] += same
+                if not same:
+                    notes.append(f"{c['case']} 항목 {k} {key}: 정답 {e[key]}, judge {g[key]}")
+    return agree, notes
+
+
+def print_items(rows: list[dict]) -> None:
+    s = item_summary(rows)
+    print(f"\n질의 항목 단위 거부 평가(S14c): 질의 {s['queries']}개, 판단 불가(judge 형식 오류) "
+          f"{s['errors']}개, 틀린 처리가 있는 질의 {rate(s['wrong_queries'], s['queries'])}\n")
+    print("| 정보 상태 \\ 처리 | " + " | ".join(HANDLINGS) + " |\n| --- |"
+          + " ---: |" * len(HANDLINGS))
+    for st in STATES:
+        print(f"| {st} | " + " | ".join(str(s["table"][st, h]) for h in HANDLINGS) + " |")
+    print(f"\n거부 정확도(모호·회피 뺀 항목 중 맞는 처리) {rate(*s['accuracy'])}, "
+          f"상황 미전달 {s['outcomes']['상황 미전달']}, "
+          f"발언자 구분 불가 항목 {s['speaker_unclear']}\n")
+    print("| 틀린 처리 유형 | 항목 |\n| --- | ---: |")
+    for name, k in s["outcomes"].most_common():
+        if name not in ("맞음", "상황 미전달"):
+            print(f"| {name} | {k} |")
+
+
+def print_cases(cfg) -> None:
+    src = ROOT / cfg.gen_eval.item_cases
+    agree, notes = case_agreement(read_jsonl(src), read_jsonl(src.with_suffix(".judge.jsonl")))
+    n = agree["항목"]
+    print(f"# 판정 확인 사례 {src.name}\n\n항목 {n}개(항목 수 다른 사례 "
+          f"{agree['항목 수 다른 사례']}, 판단 불가 사례 {agree['판단 불가 사례']})\n\n"
+          "| 대상 | 정답과 같음 |\n| --- | ---: |")
+    for key, name in [("state", "정보 상태"), ("handling", "처리"), ("outcome", "맞는 처리 여부")]:
+        print(f"| {name} | {rate(agree[key], n)} |")
+    print("\n" + "\n".join(f"- {x}" for x in notes) if notes else "\n어긋난 곳 없음")
+
+
 def usage_sum(usages, key: str) -> int:
     return sum((u or {}).get(key) or 0 for u in usages)
 
 
 def main() -> None:
     cfg = load_cfg(["index.scope=full", *sys.argv[1:]])
+    if cfg.gen_eval.item_cases:
+        print_cases(cfg)
+        return
     rows = read_jsonl(ROOT / cfg.paths.gen_judge)
     n = len(rows)
     answered = [r for r in rows if r["refusal"] != "full"]
@@ -97,6 +174,8 @@ def main() -> None:
           "'있음'으로 본다)\n\n| 비율 | 질의 | 거부 |\n| ---: | ---: | ---: |")
     for ratio, k, ref in chunk_ratio_table(rows):
         print(f"| {ratio:.2f} | {k} | {rate(ref, k)} |")
+    if any(r.get("item_eval") for r in rows):
+        print_items(rows)
 
     cites = [r["citations"] for r in answered]
     n_sent = sum(c["n_sentences"] for c in cites)
@@ -114,7 +193,7 @@ def main() -> None:
     tin, tout = usage_sum(gen_usage, "prompt_tokens"), usage_sum(gen_usage, "completion_tokens")
     reasoning = sum(((u or {}).get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
                     for u in gen_usage)
-    keys = ("faithfulness", "relevance", "inclusion", "key_statements", "chunk_keys")
+    keys = ("faithfulness", "relevance", "inclusion", "key_statements", "chunk_keys", "item_eval")
     judge_usage = [u for r in rows for key in keys for u in ((r.get(key) or {}).get("usage") or [])]
     first = [r["first_token_s"] for r in rows if r["first_token_s"] is not None]
     total = [r["total_s"] for r in rows]
