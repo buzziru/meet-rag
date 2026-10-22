@@ -27,7 +27,7 @@ def main() -> None:
     path = ROOT / cfg.paths.g1_sample
     if path.exists():  # G1 검수본의 원본 표본. 다른 표본으로 덮어쓰지 않는다(S21, 리뷰 D-4)
         raise SystemExit(f"{path}가 있다. 다시 뽑으려면 파일을 옮긴다")
-    splits =pd.read_csv(ROOT / cfg.paths.splits, dtype=str)
+    splits = pd.read_csv(ROOT / cfg.paths.splits, dtype=str)
     picked = set(sample_qids(splits.loc[splits["split"] == "dev", "qid"].tolist(),
                              cfg.seed, cfg.g1_sample_size))
 
