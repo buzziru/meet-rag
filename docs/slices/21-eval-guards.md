@@ -86,7 +86,7 @@ A-3·D-3의 eval 모듈은 보호 경로(CLAUDE.md 금지 절: `src/rag/eval/`, 
 
 - `src/rag/eval/metrics.py`, `src/rag/eval/score.py`, `src/rag/eval/compare.py`, `src/rag/eval_multi/score.py`, `src/rag/eval_multi/compare.py` (결정 사항 1 승인 범위)
 - `src/rag/sample_review.py` (결정 사항 4)
-- `src/rag/index.py`, `src/rag/search.py`, `src/rag/generate.py`, `src/rag/gen_eval/generate.py`
+- `src/rag/index.py`, `src/rag/retrieve.py`, `src/rag/search.py`, `src/rag/generate.py`, `src/rag/gen_eval/generate.py` (`retrieve.py`는 구현 때 더했다. 캐시 읽기 함수를 생성·검색이 함께 쓰는 곳에 두었다. 감사 지적으로 목록을 맞춤)
 - `tests/test_eval.py`, `tests/test_eval_multi.py`, `tests/test_sample_review.py`, `tests/test_search.py`, `tests/test_generate.py`, `tests/test_index.py`
 - `docs/slices/21-eval-guards.md`, `docs/slices/05-retrieve.md`(VM 절차 한 줄), `docs/DECISIONS.md`(D-45), `docs/PLAN.md`, `CLAUDE.md`(명령 줄에 `--overwrite`)
 
@@ -108,3 +108,5 @@ A-3·D-3의 eval 모듈은 보호 경로(CLAUDE.md 금지 절: `src/rag/eval/`, 
 - 결정 사항 7의 영향: 이 기록은 S15 전에 만들어 레시피에 `conditions`·`name_titles`·`rerank_scores_sha256`도 없다. 같은 경로에 이어 생성할 수 없는 상태는 이 조각 전(S15)부터였다
 - 수정 허용에서 뺀 S14c 파일(`gen_eval/judge.py`·`checks.py`·`report.py`, `configs/judge/`, `tests/test_gen_eval.py`): 이 조각 때문에 고칠 것은 없다. judge는 생성 기록 안의 레시피끼리만 대조하고 `gen_recipe_sha256`만 남겨, 새 키가 생기면 새 생성 기록의 해시가 바뀔 뿐이다(S14c 브랜치 diff로 확인, 2026-10-22). 두 브랜치가 함께 고치는 파일은 `docs/PLAN.md`(서로 다른 줄)다
 - 관찰: 질의 목록이 다른 캐시를 로컬에서 다시 임베딩해 덮어쓰는 기존 동작(범위 밖)은 그대로다
+- 관찰: VM에서 만든 캐시는 `colab_job.py fetch`가 VM 디렉터리를 묶어 받으므로(`.claude/skills/meet-rag/scripts/colab_job.py:222`) 캐시 디렉터리를 받으면 지문 파일도 함께 온다. 파일 하나만 `colab download`로 받으면 지문이 빠지고, 다음 실행이 지문 없음으로 멈춘다(오염은 아님)
+- 관찰: test 질의 캐시 2개에는 지문이 없어 `search.queries=test`로 읽으면 멈춘다. 생성 단계 test 1회는 검색 순위를 다시 만들지 않으면 해당하지 않고, 다시 만들 때는 그 준비에서 받아들이거나 다시 임베딩한다
