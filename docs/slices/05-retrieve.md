@@ -30,6 +30,7 @@ S4의 512/64 인덱스로 dev-small·dev-full 질의를 검색해 순위 파일�
   - `embed-queries`(VM): `paths.queries_dev`만 읽어 임베딩하고 `paths.query_emb`에 저장한다. 원본 질의 파일과 분할 파일을 읽지 않아 VM에 둘 필요가 없다. `index.scope=full`에서만 쓴다
 - VM에 올리는 입력은 `queries_summary_q.dev.jsonl` 하나다. `colab_job.py upload`가 모든 `qid`가 dev인지 확인한다. 코퍼스·인덱스는 올리지 않는다
 - 캐시는 `data/index/{임베딩}/queries-{범위}.npz`다. dev-small 캐시(`queries-dev-small.npz`)는 경로가 그대로라 S4 결과를 다시 쓴다
+- (S21) 캐시 옆에 지문 `queries-{범위}.npz.basis.json`(model, revision, query_prompt)을 함께 쓰고 읽을 때 대조한다. VM에서 만든 캐시는 지문 파일도 함께 내려받는다. 지문 없는 캐시는 `adopt_basis=true`로 지문만 쓴다(`docs/slices/21-eval-guards.md`)
 - Colab 절차는 meet-rag 스킬 E절을 따른다. T4 요율은 사용자가 실행 때 웹 화면에서 확인해 알려 준다
 
 ### 출력

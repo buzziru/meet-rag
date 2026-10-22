@@ -7,6 +7,7 @@
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -22,6 +23,7 @@ from rag.chunking import make_chunker
 
 ROOT = Path(__file__).resolve().parents[2]
 CHUNKS = "chunks.jsonl"  # 인덱스 디렉터리의 청크 파일. 줄 순서가 임베딩 행 순서다
+COMMIT = re.compile(r"[0-9a-f]{40}")  # HF 커밋 해시(revision 고정, D-46)
 
 # HF_HOME은 .env에서 읽는다. transformers를 import하기 전에 정해야 캐시 위치가 바뀐다
 load_dotenv(ROOT / ".env")
@@ -210,12 +212,25 @@ def load_embeddings(index_dir: Path) -> np.ndarray:
     return stack_rows(embedding_parts(index_dir))
 
 
+def pinned(section) -> str:
+    """HF 모델·토크나이저를 받을 때 넘기는 revision(D-46). 로딩 호출은 이 함수로만 넘긴다.
+
+    revision이 없으면 HF가 그때의 main을 받아 같은 설정이 다른 가중치로 바뀐다. config 키가 어디든
+    받기 전에 멈추도록 값을 여기서 본다(`.get("revision")`은 빠진 값을 None으로 조용히 넘긴다).
+    """
+    rev = section.get("revision")
+    if not (isinstance(rev, str) and COMMIT.fullmatch(rev)):
+        raise SystemExit(f"{section.get('model_name') or section.get('model')}의 revision이 커밋 "
+                         f"해시가 아니다({rev!r}). configs/에 40자리 커밋 해시를 고정한다(D-46)")
+    return rev
+
+
 def load_model(cfg, max_seq_length: int):
     import torch
     from sentence_transformers import SentenceTransformer
 
     model = SentenceTransformer(cfg.embedding.model_name, device=cfg.embedding.device,
-                                revision=cfg.embedding.get("revision"))
+                                revision=pinned(cfg.embedding))
     model.max_seq_length = min(max_seq_length, model.max_seq_length)
     if cfg.embedding.dtype == "float16":
         model = model.to(torch.float16)
@@ -261,7 +276,7 @@ def main() -> None:
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(cfg.embedding.model_name,
-                                                  revision=cfg.embedding.get("revision"))
+                                                  revision=pinned(cfg.embedding))
     else:
         model = load_model(cfg, ch.chunk_tokens + 2)  # 특수 토큰 2개
         tokenizer = model.tokenizer

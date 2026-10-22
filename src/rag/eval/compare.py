@@ -10,6 +10,7 @@ from pathlib import Path
 from rag.eval.bootstrap import paired_bootstrap, verdict
 from rag.eval.metrics import (
     gold_ranks,
+    gold_sha256,
     load_cfg,
     load_gold,
     min_docs,
@@ -17,6 +18,8 @@ from rag.eval.metrics import (
     read_run,
     sha256,
 )
+from rag.eval.score import OVERWRITE_HINT
+from rag.index import write_guarded
 
 LAYER = "dev-full"
 
@@ -26,6 +29,7 @@ def main() -> None:
     p.add_argument("--base", type=Path, required=True)
     p.add_argument("--cand", type=Path, required=True)
     p.add_argument("--out", type=Path)
+    p.add_argument("--overwrite", action="store_true")
     args = p.parse_args()
 
     cfg = load_cfg()
@@ -44,6 +48,7 @@ def main() -> None:
     )
     result = {
         "layer": LAYER,
+        "gold_sha256": gold_sha256(cfg, LAYER),
         **{
             name: {"run": str(path), "run_sha256": sha256(path),
                    "metrics": scores[name].mean().to_dict()}
@@ -57,7 +62,7 @@ def main() -> None:
     text = json.dumps(result, ensure_ascii=False, indent=2)
     print(text)
     if args.out:
-        args.out.write_text(text, encoding="utf-8")
+        print(f"-> {args.out} ({write_guarded(args.out, text, args.overwrite, OVERWRITE_HINT)})")
 
 
 if __name__ == "__main__":

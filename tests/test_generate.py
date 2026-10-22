@@ -81,3 +81,10 @@ def test_recipe_tracks_condition_settings_and_rerank_scores():
     titles = OmegaConf.merge(cfg, {"ingest": {"name_titles": ["위원"]}})
     assert recipe(titles, meta, stream=False)["name_titles"] == ["위원"]
     assert recipe(cfg, {**meta, "rerank_scores_sha256": "b"}, stream=False) != base
+
+
+def test_recipe_records_query_embedding_basis():
+    rec = recipe(load_cfg(["index.scope=full", "+exp=exp017"]),
+                 {"names": ["idx"], "n_chunks": 3}, stream=False)
+    assert rec["embedding_revision"] == "55ec6e9358a56d56af759bc8372e970caf8c305f"
+    assert rec["query_prompt"] == "query: "

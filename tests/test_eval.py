@@ -5,7 +5,14 @@ import pandas as pd
 import pytest
 
 from rag.eval.bootstrap import metadata_verdict, paired_bootstrap, verdict
-from rag.eval.metrics import gold_ranks, load_gold, metric_table, min_docs, per_query
+from rag.eval.metrics import (
+    gold_ranks,
+    gold_sha256,
+    load_gold,
+    metric_table,
+    min_docs,
+    per_query,
+)
 from rag.index import load_cfg
 
 N_MIN = min_docs([1, 5, 10], 10)
@@ -162,3 +169,46 @@ def test_load_gold_blocks_test_unless_allowed(tmp_path):
     assert load_gold(cfg, "test", allow_test=True).index.tolist() == ["q3"]
     with pytest.raises(ValueError, match="알 수 없는 평가 층"):
         load_gold(cfg, "dev")
+
+
+def test_gold_sha256_covers_split_queries_and_small_list(tmp_path):
+    cfg = _gold_files(tmp_path)
+    full, small = gold_sha256(cfg, "dev-full"), gold_sha256(cfg, "dev-small")
+    assert list(full) == [cfg.paths.splits, cfg.paths.queries]  # 코퍼스는 넣지 않는다
+    assert list(small) == [cfg.paths.splits, cfg.paths.queries, cfg.paths.dev_small_docs]
+    (tmp_path / "queries.jsonl").write_text("{}\n", encoding="utf-8")
+    assert gold_sha256(cfg, "dev-full")[cfg.paths.queries] != full[cfg.paths.queries]
+
+
+def _run_main(module, args, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["x", *args])
+    module.main()
+
+
+def test_score_and_compare_out_are_guarded(tmp_path, monkeypatch, capsys):
+    from rag.eval import compare, score
+    cfg = _gold_files(tmp_path)
+    monkeypatch.setattr(score, "load_cfg", lambda: cfg)
+    monkeypatch.setattr(compare, "load_cfg", lambda: cfg)
+    gold = load_gold(cfg, "dev-full")
+    runs = {}
+    for name, pos in [("a", {"q1": 1, "q2": 3}), ("b", {"q1": 2})]:
+        runs[name] = tmp_path / f"{name}.csv"
+        make_run(gold, pos).to_csv(runs[name], index=False)
+    for module, first, other in [
+        (score, ["--run", str(runs["a"]), "--layer", "dev-full"],
+         ["--run", str(runs["b"]), "--layer", "dev-full"]),
+        (compare, ["--base", str(runs["a"]), "--cand", str(runs["b"])],
+         ["--base", str(runs["b"]), "--cand", str(runs["a"])]),
+    ]:
+        out = tmp_path / f"{module.__name__}.json"
+        _run_main(module, [*first, "--out", str(out)], monkeypatch)
+        before = out.read_text(encoding="utf-8")
+        assert json.loads(before)["gold_sha256"] == gold_sha256(cfg, "dev-full")
+        _run_main(module, [*first, "--out", str(out)], monkeypatch)  # 같은 내용
+        assert "그대로 둠" in capsys.readouterr().out
+        with pytest.raises(SystemExit, match="--overwrite"):
+            _run_main(module, [*other, "--out", str(out)], monkeypatch)
+        assert out.read_text(encoding="utf-8") == before
+        _run_main(module, [*other, "--out", str(out), "--overwrite"], monkeypatch)
+        assert out.read_text(encoding="utf-8") != before
