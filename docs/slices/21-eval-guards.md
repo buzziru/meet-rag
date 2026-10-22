@@ -96,3 +96,15 @@ A-3·D-3의 eval 모듈은 보호 경로(CLAUDE.md 금지 절: `src/rag/eval/`, 
 - 질의 캐시의 qid 목록이 다를 때 로컬에서 다시 임베딩해 덮어쓰는 기존 동작(`query_embeddings`). Colab에서 만든 캐시가 CPU 값으로 바뀌는 경로지만 이번 리뷰 항목이 아니다. 관찰로 남긴다
 - 리뷰 등급 낮음의 나머지(A-7, D-1·D-6·D-7·D-9·D-10·D-11, B-8 나머지). PLAN 결정대로 고치지 않는다
 - test 질의 임베딩 캐시 2개의 지문
+
+## 결과 (2026-10-22)
+
+- 커밋: (a)·(b) fcca03e, (c) 46a317f. 테스트 255 → 262개, `uv run pytest -q`·`uv run ruff check .` 통과
+- 채점 불변: `main`(3c6ed6f)과 이 브랜치에서 EXP-017 순위로 `rag.eval.score`(dev-small·dev-full), `rag.eval.compare`(EXP-014 대 EXP-017), `rag.eval_multi.score`·`compare`(같은 쌍의 multi-doc)를 임시 경로에 써, `gold_sha256`을 뺀 JSON 5개가 모두 같다. 기록된 해시: 분할 `091235be…`, 질의 `1643b047…`, dev-small 목록 `7803c4a7…`
+- 덮어쓰기: 같은 `--out`으로 다시 돌리면 "같은 내용, 그대로 둠", 다른 순위를 같은 `--out`에 쓰면 "내용이 다른 파일이 있다. 덮어쓰려면 --overwrite"로 멈추고(종료 코드 1), `--overwrite`면 "씀"(score·compare·eval_multi compare를 실제 파일로, 네 명령 모두 합성 파일 테스트로)
+- 기존 캐시 받아들이기(결정 사항 6): kure-v1 캐시 3개는 2026-10-01\~08에 만들었고, `embedding.revision`·`query_prompt` 지원은 2026-10-13 d4fbd41에서 들어왔다(그 전 `encoder`는 접두를 붙이지 않았고 모델을 revision 없이 불렀다). snowflake-ko 캐시 3개는 2026-10-13 16:27·17:26에 만들었고, `configs/exp/exp009.yaml`(revision `55ec6e9…`, 접두 `query: `)은 같은 날 15:09 5ec9de6 뒤 바뀌지 않았다. EXP-009 실행 기록(dev·G3 질의는 VM `embed-queries +exp=exp009`, dev-small은 로컬)과 맞다. 이 대조로 `rag.search [+exp=exp017] index.scope=… adopt_basis=true` 6회로 지문을 썼다(모두 "씀")
+- 질의 캐시: `rag.search +exp=exp017`의 dev-small·dev-full·multi-doc이 기존 순위 파일과 "같은 내용, 그대로 둠". `embedding.query_prompt='passage: '` override는 임베딩 전에 "지문이 지금 설정과 다르다(query_prompt)"로 멈춘다. 기본 설정(kure-v1) dev-small 검색은 완료 기준 4대로 돌리지 못했다. kure-v1 인덱스에 S15 인덱스 지문(`basis.json`)이 없어 질의 캐시 전에 멈추고, 이 동작은 이 조각 전 코드(`rag.retrieve`의 인덱스 지문 대조, S15)다. 대신 kure-v1 질의 캐시 3개를 `read_query_emb`로 기본 설정에서 읽어 지문 대조를 통과하는 것을 확인했다(1,039·3,016·600행)
+- 생성 근거 불변: 기존 생성 기록 20건의 근거 dict가 20/20 같다(`LANGSMITH_TRACING=false`, 생성 API 호출 없음. `Pipeline`이 클라이언트를 만들 때 읽는 키 환경 변수에는 더미 값을 넣었다). 새 레시피에 `embedding_revision`(`55ec6e9…`), `query_prompt`(`query: `)가 들어간다
+- 결정 사항 7의 영향: 이 기록은 S15 전에 만들어 레시피에 `conditions`·`name_titles`·`rerank_scores_sha256`도 없다. 같은 경로에 이어 생성할 수 없는 상태는 이 조각 전(S15)부터였다
+- 수정 허용에서 뺀 S14c 파일(`gen_eval/judge.py`·`checks.py`·`report.py`, `configs/judge/`, `tests/test_gen_eval.py`): 이 조각 때문에 고칠 것은 없다. judge는 생성 기록 안의 레시피끼리만 대조하고 `gen_recipe_sha256`만 남겨, 새 키가 생기면 새 생성 기록의 해시가 바뀔 뿐이다(S14c 브랜치 diff로 확인, 2026-10-22). 두 브랜치가 함께 고치는 파일은 `docs/PLAN.md`(서로 다른 줄)다
+- 관찰: 질의 목록이 다른 캐시를 로컬에서 다시 임베딩해 덮어쓰는 기존 동작(범위 밖)은 그대로다

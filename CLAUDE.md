@@ -12,9 +12,9 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 평가 분할: `uv run python -m rag.splits` (→ `data/splits/`)
 - 값 사전: `uv run python -m rag.meta_dict` (확인용 파일. 검색·생성의 조건 추출은 실행 때 코퍼스에서 직접 만든다(S12), slices/10-speaker-fields.md)
 - 질의 조건: `uv run python -m rag.conditions [search.queries=summary_q|multidoc]` (→ `data/conditions/` 확인용 파일. 검색·생성은 실행 config의 추출기로 직접 뽑는다(S12), slices/11-query-conditions.md)
-- 채점: `uv run python -m rag.eval.score --run <순위.csv> --layer dev-small|dev-full [--out <결과.json>]` (순위 파일 열 `qid`, `rank`, `doc_id`)
-- 판정: `uv run python -m rag.eval.compare --base <기준.csv> --cand <후보.csv> [--out <결과.json>]` (dev-full 고정)
-- multi-doc 채점·비교: `uv run python -m rag.eval_multi.score --run <순위.csv> [--out <결과.json>]`, `rag.eval_multi.compare --base <기준.csv> --cand <후보.csv>` (순위는 `rag.search index.scope=full search.queries=multidoc`, slices/09-multidoc-eval.md)
+- 채점: `uv run python -m rag.eval.score --run <순위.csv> --layer dev-small|dev-full [--out <결과.json> [--overwrite]]` (순위 파일 열 `qid`, `rank`, `doc_id`)
+- 판정: `uv run python -m rag.eval.compare --base <기준.csv> --cand <후보.csv> [--out <결과.json> [--overwrite]]` (dev-full 고정)
+- multi-doc 채점·비교: `uv run python -m rag.eval_multi.score --run <순위.csv> [--out <결과.json> [--overwrite]]`, `rag.eval_multi.compare --base <기준.csv> --cand <후보.csv>` (순위는 `rag.search index.scope=full search.queries=multidoc`, slices/09-multidoc-eval.md)
 - 인덱스: `uv run python -m rag.index index.scope=dev-small|full [embedding.device=cuda embedding.dtype=float16]` (full은 Colab L4 약 21분. 옵션: slices/04-index.md)
 - 검색: `uv run python -m rag.search [index.scope=full]` (질의 임베딩 캐시가 없을 때: slices/05-retrieve.md)
 - test 1회(S13): 실행을 마쳤고 다시 돌리지 않는다. 절차·명령·결과는 slices/13-test-run.md, D-39
