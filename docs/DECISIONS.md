@@ -469,7 +469,7 @@
 - 날짜: 2026-10-22
 
 ## D-46 HF 모델·토크나이저는 revision을 고정한다
-- 결정: HF에서 받는 모델·토크나이저(임베딩, 리랭커 등)는 `configs/`에 revision(40자리 커밋 해시)을 고정하고, 불러오는 코드는 `revision=`을 넘긴다. CLAUDE.md 금지 절에 적고 `tests/test_revisions.py`가 점검한다(기본 설정과 `configs/exp/*` 전부의 `embedding.revision`·cross-encoder 리랭커 `revision`, `src/`의 HF 로딩 호출). API로 부르는 생성·judge 모델은 제공자가 버전을 고정해 주지 않아 같은 방식으로 고정할 수 없고, 모델 이름과 제공자를 레시피·기록에 남긴다
+- 결정: HF에서 받는 모델·토크나이저(임베딩, 리랭커 등)는 `configs/`에 revision(40자리 커밋 해시)을 고정하고, 불러오는 코드는 revision을 `rag.index.pinned(config 구역)`로만 넘긴다. `pinned`는 revision이 40자리 커밋 해시가 아니면 모델을 받기 전에 멈춘다. CLAUDE.md 금지 절에 적고 `tests/test_revisions.py`가 점검한다: `src/`의 HF 로딩 호출이 모두 `revision=pinned(...)`인지, 기본 설정과 `configs/exp/*` 전부의 `embedding.revision`·cross-encoder 리랭커 `revision`이 커밋 해시인지. 처음에는 config의 알려진 두 키와 `revision=` 키워드 유무만 봐서, 새 모델을 다른 config 키로 들이며 revision을 빠뜨리면 `.get("revision")`이 None을 넘겨 HF `main`을 받는데도 통과했다(PR #136 사용자 리뷰 2). 검사 위치를 모델을 받는 시점으로 옮겨 config 키와 관계없이 막는다. API로 부르는 생성·judge 모델은 제공자가 버전을 고정해 주지 않아 같은 방식으로 고정할 수 없고, 모델 이름과 제공자를 레시피·기록에 남긴다
 - kure-v1: 기본 설정 `embedding.revision`을 `8b418a58414668e75532ed045c22d9ca018ae2b2`로 고정했다. HF `nlpai-lab/KURE-v1`의 `main` 최신 커밋(2026-09-07)이 이것이고 그 뒤 바뀌지 않아, kure-v1 산출물(2026-10-01\~08)은 모두 이 커밋으로 만들었다. 프로젝트 HF 캐시의 스냅샷도 이것 하나다. 재현 임베딩으로는 확인하지 않았다(사용자 결정). 질의 캐시 지문 3개(`data/index/kure-v1/queries-*.npz.basis.json`)의 revision도 같은 값으로 고쳤다. snowflake-ko(EXP-009)와 리랭커(EXP-005·017)는 이미 고정돼 있었다
 - 이유: kure-v1은 revision 없이 불러 `main`이 바뀌면 같은 설정이 다른 가중치를 받는다. 고정 누락은 새 모델을 들일 때마다 반복될 수 있어 테스트로 점검한다(사용자 결정 2026-10-22, PR #136 리뷰)
 - 날짜: 2026-10-22
