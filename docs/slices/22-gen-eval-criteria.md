@@ -1,0 +1,95 @@
+# S22 생성 평가 기준 반영
+
+`docs/gen-eval-criteria.md`(이하 기준 문서)의 "모듈 점검 결과" 12개 행을 judge 지시와 평가 코드에 한 번에 반영한다(PLAN 생성 평가 절, D-47 남은 일). judge 지시는 j_v8로 올리고, 이것이 동결 전 마지막 지시 변경이다(기준 문서 P1). S14 표본을 다시 채점하고 S14c 확인 사례로 회귀 검사를 해 동작을 확인한다(재채점 허용, 사용자 결정 2026-10-22).
+
+이슈 #142의 두 항목을 함께 한다(사용자 지시 2026-10-26, S22 선행 처리).
+
+- `judge_cases` 레시피에 확인 사례 파일 해시가 없어, 사례 정답을 고친 뒤에도 report가 옛 judge 결과와 대조한다(`src/rag/gen_eval/judge.py:296`, `report.py` `print_cases`). 이 조각에서 확인 사례를 다시 채점하므로 같이 고친다
+- D-44 "지켜야 할 것" 3이 "judge 보정(G5)에 쓴 질의"라고 적고 있다(`docs/DECISIONS.md:462`). G5는 블라인드 확인으로 바뀌었고 제외 대상은 D-47 결정 5가 정했다. 이 조각이 그 제외를 구현하므로 문구를 D-47 결정 5로 맞춘다
+
+## 만드는 것
+
+### (a) judge 지시 j_v8 (`configs/judge/prompt/j_v8.yaml`)
+
+j_v7을 복사해 아래 네 단계만 바꾼다. `statements`, `key_statements`, `key_checks`, `chunk_checks`는 글자까지 같게 두어 저장된 응답을 그대로 쓴다. 기본 설정의 `override judge/prompt`를 j_v8로 바꾼다. j_v7 파일은 고치지 않는다.
+
+| 단계 | 바꿀 것 | 규칙 |
+| --- | --- | --- |
+| `verdicts` | 규칙 5를 `items` 규칙 3과 같은 발언자 세 갈래(질의자 발언이 분명함: 의문형, 답변자를 부르는 호칭, 답변자가 확인하지 않은 주장 / 답변자 발언이 분명함 / 구분 불가)로 바꾼다. 출력 항목마다 `speaker_unclear`(true·false)를 더한다. F6 예(위원 "과태료를 두 배로" + 답변자 "검토하겠습니다")를 예시로 넣는다 | G2, F5\~F7 |
+| `relevance` | "일부"에서 "'검토하겠다'는 발언만 옮긴 답변" 문장을 뺀다. "답함"에 확답이 없었다는 상황을 전한 답변(R5 예)과, 부분 거부 답변에서 찾지 못했다고 밝힌 부분은 감점하지 않는다는 규칙(R6 예)을 넣는다 | R5, R6 |
+| `items` | 규칙 4의 대상에 연도를 더한다(법, 기관, 사건, 연도) | G4 |
+| `item_handling` | "일부만 있다"는 안내와 함께 확답이 없다는 상황(검토·예정·협의하겠다, 답을 피했다)을 전했으면 "상황을 밝히고 답함"이라는 규칙을 더한다. I7의 두 예와 "협의하겠다" 예를 넣는다 | I7 |
+
+### (b) 평가 코드 (`src/rag/gen_eval/`)
+
+| 규칙 | 바꿀 것 |
+| --- | --- |
+| F7 | `faithfulness`가 판정마다 `speaker_unclear`가 bool인지 보고(아니면 형식 오류), report가 표시된 진술 수와 그런 진술이 든 질의 수를 충실성 행 아래에 낸다 |
+| P6 | `verdicts`, `key_checks`, `chunk_checks`의 응답에서 `statement` 문자열이 입력 진술과 같은 순서·같은 문구인지 본다. 다르면 형식 오류다(결정 사항 2) |
+| C2 | report `refusal_table`의 "판단 불가"를 참조 사용 불가(핵심 진술 없음)와 judge 형식 오류로 나눈다 |
+| R6 | 부분 거부 답변의 `relevance`에 거부 문장을 뺀 내용이 아니라 답변 전체를 넣는다. 충실성·인용 검사는 그대로 거부 문장을 뺀다(D-47 결정 4) |
+| K8 | report 기준 표의 "뺀 질의"에 전체 거부 수를 기준마다 낸다(지금은 전체 거부 답변에 기준 칸이 없어 세지 않는다). 짝지은 제외(D-47 결정 6)는 비교 코드를 만들 때 넣고 이 조각에서는 하지 않는다 |
+| I10 | report 항목 평가에 "모호·회피 항목 k/전체 항목"을 낸다 |
+| I11 | report의 거부 정확도 이름에 "블라인드 확인 전 참고값"을 붙인다 |
+| I13 | `item_eval` 결과에 질의 단위 값 `counts`(맞는 처리, 판정 대상(모호·회피 제외), 과잉 거부, 근거 없이 답함 항목 수)를 더해 judge 기록에 남긴다. report의 거부 정확도는 이 값을 합쳐 계산한다. judge 판정은 바뀌지 않는다 |
+| P3 | judge 지시 개발에 쓴 질의를 `configs/`의 목록으로 두고 판정용 세트에서 뺀다(결정 사항 1) |
+| 이슈 #142 | `judge_cases`의 레시피에 사례 파일의 sha256(`item_cases_sha256`)을 남기고, report `print_cases`는 지금 사례 파일의 해시와 다르면 멈춘다 |
+
+### (c) 문서
+
+- `docs/DECISIONS.md` D-44 지켜야 할 것 3: "judge 보정(G5)에 쓴 질의"를 "judge 지시 개발에 쓴 질의(D-47 결정 5)와 블라인드 확인 표본"으로 고친다. D-47 남은 일에 이 조각에서 반영했다고 적는다
+- 기준 문서 "모듈 점검 결과" 표에 반영 커밋을 적는다
+- `docs/slices/14-gen-eval.md`의 judge 지시 버전 줄, CLAUDE.md 명령 줄은 바뀌는 것이 있을 때만 고친다
+
+### 테스트 (`tests/test_gen_eval.py`)
+
+- j_v8 파일: 바꾸지 않는 네 단계가 j_v7과 같다. 바꾼 네 단계에 위 표의 문구가 있다(R5·R6·I7 예, `speaker_unclear`, 연도)
+- 가짜 judge 응답으로: `verdicts`에 `speaker_unclear`가 없거나 진술 문구·순서가 다르면 형식 오류, `key_checks`·`chunk_checks`도 같다. 표시된 진술 수가 집계된다
+- 부분 거부 답변에서 `relevance`에 답변 전체가, `faithfulness`에 거부 문장을 뺀 내용이 들어간다
+- `counts` 네 값이 판정표(I8)대로 나온다. report의 거부 정확도가 `counts` 합과 같다
+- report: 전체 거부가 기준별 뺀 이유에 나온다. 판단 불가가 두 갈래로 나뉜다. 모호·회피 비율이 나온다
+- 제외 목록: 결정 사항 1의 범위에서 목록 qid가 표본에 들어가지 않고, 제외 뒤에도 n을 늘리면 앞 표본이 유지된다
+- 사례 파일 한 바이트를 바꾸면 `print_cases`가 멈춘다
+- 기존 테스트가 그대로 통과한다
+
+## 결정 사항
+
+1. **개발 질의 제외의 범위와 방식.** 대상은 S14 표본 20질의다. S14c 확인 사례의 질의 9개는 모두 이 20개 안에 있다(지시서 작성 때 확인). 20개 모두 dev-full에 들어 있고, dev-full seed 순서의 앞 200개 안에는 1개, 앞 300개 안에는 2개가 있다
+   - (a) `configs/gen_eval/dev_queries.yaml`에 qid 20개를 출처(S14 표본, S14c 사례)와 함께 두고, `gen_eval.queries=dev-full`일 때만 뺀다. seed로 섞은 순서에서 목록 qid를 뺀 뒤 앞 n개를 쓴다. 예: `gen_eval.queries=dev-full gen_eval.n=200`이면 앞 201개 중 목록 qid 1개를 건너뛴 200개다. n을 늘려도 앞 표본이 유지된다. dev-small은 개발 층으로 남아, 이 조각의 S14 재채점(`gen_eval.queries=dev-small gen_eval.n=20`)이 같은 20개를 쓴다. qid만 두고 질의 원문은 두지 않는다(`configs/multidoc/g3_exclude.yaml`과 같음)
+   - (b) 같은 목록을 층과 관계없이 늘 뺀다: dev-small `n=20`이 S14 표본이 아닌 다른 20개가 되어, 이 조각의 재채점에는 제외를 끄는 설정이 따로 필요하다
+   - (c) 목록을 두지 않고 실행할 때 S14 표본 규칙(dev-small, seed, n=20)과 사례 파일(`data/gen_eval/s14c_cases.jsonl`)에서 계산한다: 설정 파일이 없지만 `data/` 파일이 바뀌면 판정용 세트가 조용히 바뀐다
+   - 추천은 (a)다. 블라인드 확인 표본도 정해지면 같은 파일에 더한다(D-44 지켜야 할 것 3)
+2. **진술 문자열 대조의 엄격함(P6).** 지금 기록(j_v7, S14 표본)에서 `key_checks` 17건, `chunk_checks` 17건 모두 응답의 진술 목록이 입력과 글자까지 같았다(지시서 작성 때 잰 값). `verdicts`는 성공한 응답의 진술을 기록에 남기지 않아 재지 못했다
+   - (a) 글자까지 같아야 한다: 예: judge가 진술 끝의 마침표를 빼면 그 질의의 그 기준은 형식 오류(판단 불가)가 된다. 형식 오류 수는 report에 나온다
+   - (b) 공백만 정규화해 비교한다: 공백 차이는 통과한다. 지금 기록에서는 (a)와 결과가 같다
+   - 추천은 (a)다. 다른 문구를 같은 진술로 볼 근거가 없고, 지금 기록에서 어긋남이 0건이다. 재채점에서 형식 오류가 나오면 수와 사례를 보고하고 (b)를 다시 묻는다
+3. **재채점 실행 승인(opencode Go, judge `deepseek_go_mixed`).** S14 표본 20질의를 생성 기록 `data/gen_eval/runs/hybrid-cond-filter-law-ms256-k20-ce-v2-dev-small.jsonl`(프롬프트 v2, 생성 API 호출 없음)로 j_v8 채점하고, S14c 확인 사례 20개를 다시 채점한다
+   - 호출: S14 표본은 바뀌는 네 단계만 새로 묻는다(`statements`, `key_statements`, `key_checks`, `chunk_checks`는 저장 응답). 질의당 `verdicts`·`relevance`·`items`·`item_handling` 4회로 약 80회, 사례는 `items`·`item_handling` 2회로 40회, 합계 약 120회
+   - 비용: j_v7 기록의 usage(질의당 바뀌는 단계 합계 입력 약 6.9K·출력 약 4.5K 토큰, 사례당 입력 약 4.3K·출력 약 3.3K)와 opencode Go 가격(DeepSeek V4.1 Flash 100만 토큰당 비피크 입력 $0.15·출력 $0.60, 피크 두 배)으로 비피크 약 $0.13, 피크 약 $0.26이다. 월 한도 $80의 0.3% 이하다. 형식 오류로 다시 돌리면 그만큼 더 든다
+   - 사례 결과는 j_v7 결과(`s14c_cases.judge.jsonl`)를 지우지 않고 옮겨 둔 뒤 새로 쓴다(`judge_cases`는 출력이 있으면 멈춘다). 옮길 이름은 `s14c_cases.judge.j_v7.jsonl`이다
+
+## 완료 기준
+
+1. `uv run pytest -q`, `uv run ruff check .` 통과
+2. j_v8 채점: 결정 사항 3의 S14 표본 채점이 형식 오류 수와 함께 끝나고, report가 위 (b)의 새 항목(발언자 구분 불가 진술, 판단 불가 두 갈래, 전체 거부의 뺀 이유, 모호·회피 비율, 참고값 표시)을 낸다. judge 기록마다 `counts`가 있다
+3. 저장 응답 재사용: 2의 실행에서 `statements`, `key_statements`, `key_checks`, `chunk_checks` 요청이 모두 저장된 응답으로 처리된다(API 호출 수가 바뀌는 네 단계의 요청 수와 같다)
+4. j_v7 대비 변화: S14 표본에서 j_v7과 j_v8의 기준별 값(충실성, 관련성, 포함도, 항목 판정)이 달라진 질의를 목록으로 내고, 각 변화가 어느 규칙(위 (a) 표) 때문인지 결과 절에 적는다. 수치 기준은 두지 않는다
+5. 회귀 검사: S14c 확인 사례를 j_v8로 채점해 정답과의 일치(정보 상태, 처리, 맞는 처리 여부)를 j_v7 결과와 나란히 낸다. 어긋남이 늘어난 사례는 결과 절에 사례 번호와 원인을 적는다. 이 일치율은 검증 근거로 쓰지 않는다(P3)
+6. 사례 해시: 사례 파일의 해시가 레시피에 남고, 다른 사례 파일로 report를 돌리면 멈춘다
+7. test 분할 질의를 읽는 명령은 돌리지 않는다. 외부 API는 결정 사항 3의 실행만 한다
+
+## 수정 허용 파일
+
+- `configs/judge/prompt/j_v8.yaml`(새 파일), `configs/config.yaml`(`override judge/prompt`, `gen_eval` 구역), `configs/gen_eval/dev_queries.yaml`(새 파일, 결정 사항 1)
+- `src/rag/gen_eval/judge.py`, `src/rag/gen_eval/report.py`, `src/rag/gen_eval/checks.py`, `src/rag/gen_eval/common.py`
+- `tests/test_gen_eval.py`
+- `docs/slices/22-gen-eval-criteria.md`, `docs/gen-eval-criteria.md`("모듈 점검 결과" 반영 표시), `docs/DECISIONS.md`(D-44 지켜야 할 것 3, D-47 남은 일), `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/slices/14-gen-eval.md`(지시 버전 줄), `CLAUDE.md`(명령 줄이 바뀔 때만)
+
+## 범위 밖
+
+- 짝지은 제외(D-47 결정 6)와 설정 비교 코드: 비교 코드를 만들 때 한다
+- 반복 재채점(캐시 키에 반복 번호)과 변동 폭 측정: PLAN 다음 항목이다
+- 평가 모듈 동결 기록(P2): PLAN 다음 항목이다
+- 블라인드 확인 일치 기준값(SPEC 초안 결정 사항 4): 블라인드 확인 전에 정한다(이슈 #142, 별도 세션)
+- `src/rag/gen_eval/generate.py`, `review.py`, 생성 프롬프트, judge 설정 파일(`configs/judge/*.yaml`)
+- 보호 경로(`src/rag/eval/`, `src/rag/eval_multi/`, `configs/eval/`, `data/splits/`)
