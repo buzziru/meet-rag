@@ -17,7 +17,8 @@ from sklearn.metrics import cohen_kappa_score
 
 from rag.eval.metrics import load_gold
 from rag.gen_eval.checks import HANDLINGS, OUTCOMES, STATES
-from rag.gen_eval.common import read_jsonl
+from rag.gen_eval.common import read_jsonl, stable
+from rag.gen_eval.judge import sha
 from rag.index import ROOT, load_cfg, refuse_existing
 
 # 판정 종류: (이름, 선택지, 실패 클래스). 순서는 검수 문서 안의 순서다(근거를 읽는 판정을 앞에)
@@ -65,6 +66,16 @@ def pool_only(base: list[dict], pool: list[dict]) -> list[dict]:
     """풀 결과 중 판정용 결과(base)에 없는 질의."""
     seen = {r["qid"] for r in base}
     return [r for r in pool if r["qid"] not in seen]
+
+
+def check_same_generation(rows: list[dict], gens: dict[str, dict]) -> None:
+    """judge가 채점한 답변과 검수 문서에 넣을 생성 기록이 같은 생성인지 레시피 지문으로 본다.
+    다르면 사람이 보는 답변과 정답 키가 조용히 어긋난다(gen_rep·프롬프트가 다른 기록 등)."""
+    bad = [r["qid"] for r in rows if r["qid"] not in gens
+           or sha(stable(gens[r["qid"]]["recipe"])) != r["judge_recipe"]["gen_recipe_sha256"]]
+    if bad:
+        raise SystemExit(f"judge 결과와 생성 기록(paths.gen_runs)의 생성이 다르다: {bad[:5]}. "
+                         "같은 +exp·prompt·gen_eval.gen_rep로 실행한다")
 
 
 def pick(rows: list[dict], meeting: dict[str, str], m: int, clean_share: float,
@@ -213,6 +224,7 @@ def main() -> None:
     meeting = load_gold(cfg, "dev-full")["conference_number"].to_dict()
     chosen = pick(rows, meeting, b.m, b.clean_share, b.seed)
     gens = {r["qid"]: r for r in read_jsonl(ROOT / cfg.paths.gen_runs)}
+    check_same_generation(chosen, gens)
     out.parent.mkdir(parents=True, exist_ok=True)
     doc.write_text(document(chosen, gens), encoding="utf-8", newline="\n")
     keys = [{"qid": r["qid"], **u} for r in chosen for u in units(r)]

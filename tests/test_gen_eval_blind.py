@@ -87,3 +87,15 @@ def test_score_agreement_and_refusal_outcome():
     assert res["거부 정확도(판정표 결과)"]["tpr"] == (0, 1)
     assert res["답변 관련성"]["agree"] == 1.0
     assert reasons(done) == {("q", "state0"): "근거 2에 있다"}
+
+
+def test_check_same_generation_stops_on_other_recipe():
+    from rag.gen_eval.blind import check_same_generation
+    from rag.gen_eval.common import stable
+    from rag.gen_eval.judge import sha
+    recipe = {"prompt": "v2", "git_commit": "a"}
+    r = {**row("q"), "judge_recipe": {"gen_recipe_sha256": sha(stable(recipe))}}
+    # 커밋만 다르면 같은 생성이다
+    check_same_generation([r], {"q": {"recipe": {**recipe, "git_commit": "b"}}})
+    with pytest.raises(SystemExit):
+        check_same_generation([r], {"q": {"recipe": {**recipe, "prompt": "v1"}}})
