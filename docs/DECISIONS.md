@@ -491,3 +491,17 @@
 - 이유: 1은 사용자가 S14c c11에서 근거가 없었던 것이 아니라 답변이 분명하지 못했던 상황을 설명해야 한다고 판단한 것과 맞춘다. 2는 관련성을 일부로 두면 상황을 전한 답변이 평균에서 빠지는 전체 거부보다 불리해지고, 그 상황이 사실인지는 충실성과 항목 평가가 본다. 3은 진술의 실질을 판단하는 것이 judge 본래의 일에 가깝지만, 평가 모듈의 일관성이 확립되지 않아 무엇이 부수 세부인지를 judge 판단에 맡기지 않는다(사용자)
 - 남은 일: 2·4의 지시 변경, 5의 제외 목록, F7(충실성 판정의 발언자 구분 불가 표시) 등 모듈 점검에서 나온 수정(`docs/gen-eval-criteria.md` "모듈 점검 결과")은 S22 생성 평가 기준 반영(SLICE, judge 지시 j_v8)에서 한다. S22에서 반영했다(`docs/slices/22-gen-eval-criteria.md`, 2026-10-26). 5의 제외는 판정용 층(dev-full)에만 적용하고 dev-small은 개발 층으로 둔다(S22 결정 사항 1)
 - 날짜: 2026-10-22
+
+## D-49 생성 평가 judge 지시와 집계를 동결한다 (S23)
+- 결정: judge 지시 `j_v8`과 집계 규칙을 동결한다. 동결 뒤에는 정답과 비교하며 지시를 고치지 않고, 바꿔야 하면 새 버전 파일을 만들어 검증을 다시 한다(기준 문서 P1). 보호 방식은 테스트(`tests/test_gen_eval_freeze.py`)로 하고 CLAUDE.md 보호 경로에는 넣지 않는다. 실행 설정(단계별 사고 과정, `max_tokens`)은 고정하지 않고 변동 폭 측정 결과로 정한 뒤 고정한다(사용자 결정 2026-10-26, S23 결정 사항 1·2)
+- 동결 기록(기준 문서 P2)
+  - judge 모델·경로: `deepseek-v4.1-flash`, opencode Go(`https://opencode.ai/inference/go/openai/v1`). API 모델이라 가중치를 고정할 수 없어 이름과 제공자를 남긴다(D-46). 모델 식별자가 바뀌면 검증을 다시 한다(P9)
+  - 지시: `configs/judge/prompt/j_v8.yaml`, `prompt_sha256` `fc8b56034f35d1809db92f1ce5cdf250f09773c11f407379088a40da86bd4de8`(`judge_recipe`와 같은 계산)
+  - temperature 0.0
+  - 집계 코드: `src/rag/gen_eval/report.py`·`checks.py`, S22 병합 커밋 8eb1284
+  - 판정표(I8): `checks.py`의 `OUTCOMES` 12쌍과 `item_outcome`(모호·회피는 상황 전달·미전달, 있음·일부·없음의 "상황을 밝히고 답함"은 답함과 같음)
+  - 캐시 키: 요청 본문(model, messages, params, extra_body)의 sha256. 반복 재채점은 반복 번호를 키에 더하되 반복 0은 지금 키와 같게 둔다(다음 항목)
+  - 판정용 세트 제외: `configs/gen_eval/dev_queries.yaml`(D-47 결정 5)
+- 동결하지 않은 실행 설정(지금 값을 기록만 한다): `deepseek_go_mixed`(기본 사고 과정 끔, `verdicts`·`key_statements`·`items`만 low), `max_tokens` 16384. `max_tokens`는 사고 과정을 high 이상으로 켰을 때 정한 값이라 측정 결과를 보고 바꿀 수 있다
+- 점검: 테스트가 기본 설정의 지시 버전과 해시, `OUTCOMES`를 기대값과 대조한다. j_v8 한 글자나 판정표 한 쌍을 바꾸면 실패한다. 기대값을 같이 고치면 통과하므로 PR 리뷰에서 테스트 파일 변경을 본다
+- 날짜: 2026-10-26

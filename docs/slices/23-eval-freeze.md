@@ -64,3 +64,11 @@
 - 실행 설정 고정, 반복 재채점 코드와 변동 폭 측정: PLAN 다음 항목
 - judge 지시·코드 변경
 - 블라인드 확인 일치 기준값: 블라인드 확인 전에 정한다
+
+## 결과 (2026-10-26)
+
+- 테스트 `tests/test_gen_eval_freeze.py` 2개: 기본 설정의 지시 버전·`prompt_sha256`, `OUTCOMES` 12쌍. `uv run pytest -q`(296개)·`uv run ruff check .` 통과
+- 완료 기준 2: `j_v8.yaml` `statements` 지시에 공백 한 칸을 더하면 해시 테스트가, `OUTCOMES`의 ("없음", "다루지 않음")을 "누락"으로 바꾸면 판정표 테스트가 실패했다(각 1 failed). 두 파일은 `git checkout`으로 되돌렸고 테스트는 다시 통과한다
+- 완료 기준 3: D-49와 테스트의 해시 `fc8b5603…4de8`은 `judge_recipe`와 같은 계산(`sha(OmegaConf.to_container(prompt))`)으로 얻은 값이고, S22 재채점 기록의 레시피 `prompt_sha256`과 같다
+- 외부 API와 test 분할은 쓰지 않았다
+- 관찰: D-48(판단 모델 미채택, PR #147)이 아직 병합되지 않아 이 브랜치의 DECISIONS에는 D-48이 없다. 둘 다 DECISIONS 끝에 항목을 더하므로, 먼저 병합된 쪽 뒤에 다른 쪽을 맞춘다
