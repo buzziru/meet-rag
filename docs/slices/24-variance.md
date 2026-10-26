@@ -96,6 +96,7 @@
 ## 수정 허용 파일
 
 - `src/rag/gen_eval/generate.py`, `src/rag/gen_eval/judge.py`, `src/rag/gen_eval/report.py`, `src/rag/gen_eval/common.py`
+- `src/rag/index.py`(경로 템플릿용 OmegaConf resolver `rep` 한 줄. 구현 때 더했다. 감사 지적으로 목록을 맞춤)
 - `configs/config.yaml`(`gen_eval`, `paths.gen_runs`·`paths.gen_judge` 템플릿), `configs/judge/*.yaml`(`rep`, 결정에 따른 기본 judge)
 - `tests/test_gen_eval.py`
 - `notebooks/35_01_S24_변동폭.ipynb`(새 파일)
@@ -124,4 +125,6 @@
 - 시간: judge 시간의 86%가 사고 과정을 켠 세 단계다. 측정 뒤 질의 안의 독립 사슬 네 개(충실성, 관련성, 포함도·근거 청크, 항목 평가)를 동시에 부르도록 고쳤고(요청 본문은 같아 판정 불변), 측정 지연으로 330질의 judge가 검색이 바뀌는 실험 약 45분, 생성만 바뀌는 실험 약 27분으로 어림된다. judge 질의 동시 수 8은 생성 베이스라인 첫 실행에서 지연과 429를 재고 문제가 없으면 8로 한다(사용자 결정 2026-10-26)
 - 관찰: LangSmith가 측정 중 월 추적 한도를 넘어 업로드가 429로 실패했다(채점에는 영향 없음). 대량 실행에서는 추적을 끈다(D-50)
 - 관찰: `nb_kernel.py`가 노트북을 CRLF로 다시 써 커밋 전에 LF로 고쳤다. 하네스 PR에서 고친다(대기 목록)
+- 지시서와 다르게 한 것(감사·가이드 지적): (1) 생성 반복 번호 `gen_rep`은 생성 레시피가 아니라 경로와 기록 필드에 남겼다. 생성 레시피(`rag.generate.recipe`)는 범위 밖이고, 레시피에 넣으면 측정으로 만든 반복 0 기록 100건과 레시피가 달라져 베이스라인에서 이어 쓰지 못한다. judge 레시피에는 `rep`가 있다 (2) 동시 수 `gen_eval.concurrency`도 레시피에 넣지 않았다. 생성 내용에 영향이 없고 기록마다 `concurrency`가 남는다 (3) `retrieve_s`는 검색과 프롬프트 조립 시간을 합친 값이다
+- 리뷰 가이드 지적 반영: 동시 생성에서 한 질의가 실패하면 뒤에 끝난 생성까지 버리던 것을, 실패한 질의만 빼고 쓴 뒤 멈추도록 고쳤다(다시 실행하면 그 질의만 생성). docstring의 `gen_eval.n=20` 예시를 새 기본값에 맞췄다
 - test 분할은 쓰지 않았다. 외부 API는 승인받은 측정과 S14 v2 반복 0 확인(저장 응답만)뿐이다
