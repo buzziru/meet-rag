@@ -9,6 +9,7 @@ from rag.gen_eval.checks import (
     STATES,
     citation_check,
     gold_position,
+    item_counts,
     item_outcome,
     metadata_mismatches,
     refusal_split,
@@ -36,6 +37,7 @@ from rag.gen_eval.report import (
     criterion,
     item_summary,
     refusal_table,
+    require_s22,
 )
 from rag.gen_eval.review import main as review_main
 from rag.index import load_cfg
@@ -133,13 +135,34 @@ class StubJudge:
         return self.replies[step], {"prompt_tokens": 1, "completion_tokens": 1}
 
 
+def verdicts_reply(statements, verdicts, unclear=None):
+    unclear = unclear or [False] * len(statements)
+    return {"verdicts": [{"statement": s, "reason": "r", "verdict": v, "speaker_unclear": u}
+                         for s, v, u in zip(statements, verdicts, unclear, strict=True)]}
+
+
+def checks_reply(keys, presents):
+    return {"checks": [{"statement": k, "reason": "r", "present": p}
+                       for k, p in zip(keys, presents, strict=True)]}
+
+
 def test_faithfulness_scores_and_format_errors():
-    ok = StubJudge({"statements": {"statements": ["s1", "s2"]},
-                    "verdicts": {"verdicts": [{"verdict": 1}, {"verdict": 0}]}})
-    assert faithfulness(ok, "q", "a", [ctx(1)])["score"] == 0.5
-    short = StubJudge({"statements": {"statements": ["s1", "s2"]},
-                       "verdicts": {"verdicts": [{"verdict": 1}]}})
+    st = {"statements": ["s1", "s2"]}
+    ok = StubJudge({"statements": st,
+                    "verdicts": verdicts_reply(["s1", "s2"], [1, 0], [True, False])})
+    got = faithfulness(ok, "q", "a", [ctx(1)])
+    assert got["score"] == 0.5 and [v["speaker_unclear"] for v in got["verdicts"]] == [True, False]
+    short = StubJudge({"statements": st, "verdicts": verdicts_reply(["s1"], [1])})
     assert faithfulness(short, "q", "a", [ctx(1)])["error"] == "verdicts 형식 오류"
+    # 진술 순서·문구가 입력과 다르면 어느 판정이 어느 진술인지 알 수 없다(P6)
+    swapped = StubJudge({"statements": st, "verdicts": verdicts_reply(["s2", "s1"], [1, 0])})
+    assert faithfulness(swapped, "q", "a", [ctx(1)])["error"] == "verdicts 형식 오류"
+    reworded = StubJudge({"statements": st, "verdicts": verdicts_reply(["s1.", "s2"], [1, 0])})
+    assert faithfulness(reworded, "q", "a", [ctx(1)])["error"] == "verdicts 형식 오류"
+    no_flag = verdicts_reply(["s1", "s2"], [1, 0])
+    del no_flag["verdicts"][0]["speaker_unclear"]
+    no_flag = StubJudge({"statements": st, "verdicts": no_flag})
+    assert faithfulness(no_flag, "q", "a", [ctx(1)])["error"] == "verdict 값 오류"
     assert faithfulness(StubJudge({"statements": None}), "q", "a", [])["score"] is None
 
 
@@ -151,10 +174,12 @@ def test_relevance_and_inclusion():
     assert inclusion(none, "a", ks)["excluded"] == "reference_unusable"
     assert inclusion(none, "a", None)["excluded"] == "gold_missing"
     two = StubJudge({"key_statements": {"key_statements": ["k1", "k2"]},
-                     "key_checks": {"checks": [{"present": 1}, {"present": 1}]}})
+                     "key_checks": checks_reply(["k1", "k2"], [1, 1])})
     assert inclusion(two, "a", key_statements(two, "q", "ref"))["score"] == 1.0
-    bad = StubJudge({"chunk_checks": {"checks": [{"present": 1}]}})
+    bad = StubJudge({"chunk_checks": checks_reply(["k1"], [1])})
     assert key_presence(bad, "chunk_checks", ["k1", "k2"], excerpt="e")["score"] is None
+    swapped = StubJudge({"chunk_checks": checks_reply(["k2", "k1"], [1, 1])})
+    assert key_presence(swapped, "chunk_checks", ["k1", "k2"], excerpt="e")["score"] is None
 
 
 def gen(answer, contexts):
@@ -171,7 +196,7 @@ def judge_cfg(item_eval=False):
 
 def test_judge_record_checks_chunk_with_key_statements_even_for_refusal():
     stub = StubJudge({"key_statements": {"key_statements": ["k1", "k2"]},
-                      "chunk_checks": {"checks": [{"present": 1}, {"present": 0}]}})
+                      "chunk_checks": checks_reply(["k1", "k2"], [1, 0])})
     contexts = [ctx(1, "other"), ctx(2, "gold", text="발췌")]
     out = judge_record.__wrapped__(stub, gen(REFUSAL + ".", contexts),
                                    {"doc_id": "gold", "answer_comment": "발언"}, judge_cfg(), set())
@@ -194,18 +219,19 @@ class RecordingJudge(StubJudge):
         return super().ask(step, **values)
 
 
-def test_partial_refusal_scores_content_without_refused_sentence():
+def test_partial_refusal_scores_faithfulness_without_refused_sentence():
     stub = RecordingJudge({
         "key_statements": {"key_statements": ["k1", "k2"]},
-        "chunk_checks": {"checks": [{"present": 1}, {"present": 1}]},
-        "statements": {"statements": ["s1"]}, "verdicts": {"verdicts": [{"verdict": 1}]},
-        "relevance": {"label": "일부"},
-        "key_checks": {"checks": [{"present": 1}, {"present": 0}]}})
+        "chunk_checks": checks_reply(["k1", "k2"], [1, 1]),
+        "statements": {"statements": ["s1"]}, "verdicts": verdicts_reply(["s1"], [1]),
+        "relevance": {"label": "답함"},
+        "key_checks": checks_reply(["k1", "k2"], [1, 0])})
     out = judge_record.__wrapped__(stub, gen(PARTIAL, [ctx(1, "gold")]),
                                    {"doc_id": "gold", "answer_comment": "발언"}, judge_cfg(), set())
     assert out["refusal"] == "partial" and out["inclusion"]["score"] == 0.5
     assert stub.seen["statements"]["answer"] == "A 위원은 B를 제안했습니다[1]."
-    assert stub.seen["relevance"]["answer"] == "A 위원은 B를 제안했습니다[1]."
+    # 관련성은 거부 문장을 넣은 답변 전체로 채점한다(D-47 결정 4, 기준 문서 R6)
+    assert stub.seen["relevance"]["answer"] == PARTIAL
     assert stub.seen["key_checks"]["answer"] == PARTIAL
     assert out["citations"]["n_sentences"] == 1
 
@@ -247,6 +273,7 @@ def test_item_eval_judges_each_item_and_format_errors():
                            "item_handling": handling_reply("답함", "다루지 않음")})
     out = item_eval(stub, "q", "답변", [ctx(1)])
     assert [i["outcome"] for i in out["items"]] == ["맞음", "무언 생략"]
+    assert out["counts"] == {"correct": 1, "judged": 2, "over_refusal": 0, "unsupported": 0}
     assert out["items"][0]["speaker_unclear"] is True
     assert "답변" not in stub.seen["items"].values()  # 정보 상태는 답변 없이 정한다
     assert json.loads(stub.seen["item_handling"]["items"]) == [
@@ -272,7 +299,7 @@ def test_judge_record_runs_item_eval_for_full_refusal():
 
 
 def test_check_item_steps_stops_without_item_steps():
-    check_item_steps(load_cfg(["index.scope=full"]))  # 기본 j_v7에는 두 단계가 있다
+    check_item_steps(load_cfg(["index.scope=full"]))  # 기본 j_v8에는 두 단계가 있다
     with pytest.raises(SystemExit, match="items, item_handling 단계가 없다"):
         check_item_steps(load_cfg(["index.scope=full", "judge/prompt=j_v5"]))
     check_item_steps(load_cfg(["index.scope=full", "judge/prompt=j_v5",
@@ -281,15 +308,17 @@ def test_check_item_steps_stops_without_item_steps():
 
 def test_item_summary_and_case_agreement():
     def row(*pairs):
-        return {"item_eval": {"items": [
-            {"state": s, "handling": h, "outcome": item_outcome(s, h), "speaker_unclear": False}
-            for s, h in pairs]}}
+        items = [{"state": s, "handling": h, "outcome": item_outcome(s, h),
+                  "speaker_unclear": False} for s, h in pairs]
+        return {"item_eval": {"items": items, "counts": item_counts(items)}}
     rows = [row(("있음", "답함"), ("모호", "거부")),
-            row(("일부", "거부"), ("회피", "상황을 밝히고 답함")),
+            row(("일부", "거부"), ("회피", "상황을 밝히고 답함"), ("없음", "답함")),
             {"item_eval": {"error": "items 형식 오류"}}, {}]
+    assert rows[1]["item_eval"]["counts"] == {"correct": 0, "judged": 2, "over_refusal": 1,
+                                              "unsupported": 1}
     s = item_summary(rows)
-    assert s["accuracy"] == (1, 2) and s["outcomes"]["상황 미전달"] == 1
-    assert s["situation"] == (1, 2)
+    assert s["accuracy"] == (1, 3) and s["outcomes"]["상황 미전달"] == 1
+    assert s["situation"] == (1, 2) and s["ambiguous"] == (2, 5)
     assert s["queries"] == 3 and s["errors"] == 1 and s["wrong_queries"] == 1
     assert s["table"]["모호", "거부"] == 1
     cases = [{"case": "c1", "expected": [{"state": "있음", "handling": "답함"}]},
@@ -300,23 +329,40 @@ def test_item_summary_and_case_agreement():
     agree, notes = case_agreement(cases, results)
     assert agree["항목"] == 1 and agree["state"] == 0 and agree["handling"] == 1
     assert agree["항목 수 다른 사례"] == 1 and len(notes) == 3
+    # S22 이전 기록은 거부 정확도 0/0이나 KeyError로 읽지 않고 멈춘다
+    require_s22([rows[0], {"faithfulness": verdicts_reply(["s1"], [1])}])
+    old = row(("있음", "답함"))
+    del old["item_eval"]["counts"]
+    old_verdicts = {"faithfulness": {"verdicts": [{"statement": "s1", "verdict": 1}]}}
+    for bad in (old, old_verdicts):
+        with pytest.raises(SystemExit, match="S22 이전 judge 기록"):
+            require_s22([bad])
 
 
 def test_report_criterion_and_refusal_table():
+    keys = {"keys": ["k"]}
     rows = [
-        {"refusal": False, "gold_n": 1, "answer_in_chunk": True,
+        {"refusal": None, "gold_n": 1, "answer_in_chunk": True, "key_statements": keys,
          "inclusion": {"score": 0.5}},
-        {"refusal": True, "gold_n": 1, "answer_in_chunk": True},
-        {"refusal": True, "gold_n": 2, "answer_in_chunk": False},
-        {"refusal": False, "gold_n": 3, "answer_in_chunk": None},
-        {"refusal": False, "gold_n": None, "answer_in_chunk": None,
+        {"refusal": "full", "gold_n": 1, "answer_in_chunk": True, "key_statements": keys},
+        {"refusal": "partial", "gold_n": 2, "answer_in_chunk": False, "key_statements": keys,
+         "inclusion": {"score": 0.0}},
+        {"refusal": None, "gold_n": 3, "answer_in_chunk": None, "key_statements": {"keys": []},
+         "inclusion": {"score": None, "excluded": "reference_unusable"}},
+        {"refusal": None, "gold_n": 4, "answer_in_chunk": None, "key_statements": keys,
+         "inclusion": {"score": 0.5}},  # chunk_checks 형식 오류
+        {"refusal": None, "gold_n": None, "answer_in_chunk": None,
          "inclusion": {"score": None, "excluded": "gold_missing"}},
     ]
     scores, excluded, errors = criterion(rows, "inclusion")
-    assert scores == [0.5] and excluded == {"gold_missing": 1} and errors == 0
+    # 전체 거부도 뺀 이유로 센다(기준 문서 K8)
+    assert scores == [0.5, 0.0, 0.5] and errors == 0
+    assert excluded == {"full_refusal": 1, "reference_unusable": 1, "gold_missing": 1}
+    # 판단 불가는 참조 사용 불가와 judge 형식 오류로 나눈다(C2)
     assert refusal_table(rows) == [("정답 문서 있음, 청크에 핵심 답 있음", 2, 1),
                                    ("정답 문서 있음, 청크에 핵심 답 없음", 1, 1),
-                                   ("정답 문서 있음, 판단 불가", 1, 0),
+                                   ("정답 문서 있음, 판단 불가(참조 사용 불가)", 1, 0),
+                                   ("정답 문서 있음, 판단 불가(judge 형식 오류)", 1, 0),
                                    ("정답 문서 없음", 1, 0)]
 
 
@@ -437,3 +483,61 @@ def test_judge_stops_before_calls_when_output_exists(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["rag.gen_eval.judge", f"paths.gen_judge='{out.as_posix()}'"])
     with pytest.raises(SystemExit, match="search.overwrite"):
         judge_main()  # n을 늘려 다시 채점할 때 overwrite를 빼먹으면 호출 전에 멈춘다
+
+
+def test_j_v8_changes_only_four_steps():
+    from omegaconf import OmegaConf
+    v7, v8 = (OmegaConf.load(f"configs/judge/prompt/{v}.yaml") for v in ("j_v7", "j_v8"))
+    # 바꾸지 않는 단계는 글자까지 같아 저장된 응답을 그대로 쓴다
+    for step in ("statements", "key_statements", "key_checks", "chunk_checks"):
+        assert v7[step] == v8[step]
+    for step in ("verdicts", "relevance", "items", "item_handling"):
+        assert v7[step].system != v8[step].system and v7[step].user == v8[step].user
+    assert "speaker_unclear" in v8.verdicts.system and "과태료를 두 배로" in v8.verdicts.system
+    assert '"검토하겠다"는 발언만 옮긴' not in v8.relevance.system
+    assert "실효성 있는 방안을 검토하겠다고 답했습니다[1]" in v8.relevance.system  # R5
+    assert "향후 계획은 제공된 회의록에서 답을 찾지 못했습니다" in v8.relevance.system  # R6
+    assert "(법, 기관, 사건, 연도)" in v8["items"].system  # G4
+    assert "관계 부처와 협의해 정하겠다고 했습니다[1]" in v8.item_handling.system  # I7
+    assert load_cfg(["index.scope=full"]).judge.prompt.version == "j_v8"
+
+
+def test_eval_qids_excludes_dev_queries_only_in_dev_full(monkeypatch):
+    import pandas as pd
+    from omegaconf import OmegaConf
+
+    from rag.gen_eval.common import dev_queries, eval_qids
+    dev = dev_queries(load_cfg(["index.scope=full"]))
+    assert len(dev) == 20 and "035604-0001" in dev
+    qids = sorted(dev) + [f"q{i:03d}" for i in range(80)]
+    monkeypatch.setattr("rag.gen_eval.common.load_gold",
+                        lambda cfg, layer: pd.DataFrame(index=qids))
+    monkeypatch.setattr("rag.gen_eval.common.dev_queries", lambda cfg: dev)
+
+    def cfg(layer, n):
+        return OmegaConf.create({"gen_eval": {"queries": layer, "seed": 7, "n": n}})
+    full = eval_qids(cfg("dev-full", 30))
+    assert len(full) == 30 and not dev & set(full)
+    assert eval_qids(cfg("dev-full", 60))[:30] == full  # 제외 뒤에도 앞 표본이 유지된다
+    assert eval_qids(cfg("dev-small", 100)) == sample_qids(qids, 7, 100)  # 개발 층은 빼지 않는다
+    assert sample_qids(qids, 7, 100, dev) == [q for q in sample_qids(qids, 7, 100) if q not in dev]
+
+
+def test_print_cases_stops_when_case_file_changed(tmp_path, monkeypatch):
+    from hashlib import sha256
+
+    from omegaconf import OmegaConf
+
+    from rag.gen_eval.report import print_cases
+    monkeypatch.setattr("rag.gen_eval.report.ROOT", tmp_path)
+    src = tmp_path / "cases.jsonl"
+    src.write_text(json.dumps({"case": "c1", "expected": [{"state": "없음", "handling": "거부"}]})
+                   + "\n", encoding="utf-8")
+    result = {"case": "c1", "items": [{"state": "없음", "handling": "거부", "outcome": "맞음"}],
+              "judge_recipe": {"item_cases_sha256": sha256(src.read_bytes()).hexdigest()}}
+    (tmp_path / "cases.judge.jsonl").write_text(json.dumps(result) + "\n", encoding="utf-8")
+    cfg = OmegaConf.create({"gen_eval": {"item_cases": "cases.jsonl"}})
+    print_cases(cfg)
+    src.write_bytes(src.read_bytes() + b"\n")  # 읽는 내용은 같아도 파일이 바뀌면 멈춘다
+    with pytest.raises(SystemExit, match="사례 파일과 다르다"):
+        print_cases(cfg)

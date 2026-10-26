@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+from omegaconf import OmegaConf
 
 from rag.eval.metrics import load_gold
 from rag.index import ROOT
@@ -15,18 +16,29 @@ LAYERS = ("dev-small", "dev-full")
 VOLATILE = ("git_commit", "git_dirty")  # 같은 설정의 이어 쓰기에서 달라도 되는 레시피 값
 
 
-def sample_qids(qids: list[str], seed: int, n: int) -> list[str]:
-    """qid를 정렬해 seed로 섞은 순서의 앞 n개. n을 늘려도 앞 표본이 유지된다."""
+def sample_qids(qids: list[str], seed: int, n: int,
+                exclude: frozenset[str] = frozenset()) -> list[str]:
+    """qid를 정렬해 seed로 섞은 순서에서 exclude를 뺀 앞 n개. n을 늘려도 앞 표본이 유지된다."""
     qids = sorted(qids)
-    return [qids[i] for i in np.random.default_rng(seed).permutation(len(qids))[:n]]
+    order = (qids[i] for i in np.random.default_rng(seed).permutation(len(qids)))
+    return [q for q in order if q not in exclude][:n]
+
+
+def dev_queries(cfg) -> frozenset[str]:
+    """judge 지시 개발에 쓴 질의(paths.gen_dev_queries의 모든 목록)."""
+    lists = OmegaConf.to_container(OmegaConf.load(ROOT / cfg.paths.gen_dev_queries))
+    return frozenset(q for qs in lists.values() for q in qs)
 
 
 def eval_qids(cfg) -> list[str]:
-    """gen_eval.queries 층의 표본 qid."""
+    """gen_eval.queries 층의 표본 qid. 판정용 층(dev-full)에서는 judge 지시 개발에 쓴 질의를 뺀다
+    (D-47 결정 5, S22 결정 사항 1). dev-small은 개발 층이라 빼지 않는다."""
     layer = cfg.gen_eval.queries
     if layer not in LAYERS:
         raise SystemExit(f"gen_eval.queries는 {LAYERS} 중 하나다: {layer}")
-    return sample_qids(list(load_gold(cfg, layer).index), cfg.gen_eval.seed, cfg.gen_eval.n)
+    exclude = dev_queries(cfg) if layer == "dev-full" else frozenset()
+    return sample_qids(list(load_gold(cfg, layer).index), cfg.gen_eval.seed, cfg.gen_eval.n,
+                       exclude)
 
 
 def load_refs(cfg, qids: list[str]) -> dict[str, dict]:

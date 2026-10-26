@@ -5,8 +5,9 @@ defaults:
   - generator: openrouter
   - prompt: v2
   - judge: deepseek_go_mixed  # 기본 사고 과정 끔 + verdicts·key_statements·items만 low(D-40, S14c)
-  # j_v7 = j_v5 + 질의 항목 단위 거부 평가 두 단계(S14c). 기존 단계는 같아 저장 응답을 그대로 쓴다
-  - override judge/prompt: j_v7
+  # j_v8 = 생성 평가 판정 기준 반영(S22). 바뀐 단계는 verdicts·relevance·items·item_handling이고, 나머지는
+  # j_v7과 같아 저장 응답을 그대로 쓴다. 동결 전 마지막 지시 변경이다
+  - override judge/prompt: j_v8
   - _self_
 
 # 분할·표본 추출용. 값은 docs/SPEC.md와 같다
@@ -73,6 +74,7 @@ paths:
   gen_runs: data/gen_eval/runs/${retriever.run_name}-${prompt.version}-${gen_eval.queries}.jsonl
   gen_judge: data/gen_eval/judge/${retriever.run_name}-${prompt.version}-${gen_eval.queries}-${judge.name}-${judge.prompt.version}.jsonl
   gen_judge_cache: data/gen_eval/judge_cache
+  gen_dev_queries: configs/gen_eval/dev_queries.yaml  # judge 지시 개발에 쓴 질의. dev-full 표본에서 뺀다(S22)
   # multi-doc 후보 집합과 시작 묶음 (docs/slices/07-bundles.md)
   multidoc_pools: data/multidoc/pools.jsonl
   # S8 생성 입력·문서 원문·생성 출력·검사 기록(후보 집합마다 파일 하나), 통과 질의 (docs/slices/08-multidoc-queries.md)

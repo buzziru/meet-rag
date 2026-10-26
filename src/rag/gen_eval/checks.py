@@ -121,3 +121,13 @@ def item_outcome(state: str, handling: str) -> str:
     if state in SITUATION:
         return "상황 전달" if handling == "상황을 밝히고 답함" else "상황 미전달"
     return OUTCOMES[state, "답함" if handling == "상황을 밝히고 답함" else handling]
+
+
+def item_counts(items: list[dict]) -> dict:
+    """질의 하나의 항목 판정 수(기준 문서 I13). 판정 대상은 모호·회피를 뺀 항목이다. 설정 비교는
+    회의 단위 paired bootstrap이라 질의 단위 값이 필요하다."""
+    outcomes = [i["outcome"] for i in items]
+    return {"correct": outcomes.count("맞음"),
+            "judged": sum(1 for i in items if i["state"] not in SITUATION),
+            "over_refusal": outcomes.count("과잉 거부"),
+            "unsupported": outcomes.count("근거 없이 답함")}
