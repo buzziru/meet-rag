@@ -112,7 +112,8 @@ def query_embeddings(cfg, qids: list[str], text_path: Path, emb_path: Path) -> n
         if cached_qids != qids:
             raise SystemExit(f"질의 임베딩 캐시의 질의 목록이 지금과 다르다: {emb_path} "
                              f"(캐시 {len(cached_qids)}개, 지금 {len(qids)}개). 덮어쓰지 않는다. "
-                             "다시 만들려면 Colab embed-queries(slices/05-retrieve.md)로 만든다")
+                             "다시 만들려면 캐시를 다른 이름으로 옮긴 뒤 만든다"
+                             "(full·multidoc은 Colab embed-queries, slices/05-retrieve.md)")
         return emb
     emb = embed_queries(cfg, read_texts(text_path, qids))
     save_query_emb(cfg, emb_path, qids, emb)
