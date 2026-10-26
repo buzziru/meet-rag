@@ -26,7 +26,7 @@ from langsmith import traceable
 from langsmith.run_trees import get_cached_client
 from langsmith.wrappers import wrap_openai
 from omegaconf import OmegaConf
-from openai import OpenAI
+from openai import DefaultHttpxClient, OpenAI
 
 from rag.conditions import DATE, DOC_DATE, committee_base
 from rag.gen_eval.checks import (
@@ -107,15 +107,45 @@ def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
     return rec
 
 
+class HttpCounts:
+    """HTTP 요청 수와 응답 상태 코드별 수. OpenAI SDK는 429·5xx·연결 오류를 기본 2회 다시 시도하고
+    재시도마다 요청을 새로 보내므로, 요청 수 − 성공 호출 수가 재시도 수이고 상태 코드로 오류 종류를
+    안다(S25 D-51, 동시 수를 올리기 전에 확인할 값). 결과 파일에는 넣지 않고 실행 출력에만 낸다.
+    대량 실행은 출력을 `_workspace/<작업>_run.log`로 남겨 이 수를 보존한다(사용자 결정 2026-10-26,
+    PR #154)."""
+
+    def __init__(self):
+        self.requests, self.status = 0, {}
+        self.lock = threading.Lock()
+
+    def on_request(self, request) -> None:
+        with self.lock:
+            self.requests += 1
+
+    def on_response(self, response) -> None:
+        with self.lock:
+            self.status[response.status_code] = self.status.get(response.status_code, 0) + 1
+
+    def summary(self, calls: int) -> str:
+        """calls는 성공한 API 호출 수. 응답 없음은 타임아웃·연결 오류처럼 상태 코드가 없는 요청."""
+        codes = ", ".join(f"{k} {v}" for k, v in sorted(self.status.items())) or "-"
+        no_reply = self.requests - sum(self.status.values())
+        return (f"HTTP 요청 {self.requests}회(응답 상태 {codes}, 응답 없음 {no_reply}), "
+                f"성공 호출 밖 요청(재시도·실패) {self.requests - calls}회")
+
+
 class Judge:
     """judge 호출 하나를 맡는다. 같은 요청 본문은 저장된 응답을 쓴다."""
 
     def __init__(self, cfg, session: str):
         j = cfg.judge
         self.j, self.prompt = j, j.prompt
+        self.http = HttpCounts()
         self.client = wrap_openai(OpenAI(
             base_url=j.base_url, api_key=os.environ[j.api_key_env], timeout=j.timeout,
-            default_headers={"User-Agent": j.user_agent, "x-opencode-session": session}))
+            default_headers={"User-Agent": j.user_agent, "x-opencode-session": session},
+            http_client=DefaultHttpxClient(event_hooks={"request": [self.http.on_request],
+                                                        "response": [self.http.on_response]})))
         self.params = OmegaConf.to_container(j.params)
         self.extra = OmegaConf.to_container(j.extra_body) if j.extra_body else None
         # 단계별로 params·extra_body를 덮어쓴다(예: 일부 단계만 사고 과정 켬, PR #106)
@@ -342,9 +372,12 @@ def judge_cases(cfg) -> None:
     rec = judge_recipe(cfg, [])  # 합성 답변이라 생성 기록이 없다
     rec["item_cases_sha256"] = hashlib.sha256(src.read_bytes()).hexdigest()
     judge = Judge(cfg, session=f"meet-rag-judge-{sha(stable(rec))[:16]}")
-    with ThreadPoolExecutor(cfg.judge.concurrency) as ex:
-        rows = list(ex.map(lambda c: {"case": c["case"], **item_eval(
-            judge, c["query"], c["answer"], c["contexts"])}, cases))
+    try:
+        with ThreadPoolExecutor(cfg.judge.concurrency) as ex:
+            rows = list(ex.map(lambda c: {"case": c["case"], **item_eval(
+                judge, c["query"], c["answer"], c["contexts"])}, cases))
+    finally:  # 재시도를 다 쓰고 멈춘 실행에서도 오류 수를 남긴다
+        print(judge.http.summary(judge.calls))
     get_cached_client().flush()
     text = "".join(json.dumps({**r, "judge_recipe": rec}, ensure_ascii=False) + "\n" for r in rows)
     out.write_text(text, encoding="utf-8", newline="\n")
@@ -374,8 +407,11 @@ def main() -> None:
         return judge_record(judge, gens[qid], refs[qid], cfg, committees,
                             langsmith_extra={"metadata": {"qid": qid, **rec}})
 
-    with ThreadPoolExecutor(cfg.judge.concurrency) as ex:
-        rows = list(ex.map(one, qids))
+    try:
+        with ThreadPoolExecutor(cfg.judge.concurrency) as ex:
+            rows = list(ex.map(one, qids))
+    finally:  # 재시도를 다 쓰고 멈춘 실행에서도 오류 수를 남긴다
+        print(judge.http.summary(judge.calls))
     get_cached_client().flush()
     text = "".join(json.dumps({**r, "judge_recipe": rec}, ensure_ascii=False) + "\n" for r in rows)
     state = write_guarded(ROOT / cfg.paths.gen_judge, text, cfg.search.overwrite)

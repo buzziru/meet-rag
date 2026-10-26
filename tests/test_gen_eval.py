@@ -650,3 +650,30 @@ def test_generate_all_writes_others_when_one_generation_fails():
         generate_all(FailingPipe(), items, {"model": "m"}, 4, 0, out.append)
     # 실패한 q2만 빠지고 뒤에 끝난 생성도 쓴다. 다시 실행하면 q2만 남는다
     assert [r["qid"] for r in out] == ["q0", "q1", "q3", "q4"]
+
+
+def test_http_counts_record_sdk_retries():
+    """SDK가 429를 다시 시도하면 요청마다 상태 코드가 남는다(D-51)."""
+    import httpx
+    from openai import DefaultHttpxClient, OpenAI
+
+    from rag.gen_eval.judge import HttpCounts
+    choice = {"index": 0, "finish_reason": "stop",
+              "message": {"role": "assistant", "content": "{}"}}
+    ok = {"id": "x", "object": "chat.completion", "created": 0, "model": "m", "choices": [choice]}
+    replies = iter([httpx.Response(429, json={"error": "rate"}), httpx.Response(200, json=ok)])
+    from langsmith.wrappers import wrap_openai
+    counts = HttpCounts()
+    # Judge와 같이 LangSmith로 감싸도 훅을 단 HTTP 클라이언트를 쓴다
+    client = wrap_openai(OpenAI(base_url="http://test/v1", api_key="k", max_retries=2,
+                                http_client=DefaultHttpxClient(
+                                    transport=httpx.MockTransport(lambda request: next(replies)),
+                                    event_hooks={"request": [counts.on_request],
+                                                 "response": [counts.on_response]})))
+    r = client.chat.completions.create(model="m", messages=[{"role": "user", "content": "q"}])
+    assert r.choices[0].message.content == "{}"
+    assert counts.requests == 2 and counts.status == {429: 1, 200: 1}
+    assert counts.summary(1) == ("HTTP 요청 2회(응답 상태 200 1, 429 1, 응답 없음 0), "
+                                 "성공 호출 밖 요청(재시도·실패) 1회")
+    counts.requests += 1  # 타임아웃처럼 응답 없이 끝난 요청
+    assert "응답 없음 1" in counts.summary(1)
