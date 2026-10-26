@@ -351,7 +351,7 @@ def test_query_cache_basis_is_checked_on_read(tmp_path):
         adopt_query_basis(cfg, tmp_path / "none.npz")
 
 
-def test_query_embeddings_reembeds_only_when_qids_differ(tmp_path, monkeypatch):
+def test_query_embeddings_stops_when_qids_differ(tmp_path, monkeypatch):
     import rag.search as search
     from rag.retrieve import save_query_emb
     cfg = load_cfg([])
@@ -362,5 +362,9 @@ def test_query_embeddings_reembeds_only_when_qids_differ(tmp_path, monkeypatch):
     monkeypatch.setattr(search, "embed_queries",
                         lambda _, texts: calls.append(texts) or np.zeros((len(texts), 2)))
     assert search.query_embeddings(cfg, ["q1"], tmp_path, path).sum() == 2  # 캐시
-    assert search.query_embeddings(cfg, ["q1", "q2"], tmp_path, path).sum() == 0
+    with pytest.raises(SystemExit, match="덮어쓰지 않는다"):
+        search.query_embeddings(cfg, ["q1", "q2"], tmp_path, path)
+    assert np.load(path)["emb"].sum() == 2  # 캐시는 그대로
+    new = tmp_path / "queries-full.npz"  # 캐시가 없으면 로컬에서 만든다
+    assert search.query_embeddings(cfg, ["q1", "q2"], tmp_path, new).sum() == 0
     assert calls == [["q1", "q2"]]
