@@ -1,6 +1,6 @@
 ---
 name: protocol-guard
-description: meet-rag 브랜치 diff에서 평가 오염과 저장소 금지 조항 위반을 찾는 점검표. test 분할 접근, src/rag/eval·src/rag/eval_multi·configs/eval·data/splits와 G3 동결 세트 설정(g3_exclude.yaml, paths.multidoc_frozen) 수정, 파라미터 하드코딩, data/·.env 스테이징, test 질의의 외부 전송(API·Colab), 승인 기록 없는 질의 대량 전송, EXP 범위 밖 변경을 판정하고, data/ 산출물(인덱스·점수 파일 등)을 덮어쓰거나 지문 대조 없이 읽는 코드를 보고한다. protocol-auditor 에이전트가 PR 전 감사에서 쓰고, 메인이 커밋 직전 빠른 확인에 쓴다. 일반 코드 리뷰에는 쓰지 않는다.
+description: meet-rag 브랜치 diff에서 평가 오염과 저장소 금지 조항 위반을 찾는 점검표. test 분할 접근, src/rag/eval·src/rag/eval_multi·configs/eval·data/splits·config.yaml의 multidoc.eval 키와 G3 동결 세트 설정(g3_exclude.yaml, paths.multidoc_frozen) 수정, 파라미터 하드코딩, data/·.env 스테이징, test 질의의 외부 전송(API·Colab), 승인 기록 없는 질의 대량 전송, EXP 범위 밖 변경을 판정하고, data/ 산출물(인덱스·점수 파일 등)을 덮어쓰거나 지문 대조 없이 읽는 코드를 보고한다. protocol-auditor 에이전트가 PR 전 감사에서 쓰고, 메인이 커밋 직전 빠른 확인에 쓴다. 일반 코드 리뷰에는 쓰지 않는다.
 ---
 
 # protocol-guard: 평가 프로토콜 점검표
