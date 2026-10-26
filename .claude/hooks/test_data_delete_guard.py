@@ -145,3 +145,27 @@ def test_hook_outputs_permission_decision(repo):
     quiet = subprocess.run([sys.executable, str(HOOK)], capture_output=True, check=True,
                            input=json.dumps({"tool_input": {"command": "git status"}}).encode())
     assert quiet.stdout == b""
+
+
+@pytest.mark.parametrize("command", [
+    "git worktree remove {r}/wt3",
+    "git -C {r} worktree remove --force wt3",
+    "rm -rf {r}/wt3",
+])
+def test_worktree_with_workspace_notes_is_denied(repo, command):
+    """worktree의 `_workspace/` 기록은 .gitignore 대상이라 git이 경고 없이 지운다(ADR-0062)."""
+    wt = repo / "wt3"
+    (wt / "_workspace" / "sub").mkdir(parents=True)
+    (wt / ".git").write_text("gitdir: x", encoding="utf-8")
+    (wt / "_workspace" / "sub" / "note.md").write_text("n", encoding="utf-8")
+    out = run(command.format(r=repo.as_posix()), repo)
+    assert out and out[0] == "deny" and "note.md" in out[1]
+    (wt / "_workspace" / "sub" / "note.md").unlink()  # 옮긴 뒤(빈 폴더만 남음)에는 통과
+    assert run(command.format(r=repo.as_posix()), repo) is None
+
+
+def test_plain_directory_with_workspace_is_not_a_worktree(repo):
+    d = repo / "plain"
+    (d / "_workspace").mkdir(parents=True)
+    (d / "_workspace" / "x.md").write_text("x", encoding="utf-8")
+    assert run(f"rm -rf {d.as_posix()}", repo) is None

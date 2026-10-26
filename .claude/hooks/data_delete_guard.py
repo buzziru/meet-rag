@@ -11,6 +11,9 @@
   명령, `git clean -x/-X`, `data/` 경로가 든 Python 삭제 호출은 사용자 확인을 띄운다(ask).
   메인 체크아웃의 `data/` 삭제는 그대로 둔다. 막으려는 것은 분리된 세션의 임의 삭제다(사용자
   결정 2026-10-22)
+- worktree(`.git`이 파일인 디렉터리)를 재귀 삭제·`git worktree remove`할 때 그 `_workspace/`에
+  파일이 있으면 막는다(deny). `_workspace/`는 세션 사이에 작업 기록을 넘기는 곳인데 .gitignore
+  대상이라 git이 경고 없이 지운다. 2026-10-26 하위 세션 진행 기록을 옮기기 전에 지웠다(ADR-0062)
 따옴표 안의 공백이 든 문자열(커밋 메시지 등)과 heredoc 본문은 명령으로 보지 않는다. 명령 해석은
 낱말 단위 근사다. 놓치는 형태가 있어도 위임 지시 규칙(meet-rag 스킬)이 함께 막는다.
 """
@@ -183,7 +186,20 @@ def check_targets(targets: list[str], recursive: bool, cwd: Path, data: list[Pat
                                 f"링크를 따라가 원본(data/ 등)을 지운다. {SAFE}")
             if capped:
                 ask.append(f"{p}(항목이 많아 링크를 다 확인하지 못함)")
+            if (p / ".git").is_file() and (notes := workspace_files(p)):
+                return "deny", (f"worktree `{p}`의 `_workspace/`에 파일 {len(notes)}개가 있다"
+                                f"({', '.join(notes[:5])}). `_workspace/`는 .gitignore 대상이라 "
+                                "git worktree remove·재귀 삭제가 경고 없이 지운다. 메인 체크아웃의 "
+                                "`_workspace/`로 옮긴 뒤 지운다(git.md main 맞추기 6, ADR-0062)")
     return None
+
+
+def workspace_files(worktree: Path) -> list[str]:
+    """worktree `_workspace/` 안의 파일(하위 폴더 포함). 세션 사이 작업 기록이라 옮긴 뒤 지운다."""
+    ws = worktree / "_workspace"
+    if not ws.is_dir():
+        return []
+    return sorted(str(f.relative_to(ws)) for f in ws.rglob("*") if f.is_file())
 
 
 def main() -> None:
