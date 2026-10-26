@@ -68,6 +68,8 @@ j_v7을 복사해 아래 네 단계만 바꾼다. `statements`, `key_statements`
    - 비용: j_v7 기록의 usage(질의당 바뀌는 단계 합계 입력 약 6.9K·출력 약 4.5K 토큰, 사례당 입력 약 4.3K·출력 약 3.3K)와 opencode Go 가격(DeepSeek V4.1 Flash 100만 토큰당 비피크 입력 $0.15·출력 $0.60, 피크 두 배)으로 비피크 약 $0.13, 피크 약 $0.26이다. 월 한도 $80의 0.3% 이하다. 형식 오류로 다시 돌리면 그만큼 더 든다
    - 사례 결과는 j_v7 결과(`s14c_cases.judge.jsonl`)를 지우지 않고 옮겨 둔 뒤 새로 쓴다(`judge_cases`는 출력이 있으면 멈춘다). 옮길 이름은 `s14c_cases.judge.j_v7.jsonl`이다
 
+결정: 1\~3 모두 추천안, 3의 재채점 실행 승인(사용자 결정 2026-10-26).
+
 ## 완료 기준
 
 1. `uv run pytest -q`, `uv run ruff check .` 통과
