@@ -95,6 +95,7 @@
 - `src/rag/gen_eval/blind.py`(새 파일), `tests/test_gen_eval_blind.py`(새 파일)
 - `tests/test_gen_eval.py`(개발 질의 수를 확인하는 줄. `blind` 목록을 더해 20 → 32. 구현 때 더함)
 - `configs/config.yaml`(`gen_eval.blind` 설정), `configs/gen_eval/dev_queries.yaml`(`blind` 목록 추가)
+- `configs/judge/deepseek_go_mixed.yaml`(`concurrency: 8`. 동시 8 확인 결과로 기본값을 바꿈. 감사 지적으로 목록을 맞춤)
 - `notebooks/36_01_S25_블라인드확인.ipynb`(새 파일)
 - `docs/slices/25-blind-baseline.md`, `docs/DECISIONS.md`, `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/drafts/spec-generation-eval.md`(judge 검증 줄, 결정 사항 4 결과), `CLAUDE.md`(명령 줄)
 
