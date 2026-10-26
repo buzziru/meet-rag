@@ -103,20 +103,19 @@ def read_texts(path: Path, qids: list[str]) -> list[str]:
     return [text[q] for q in qids]
 
 
-def query_embeddings(cfg, qids: list[str], text_path: Path, emb_path: Path) -> np.ndarray:
-    """캐시가 있으면 지문과 질의 목록이 같을 때만 쓰고 다르면 멈춘다(지문은 S21). 캐시가 없으면
-    로컬에서 임베딩해 캐시한다. Colab에서 만든 캐시를 로컬 CPU 값으로 덮어쓰면 검색 결과가 바뀔 수
-    있어, 목록이 달라도 다시 임베딩하지 않는다(이슈 #142)."""
-    if emb_path.exists():
-        cached_qids, emb = read_query_emb(cfg, emb_path)
-        if cached_qids != qids:
-            raise SystemExit(f"질의 임베딩 캐시의 질의 목록이 지금과 다르다: {emb_path} "
-                             f"(캐시 {len(cached_qids)}개, 지금 {len(qids)}개). 덮어쓰지 않는다. "
-                             "다시 만들려면 캐시를 다른 이름으로 옮긴 뒤 만든다"
-                             "(full·multidoc은 Colab embed-queries, slices/05-retrieve.md)")
-        return emb
-    emb = embed_queries(cfg, read_texts(text_path, qids))
-    save_query_emb(cfg, emb_path, qids, emb)
+def query_embeddings(cfg, qids: list[str], emb_path: Path) -> np.ndarray:
+    """질의 임베딩 캐시를 지문(S21)과 질의 목록을 대조해 읽는다. 캐시가 없거나 목록이 다르면
+    로컬에서 임베딩하지 않고 멈춘다. 로컬 CPU 임베딩은 오래 걸리고, Colab에서 만든 캐시와 값이
+    달라지면 검색 결과와 그 뒤 생성 평가가 바뀔 수 있다(이슈 #142)."""
+    guide = "캐시는 Colab embed-queries로 만든다(slices/05-retrieve.md)"
+    if not emb_path.exists():
+        raise SystemExit(f"질의 임베딩 캐시가 없다: {emb_path}. 로컬에서 임베딩하지 않는다. "
+                         f"{guide}")
+    cached_qids, emb = read_query_emb(cfg, emb_path)
+    if cached_qids != qids:
+        raise SystemExit(f"질의 임베딩 캐시의 질의 목록이 지금과 다르다: {emb_path} "
+                         f"(캐시 {len(cached_qids)}개, 지금 {len(qids)}개). 덮어쓰지 않는다. "
+                         f"다시 만들려면 캐시를 다른 이름으로 옮긴 뒤 {guide}")
     return emb
 
 
@@ -170,7 +169,7 @@ def search(cfg) -> None:
     files = query_files(cfg)
     ret = Retriever(cfg)
     qids, text_path = query_list(cfg)
-    q_emb = query_embeddings(cfg, qids, text_path, files["emb"])
+    q_emb = query_embeddings(cfg, qids, files["emb"])
     r = cfg.retriever
     query_texts = read_texts(text_path, qids)
     tokens = ret.query_tokens(query_texts)
