@@ -26,7 +26,7 @@ from langsmith import traceable
 from langsmith.run_trees import get_cached_client
 from langsmith.wrappers import wrap_openai
 from omegaconf import OmegaConf
-from openai import OpenAI
+from openai import DefaultHttpxClient, OpenAI
 
 from rag.conditions import DATE, DOC_DATE, committee_base
 from rag.gen_eval.checks import (
@@ -107,15 +107,40 @@ def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
     return rec
 
 
+class HttpCounts:
+    """HTTP 요청 수와 응답 상태 코드별 수. OpenAI SDK는 429·5xx·연결 오류를 기본 2회 다시 시도하고
+    재시도마다 요청을 새로 보내므로, 요청 수 − 성공 호출 수가 재시도 수이고 상태 코드로 오류 종류를
+    안다(S25 D-51, 동시 수를 올리기 전에 확인할 값)."""
+
+    def __init__(self):
+        self.requests, self.status = 0, {}
+        self.lock = threading.Lock()
+
+    def on_request(self, request) -> None:
+        with self.lock:
+            self.requests += 1
+
+    def on_response(self, response) -> None:
+        with self.lock:
+            self.status[response.status_code] = self.status.get(response.status_code, 0) + 1
+
+    def summary(self) -> str:
+        codes = ", ".join(f"{k} {v}" for k, v in sorted(self.status.items())) or "-"
+        return f"HTTP 요청 {self.requests}회(응답 상태 {codes})"
+
+
 class Judge:
     """judge 호출 하나를 맡는다. 같은 요청 본문은 저장된 응답을 쓴다."""
 
     def __init__(self, cfg, session: str):
         j = cfg.judge
         self.j, self.prompt = j, j.prompt
+        self.http = HttpCounts()
         self.client = wrap_openai(OpenAI(
             base_url=j.base_url, api_key=os.environ[j.api_key_env], timeout=j.timeout,
-            default_headers={"User-Agent": j.user_agent, "x-opencode-session": session}))
+            default_headers={"User-Agent": j.user_agent, "x-opencode-session": session},
+            http_client=DefaultHttpxClient(event_hooks={"request": [self.http.on_request],
+                                                        "response": [self.http.on_response]})))
         self.params = OmegaConf.to_container(j.params)
         self.extra = OmegaConf.to_container(j.extra_body) if j.extra_body else None
         # 단계별로 params·extra_body를 덮어쓴다(예: 일부 단계만 사고 과정 켬, PR #106)
@@ -381,6 +406,7 @@ def main() -> None:
     state = write_guarded(ROOT / cfg.paths.gen_judge, text, cfg.search.overwrite)
     print(f"{len(rows)}개 채점, API 호출 {judge.calls}회, 저장된 응답 {judge.hits}회 "
           f"-> {cfg.paths.gen_judge} ({state})")
+    print(f"{judge.http.summary()}, 재시도 {judge.http.requests - judge.calls}회")
 
 
 if __name__ == "__main__":
