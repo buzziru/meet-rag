@@ -44,7 +44,7 @@ git log --oneline main..HEAD
 | R5 | `CLAUDE.md` "금지" 절, `.claude/skills/protocol-guard/`, `.claude/agents/protocol-auditor.md`, 이 파일의 위험도 규칙 변경 | 감사가 느슨해지면 그사이 병합된 평가 오염을 나중에 찾기 어렵다. 위험도 규칙이 느슨해지면 이후 단방향 PR이 양방향으로 표시된다 |
 | R6 | test 분할을 읽거나 test 점수를 내는 실행·코드 | 단계(검색·생성)마다 종료 측정 1회만 허용되고, 그 점수로 결정을 조정하지 않는다(protocol-guard P1) |
 
-판단으로 올리는 경우: 기본 config에서 기준 파이프라인의 출력(순위·점수·생성 결과)이 바뀌는 코드, 기록된 해시(D-02 분할, D-13 `pools.jsonl` 등)를 바꾸는 코드, 다음 SLICE·EXP의 입력 형식을 고정하는 인터페이스. 올렸으면 이유를 적는다.
+판단으로 올리는 경우: 기본 config에서 기준 파이프라인의 출력(순위·점수·생성 결과)이 바뀌는 코드, 기록된 해시(D-02 분할, D-13 `pools.jsonl` 등)를 바꾸는 코드, 다음 SLICE·EXP의 입력 형식을 고정하는 인터페이스, D-49 동결 대상(judge 지시 `configs/judge/prompt/j_v8.yaml`, 판정표 `src/rag/gen_eval/checks.py`의 `OUTCOMES`·`item_outcome`, 이를 고정하는 `tests/test_gen_eval_freeze.py`) 변경. D-49는 동결 대상을 보호 경로(R3)가 아니라 테스트로 지키므로, 테스트와 대상을 함께 바꾸면 테스트가 통과해 변경이 드러나지 않는다. 올렸으면 이유를 적는다.
 
 ## 출력
 
