@@ -254,6 +254,17 @@ gen_eval:
   # 내용 없는 문장(인사말, 도입 문장)의 문구. 이 문구가 든 문장은 인용 검사의 문장 수에서 빼고
   # 따로 센다. 생성 프롬프트 v2도 이런 문장을 쓰지 말라고 지시한다(PR #106 코멘트, 2026-10-20)
   filler_phrases: [다음과 같습니다, 아래와 같습니다, 감사합니다, 안녕하십니까]
+  # 블라인드 확인(S25, rag.gen_eval.blind): 판정용 결과(base)에 없고 풀 결과(pool)에만 있는 질의에서
+  # m개를 고른다. 실패 없는 질의를 clean_share만큼 넣어 TNR을 낸다. 한 회의는 한 질의만 넣는다.
+  # 질의 원문이 있어 검수 문서·정답 키는 data/ 아래에 쓴다
+  blind:
+    base: data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v2-dev-full-deepseek_go_mixed-j_v8-n330.jsonl
+    pool: data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v2-dev-full-deepseek_go_mixed-j_v8-n430.jsonl
+    m: 12
+    clean_share: 0.33
+    seed: ${seed}
+    out: data/gen_eval/blind/s25
+    bootstrap: 2000
   # 사람 검수 파일(rag.gen_eval.review): 두 judge 설정의 결과를 나란히 둔다. 질의 원문이 있어 data/ 아래에 쓴다
   review:
     judges: [deepseek_go, deepseek_go_nothink]
