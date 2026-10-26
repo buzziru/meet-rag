@@ -1,6 +1,7 @@
 """judge 결과(paths.gen_judge)를 집계해 표로 낸다(S14).
 
-기준별 평균과 계산한 질의 수, 뺀 질의 수(이유별), 전체·부분 거부(S14b), 거부 교차 집계,
+기준별 평균과 계산한 질의 수, 뺀 질의 수(전체 거부 포함 이유별), 충실성 판정의 발언자 구분 불가
+진술 수(S22), 전체·부분 거부(S14b), 거부 교차 집계,
 인용·메타데이터 오류, 토큰·비용, 첫 토큰 시간을 낸다. 항목 평가 결과가 있으면 정보 상태 × 처리 표,
 거부 정확도, 틀린 처리 유형을 낸다(S14c). gen_eval.item_cases를 주면 판정 확인 사례의 judge 결과를
 정답과 대조한다. 종합 지표와 기준 비교·판정은
@@ -10,10 +11,11 @@
 
 import sys
 from collections import Counter
+from hashlib import sha256
 
 import numpy as np
 
-from rag.gen_eval.checks import HANDLINGS, SITUATION, STATES, item_outcome
+from rag.gen_eval.checks import HANDLINGS, STATES, item_outcome
 from rag.gen_eval.common import read_jsonl
 from rag.index import ROOT, load_cfg
 
@@ -27,11 +29,14 @@ def rate(k: int, n: int) -> str:
 
 
 def criterion(rows: list[dict], key: str) -> tuple[list[float], Counter, int]:
-    """(점수 목록, 뺀 이유별 수, judge 형식 오류 수). 거부 답변은 기준이 없어 세지 않는다."""
+    """(점수 목록, 뺀 이유별 수, judge 형식 오류 수). 전체 거부 답변은 기준을 채점하지 않아
+    full_refusal로 센다(기준 문서 K8)."""
     scores, excluded, errors = [], Counter(), 0
     for r in rows:
         c = r.get(key)
         if c is None:
+            if r["refusal"] == "full":
+                excluded["full_refusal"] += 1
             continue
         if c.get("score") is not None:
             scores.append(c["score"])
@@ -44,12 +49,17 @@ def criterion(rows: list[dict], key: str) -> tuple[list[float], Counter, int]:
 
 def refusal_table(rows: list[dict]) -> list[tuple[str, int, int]]:
     """(근거 상태, 질의 수, 거부 수). 정답 문서의 근거 청크에 핵심 답이 있는데 거부했으면 잘못된
-    거부다. 정답 문서가 없을 때의 거부는 참고값이다(S14 결정 5). 판단 불가는 핵심 진술이 없거나
-    judge 형식 오류인 경우다."""
+    거부다. 정답 문서가 없을 때의 거부는 참고값이다(S14 결정 5). 판단 불가는 참조 사용 불가(핵심
+    진술 없음)와 judge 형식 오류로 나눈다(기준 문서 C2)."""
+    def unusable(r):
+        return r["gold_n"] and r["answer_in_chunk"] is None and r["key_statements"]["keys"] == []
+
     groups = {"정답 문서 있음, 청크에 핵심 답 있음": lambda r: r["gold_n"] and r["answer_in_chunk"],
               "정답 문서 있음, 청크에 핵심 답 없음":
                   lambda r: r["gold_n"] and r["answer_in_chunk"] is False,
-              "정답 문서 있음, 판단 불가": lambda r: r["gold_n"] and r["answer_in_chunk"] is None,
+              "정답 문서 있음, 판단 불가(참조 사용 불가)": unusable,
+              "정답 문서 있음, 판단 불가(judge 형식 오류)":
+                  lambda r: r["gold_n"] and r["answer_in_chunk"] is None and not unusable(r),
               "정답 문서 없음": lambda r: not r["gold_n"]}
     return [(name, sum(1 for r in rows if f(r)), sum(1 for r in rows if f(r) and r["refusal"]))
             for name, f in groups.items()]
@@ -74,15 +84,18 @@ NOT_WRONG = ("맞음", "상황 전달", "상황 미전달")
 
 def item_summary(rows: list[dict]) -> dict:
     """질의 항목 단위 거부 평가의 집계(S14c). 거부 정확도는 모호·회피 항목을 뺀 항목 중 맞는
-    처리의 비율이고, 모호·회피는 상황 전달·미전달로 따로 센다(D-41 결정 3, S14c 결정 사항 4).
+    처리의 비율로, 질의 단위 값(counts, 기준 문서 I13)을 합쳐 계산한다. 모호·회피는 상황
+    전달·미전달로 따로 세고(D-41 결정 3, S14c 결정 사항 4) 전체 항목 중 비율을 낸다(I10).
     판단 불가는 judge 형식 오류로 항목이 없는 질의다."""
     evals = [r["item_eval"] for r in rows if r.get("item_eval")]
     items = [i for e in evals for i in e.get("items") or []]
     outcomes = Counter(i["outcome"] for i in items)
-    judged = [i for i in items if i["state"] not in SITUATION]
+    counts = [e["counts"] for e in evals if "counts" in e]
+    judged = sum(c["judged"] for c in counts)
     return {"table": Counter((i["state"], i["handling"]) for i in items),
-            "outcomes": outcomes, "accuracy": (outcomes["맞음"], len(judged)),
-            "situation": (outcomes["상황 전달"], len(items) - len(judged)),
+            "outcomes": outcomes, "accuracy": (sum(c["correct"] for c in counts), judged),
+            "situation": (outcomes["상황 전달"], len(items) - judged),
+            "ambiguous": (len(items) - judged, len(items)),
             "speaker_unclear": sum(i["speaker_unclear"] for i in items),
             "queries": len(evals), "errors": sum(1 for e in evals if "error" in e),
             "wrong_queries": sum(1 for e in evals if any(
@@ -124,7 +137,8 @@ def print_items(rows: list[dict]) -> None:
           + " ---: |" * len(HANDLINGS))
     for st in STATES:
         print(f"| {st} | " + " | ".join(str(s["table"][st, h]) for h in HANDLINGS) + " |")
-    print(f"\n거부 정확도(모호·회피 뺀 항목 중 맞는 처리) {rate(*s['accuracy'])}, "
+    print(f"\n거부 정확도(블라인드 확인 전 참고값, 모호·회피 뺀 항목 중 맞는 처리) "
+          f"{rate(*s['accuracy'])}, 모호·회피 항목 {rate(*s['ambiguous'])}, "
           f"모호·회피 항목 중 상황 전달 {rate(*s['situation'])}, "
           f"발언자 구분 불가 항목 {s['speaker_unclear']}\n")
     print("| 틀린 처리 유형 | 항목 |\n| --- | ---: |")
@@ -134,8 +148,13 @@ def print_items(rows: list[dict]) -> None:
 
 
 def print_cases(cfg) -> None:
+    """judge 결과를 만든 사례 파일이 지금 파일과 다르면 멈춘다(사례 정답을 고친 뒤의 옛 결과)."""
     src = ROOT / cfg.gen_eval.item_cases
-    agree, notes = case_agreement(read_jsonl(src), read_jsonl(src.with_suffix(".judge.jsonl")))
+    results = read_jsonl(src.with_suffix(".judge.jsonl"))
+    if results[0]["judge_recipe"].get("item_cases_sha256") != sha256(src.read_bytes()).hexdigest():
+        raise SystemExit(f"{src.name}이 judge 결과를 만들 때의 사례 파일과 다르다. "
+                         "사례를 다시 채점한다")
+    agree, notes = case_agreement(read_jsonl(src), results)
     n = agree["항목"]
     print(f"# 판정 확인 사례 {src.name}\n\n항목 {n}개(항목 수 다른 사례 "
           f"{agree['항목 수 다른 사례']}, 판단 불가 사례 {agree['판단 불가 사례']})\n\n"
@@ -169,6 +188,10 @@ def main() -> None:
         part = len(criterion(partial, key)[0])
         ex = ", ".join(f"{k} {v}" for k, v in excluded.items()) or "-"
         print(f"| {name} | {mean(scores)} | {len(scores)} | {part} | {ex} | {errors} |")
+    unclear = [sum(v["speaker_unclear"] for v in (r.get("faithfulness") or {}).get("verdicts", []))
+               for r in rows]
+    print(f"\n충실성 판정에서 발언자를 구분할 수 없는 진술 {sum(unclear)}개, 그런 진술이 든 질의 "
+          f"{sum(1 for k in unclear if k)}개(기준 문서 F7)")
 
     print("\n| 근거 상태 | 질의 | 거부(전체·부분) |\n| --- | ---: | ---: |")
     for name, k, ref in refusal_table(rows):

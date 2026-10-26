@@ -4,7 +4,7 @@
 - judge(D-38): 충실성(진술 추출 → 진술별 근거 판정), 답변 관련성(3단계),
   핵심 답변 포함도(핵심 진술 추출 → 답변 포함 판정), 정답 문서 근거 청크의 핵심 답(같은
   핵심 진술 → 청크 포함 판정, D-40). 전체 거부 답변은 근거 청크 판정만 하고, 부분 거부 답변은
-  거부 문장을 뺀 내용을 채점한다(S14b, D-41)
+  충실성·인용 검사만 거부 문장을 뺀 내용으로 채점한다(S14b, D-41, D-47 결정 4)
 - 질의 항목 단위 거부 평가(gen_eval.item_eval): 질의를 항목으로 나눠 항목마다 근거의 정보 상태와
   답변의 처리를 판정하고, 맞는 처리인지는 코드가 정한다(S14c, D-41 결정 2~4). 모든 답변에 한다.
   gen_eval.item_cases를 주면 생성 기록 대신 판정 확인 사례를 이 평가로만 채점한다
@@ -32,6 +32,7 @@ from rag.gen_eval.checks import (
     STATES,
     citation_check,
     gold_position,
+    item_counts,
     item_outcome,
     metadata_mismatches,
     refusal_split,
@@ -149,6 +150,13 @@ class Judge:
         return parse_json(saved["content"]), saved["usage"]
 
 
+def same_statements(rows, statements: list[str]) -> bool:
+    """judge 응답 목록이 입력 진술을 같은 순서·같은 문구로 담았는지(기준 문서 P6, S22 결정 사항 2).
+    다르면 어느 판정이 어느 진술의 것인지 알 수 없어 형식 오류로 본다."""
+    return (isinstance(rows, list) and all(isinstance(r, dict) for r in rows)
+            and [r.get("statement") for r in rows] == statements)
+
+
 def faithfulness(judge: Judge, question: str, answer: str, contexts: list[dict]) -> dict:
     """RAGAS 충실성: 뒷받침된 진술 수 / 전체 진술 수."""
     st, u1 = judge.ask("statements", question=question, answer=answer)
@@ -160,10 +168,12 @@ def faithfulness(judge: Judge, question: str, answer: str, contexts: list[dict])
     vd, u2 = judge.ask("verdicts", contexts=format_contexts(contexts),
                        statements=json.dumps(statements, ensure_ascii=False))
     verdicts = vd.get("verdicts") if vd else None
-    if not isinstance(verdicts, list) or len(verdicts) != len(statements):
+    if not same_statements(verdicts, statements):
         return {"score": None, "error": "verdicts 형식 오류", "statements": statements,
                 "usage": [u1, u2]}
-    ok = [v.get("verdict") in (0, 1) for v in verdicts]
+    # speaker_unclear: 진술을 뒷받침한 근거 내용의 발언자를 구분할 수 없음(기준 문서 F7)
+    ok = [v.get("verdict") in (0, 1) and isinstance(v.get("speaker_unclear"), bool)
+          for v in verdicts]
     if not all(ok):
         return {"score": None, "error": "verdict 값 오류", "usage": [u1, u2]}
     return {"score": sum(v["verdict"] for v in verdicts) / len(verdicts), "verdicts": verdicts,
@@ -192,8 +202,7 @@ def key_presence(judge: Judge, step: str, keys: list[str], **text: str) -> dict:
     """핵심 진술마다 대상 글(답변 또는 근거 청크)에 들어 있는지 판정하고 들어 있는 비율을 낸다."""
     out, u = judge.ask(step, key_statements=json.dumps(keys, ensure_ascii=False), **text)
     checks = out.get("checks") if out else None
-    if (not isinstance(checks, list) or len(checks) != len(keys)
-            or not all(c.get("present") in (0, 1) for c in checks)):
+    if not same_statements(checks, keys) or not all(c.get("present") in (0, 1) for c in checks):
         return {"score": None, "error": f"{step} 형식 오류", "usage": [u]}
     return {"score": sum(c["present"] for c in checks) / len(checks), "checks": checks,
             "usage": [u]}
@@ -234,7 +243,7 @@ def item_eval(judge: Judge, question: str, answer: str, contexts: list[dict]) ->
     rows = [{**i, "handling": h["handling"], "handling_reason": h.get("reason"),
              "outcome": item_outcome(i["state"], h["handling"])}
             for i, h in zip(items, handling, strict=True)]
-    return {"items": rows, "usage": [u1, u2]}
+    return {"items": rows, "counts": item_counts(rows), "usage": [u1, u2]}
 
 
 @traceable(name="judge_record", process_inputs=lambda i: {"qid": i["gen"]["qid"]})
@@ -244,8 +253,8 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
     정답 문서가 근거에 있으면 거부 여부와 관계없이 핵심 진술을 뽑고, 그 진술이 정답 문서의 근거
     청크에 들어 있는 비율이 gen_eval.chunk_key_min 이상이면 청크에 답이 있다고 본다(S14 결정 5).
     핵심 진술이 없거나 형식 오류면 answer_in_chunk는 None(판단 불가)이다.
-    부분 거부 답변은 거부 문장을 뺀 내용으로 충실성·관련성·인용 검사를 하고 포함도는 답변 전체로
-    본다(S14b, D-41)."""
+    부분 거부 답변은 거부 문장을 뺀 내용으로 충실성·인용 검사를 하고(S14b, D-41), 관련성과
+    포함도는 답변 전체로 본다. 관련성은 찾지 못했다고 밝힌 부분을 감점하지 않는다(D-47 결정 4)."""
     g = cfg.gen_eval
     answer, contexts = gen["answer"], gen["contexts"]
     gold_n = gold_position(contexts, ref["doc_id"])
@@ -271,7 +280,7 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
     out["citations"] = citation_check(rest, len(contexts), list(g.filler_phrases))
     out["metadata"] = metadata_mismatches(rest, contexts, committees)
     out["faithfulness"] = faithfulness(judge, gen["query"], rest, contexts)
-    out["relevance"] = relevance(judge, gen["query"], rest)
+    out["relevance"] = relevance(judge, gen["query"], answer)
     out["inclusion"] = inclusion(judge, answer, ks)
     return out
 
@@ -288,12 +297,14 @@ def check_item_steps(cfg) -> None:
 
 def judge_cases(cfg) -> None:
     """판정 확인 사례(S14c)를 항목 평가로만 채점한다. 사례 줄은 case·query·answer·contexts를 담는다.
-    결과는 judge 지시·설정에 따라 달라지므로 출력이 있으면 시작할 때 멈춘다."""
+    결과는 judge 지시·설정에 따라 달라지므로 출력이 있으면 시작할 때 멈춘다. 사례 파일의 해시를
+    레시피에 남겨, 사례 정답을 고친 뒤 옛 결과와 대조하면 report가 멈춘다(이슈 #142)."""
     src = ROOT / cfg.gen_eval.item_cases
     out = src.with_suffix(".judge.jsonl")
     refuse_existing(out, cfg.search.overwrite)
     cases = read_jsonl(src)
     rec = judge_recipe(cfg, [])  # 합성 답변이라 생성 기록이 없다
+    rec["item_cases_sha256"] = hashlib.sha256(src.read_bytes()).hexdigest()
     judge = Judge(cfg, session=f"meet-rag-judge-{sha(stable(rec))[:16]}")
     with ThreadPoolExecutor(cfg.judge.concurrency) as ex:
         rows = list(ex.map(lambda c: {"case": c["case"], **item_eval(
