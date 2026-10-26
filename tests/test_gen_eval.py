@@ -508,7 +508,7 @@ def test_eval_qids_excludes_dev_queries_only_in_dev_full(monkeypatch):
 
     from rag.gen_eval.common import dev_queries, eval_qids
     dev = dev_queries(load_cfg(["index.scope=full"]))
-    assert len(dev) == 20 and "035604-0001" in dev
+    assert len(dev) == 32 and {"035604-0001", "048474-0008"} <= dev  # S14 표본 20 + S25 블라인드 12
     qids = sorted(dev) + [f"q{i:03d}" for i in range(80)]
     monkeypatch.setattr("rag.gen_eval.common.load_gold",
                         lambda cfg, layer: pd.DataFrame(index=qids))
@@ -519,8 +519,9 @@ def test_eval_qids_excludes_dev_queries_only_in_dev_full(monkeypatch):
     full = eval_qids(cfg("dev-full", 30))
     assert len(full) == 30 and not dev & set(full)
     assert eval_qids(cfg("dev-full", 60))[:30] == full  # 제외 뒤에도 앞 표본이 유지된다
-    assert eval_qids(cfg("dev-small", 100)) == sample_qids(qids, 7, 100)  # 개발 층은 빼지 않는다
-    assert sample_qids(qids, 7, 100, dev) == [q for q in sample_qids(qids, 7, 100) if q not in dev]
+    n = len(qids)
+    assert eval_qids(cfg("dev-small", n)) == sample_qids(qids, 7, n)  # 개발 층은 빼지 않는다
+    assert sample_qids(qids, 7, n, dev) == [q for q in sample_qids(qids, 7, n) if q not in dev]
 
 
 def test_print_cases_stops_when_case_file_changed(tmp_path, monkeypatch):
