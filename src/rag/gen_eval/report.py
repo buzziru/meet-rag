@@ -82,6 +82,17 @@ def chunk_ratio_table(rows: list[dict]) -> list[tuple[float, int, int]]:
 NOT_WRONG = ("맞음", "상황 전달", "상황 미전달")
 
 
+def require_s22(rows: list[dict]) -> None:
+    """S22 이전 judge 기록(항목 평가의 counts, 충실성 판정의 speaker_unclear가 없음)이면 멈춘다.
+    읽으면 거부 정확도가 0/0으로 나오거나 원인을 알 수 없는 KeyError가 난다."""
+    for r in rows:
+        e, f = r.get("item_eval") or {}, r.get("faithfulness") or {}
+        if ("items" in e and "counts" not in e) or any(
+                "speaker_unclear" not in v for v in f.get("verdicts", [])):
+            raise SystemExit("S22 이전 judge 기록이다(counts·speaker_unclear 없음). "
+                             "그 기록을 만든 커밋의 report로 읽는다")
+
+
 def item_summary(rows: list[dict]) -> dict:
     """질의 항목 단위 거부 평가의 집계(S14c). 거부 정확도는 모호·회피 항목을 뺀 항목 중 맞는
     처리의 비율로, 질의 단위 값(counts, 기준 문서 I13)을 합쳐 계산한다. 모호·회피는 상황
@@ -174,6 +185,7 @@ def main() -> None:
         print_cases(cfg)
         return
     rows = read_jsonl(ROOT / cfg.paths.gen_judge)
+    require_s22(rows)
     n = len(rows)
     answered = [r for r in rows if r["refusal"] != "full"]
     partial = [r for r in rows if r["refusal"] == "partial"]
@@ -188,8 +200,9 @@ def main() -> None:
         part = len(criterion(partial, key)[0])
         ex = ", ".join(f"{k} {v}" for k, v in excluded.items()) or "-"
         print(f"| {name} | {mean(scores)} | {len(scores)} | {part} | {ex} | {errors} |")
-    unclear = [sum(v["speaker_unclear"] for v in (r.get("faithfulness") or {}).get("verdicts", []))
-               for r in rows]
+    # 뒷받침(1)으로 판정하고 발언자 구분 불가로 표시한 진술만 센다(기준 문서 F7)
+    unclear = [sum(v["speaker_unclear"] and v["verdict"] == 1
+                   for v in (r.get("faithfulness") or {}).get("verdicts", [])) for r in rows]
     print(f"\n충실성 판정에서 발언자를 구분할 수 없는 진술 {sum(unclear)}개, 그런 진술이 든 질의 "
           f"{sum(1 for k in unclear if k)}개(기준 문서 F7)")
 

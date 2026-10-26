@@ -37,6 +37,7 @@ from rag.gen_eval.report import (
     criterion,
     item_summary,
     refusal_table,
+    require_s22,
 )
 from rag.gen_eval.review import main as review_main
 from rag.index import load_cfg
@@ -328,6 +329,14 @@ def test_item_summary_and_case_agreement():
     agree, notes = case_agreement(cases, results)
     assert agree["항목"] == 1 and agree["state"] == 0 and agree["handling"] == 1
     assert agree["항목 수 다른 사례"] == 1 and len(notes) == 3
+    # S22 이전 기록은 거부 정확도 0/0이나 KeyError로 읽지 않고 멈춘다
+    require_s22([rows[0], {"faithfulness": verdicts_reply(["s1"], [1])}])
+    old = row(("있음", "답함"))
+    del old["item_eval"]["counts"]
+    old_verdicts = {"faithfulness": {"verdicts": [{"statement": "s1", "verdict": 1}]}}
+    for bad in (old, old_verdicts):
+        with pytest.raises(SystemExit, match="S22 이전 judge 기록"):
+            require_s22([bad])
 
 
 def test_report_criterion_and_refusal_table():
