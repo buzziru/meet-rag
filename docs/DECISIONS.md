@@ -498,7 +498,7 @@
   - judge 모델·경로: `deepseek-v4.1-flash`, opencode Go(`https://opencode.ai/inference/go/openai/v1`). API 모델이라 가중치를 고정할 수 없어 이름과 제공자를 남긴다(D-46). 모델 식별자가 바뀌면 검증을 다시 한다(P9)
   - 지시: `configs/judge/prompt/j_v8.yaml`, `prompt_sha256` `fc8b56034f35d1809db92f1ce5cdf250f09773c11f407379088a40da86bd4de8`(`judge_recipe`와 같은 계산)
   - temperature 0.0
-  - 집계 코드: `src/rag/gen_eval/report.py`·`checks.py`, S22 병합 커밋 8eb1284. 커밋만 기록하고 동결 테스트로 막지 않는다. report의 집계(뺀 이유, 거부 정확도 등)는 기존 `tests/test_gen_eval.py`가 점검하고, 다음 항목(반복 재채점)에서 고칠 수 있다
+  - 집계 코드: `src/rag/gen_eval/report.py`·`checks.py`, S22 병합 커밋 8eb1284. 커밋만 기록하고 동결 테스트로 막지 않는다. `report.py`는 지시와 달리 새 버전·재검증 없이 기존 테스트(`tests/test_gen_eval.py`) 통과만으로 고칠 수 있다. 재채점 과정에서 집계 수정이 생길 수 있기 때문이다(사용자 결정 2026-10-26, PR #148 리뷰). 판정표(`checks.py`의 `OUTCOMES`·`item_outcome`)는 동결 테스트로 막는다
   - 판정표(I8): `checks.py`의 `OUTCOMES` 12쌍과 `item_outcome`(모호·회피는 상황 전달·미전달, 있음·일부·없음의 "상황을 밝히고 답함"은 답함과 같음)
   - 캐시 키: 요청 본문(model, messages, params, extra_body)의 sha256. 반복 재채점은 반복 번호를 키에 더하되 반복 0은 지금 키와 같게 둔다(다음 항목)
   - 판정용 세트 제외: `configs/gen_eval/dev_queries.yaml`(D-47 결정 5)
