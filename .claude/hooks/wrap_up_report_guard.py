@@ -14,7 +14,7 @@ import sys
 import time
 
 MIN_CHARS = 400
-WAIT_S, POLL_S = 5.0, 0.2
+WAIT_S, POLL_S = 10.0, 0.2
 REASON = (f"질문 상자 전에 이 턴 본문에 쓴 보고가 {{n}}자다(기준 {MIN_CHARS}자). "
           "상자를 띄우기 전에 본문으로 보고한다: 만든 것·한 것, 결과 수치(표), 해석, "
           "어긋난 항목의 구체 내용, "
