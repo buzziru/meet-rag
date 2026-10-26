@@ -544,10 +544,11 @@ def test_print_cases_stops_when_case_file_changed(tmp_path, monkeypatch):
 
 
 def test_rep_paths_keep_rep_zero_unchanged():
-    base = load_cfg(["index.scope=full", "+exp=exp017"]).paths
+    small = ["index.scope=full", "+exp=exp017", "gen_eval.queries=dev-small"]
+    base = load_cfg(small).paths
     assert base.gen_runs.endswith("-v2-dev-small.jsonl")
     assert base.gen_judge.endswith("-v2-dev-small-deepseek_go_mixed-j_v8.jsonl")
-    rep = load_cfg(["index.scope=full", "+exp=exp017", "gen_eval.gen_rep=1", "judge.rep=2"]).paths
+    rep = load_cfg([*small, "gen_eval.gen_rep=1", "judge.rep=2"]).paths
     assert rep.gen_runs.endswith("-v2-dev-small-r1.jsonl")
     assert rep.gen_judge.endswith("-v2-dev-small-r1-deepseek_go_mixed-j_v8-r2.jsonl")
 
@@ -614,3 +615,9 @@ def test_generate_all_keeps_contexts_and_order_across_concurrency():
     assert [r["contexts"] for r in runs[1]] == [r["contexts"] for r in runs[4]]
     assert all(r["concurrency"] == 4 and r["retrieve_s"] >= 0 and r["gen_rep"] == 0
                for r in runs[4])
+
+
+def test_default_eval_set_is_dev_full_330():
+    # 판정용 세트(D-50): dev-full, 개발 질의 제외, seed 순서 앞 330개
+    g = load_cfg(["index.scope=full"]).gen_eval
+    assert (g.queries, g.n, g.concurrency) == ("dev-full", 330, 4)

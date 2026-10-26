@@ -231,8 +231,10 @@ multidoc:
 
 # 생성 평가(docs/slices/14-gen-eval.md). 질의는 평가 층(dev-small | dev-full)의 dev 질의만 쓴다
 gen_eval:
-  queries: dev-small
-  n: 20  # seed로 섞은 순서의 앞에서 자른다. n을 늘려도 앞 표본이 유지된다
+  # 판정용 세트: dev-full에서 개발 질의를 뺀 seed 순서의 앞 330개(D-50, S24 변동 폭 측정).
+  # S14 표본 재채점처럼 개발 층을 볼 때는 gen_eval.queries=dev-small gen_eval.n=20으로 바꾼다
+  queries: dev-full
+  n: 330  # seed로 섞은 순서의 앞에서 자른다. n을 늘려도 앞 표본이 유지된다
   seed: ${seed}
   # 생성 반복 번호(S24). 같은 질의를 같은 설정으로 다시 생성해 생성 잡음을 잰다. 0이면 반복 도입 전과 같은 경로다
   gen_rep: 0
