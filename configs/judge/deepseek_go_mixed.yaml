@@ -6,6 +6,9 @@ defaults:
   - _self_
 
 name: deepseek_go_mixed
+# 질의 동시 수 8(동시 API 호출 최대 32). S25 베이스라인 첫 실행에서 429·실패 없이 새 230질의를 15분에
+# 채점했다(S24 동시 4 어림의 절반). 16 이상은 Judge.ask 재시도를 정한 뒤 확인한다(D-50, S25)
+concurrency: 8
 step_params:
   verdicts:
     reasoning_effort: low
