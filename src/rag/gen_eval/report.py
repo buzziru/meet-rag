@@ -6,7 +6,8 @@
 거부 정확도, 틀린 처리 유형을 낸다(S14c). gen_eval.item_cases를 주면 판정 확인 사례의 judge 결과를
 정답과 대조한다. 종합 지표와 기준 비교·판정은
 만들지 않는다(초안 결정 사항 2·3 이후).
-인자는 Hydra override(예: +exp=exp017 gen_eval.n=20).
+인자는 Hydra override(기본은 판정용 세트 dev-full 330질의, D-50. S14 표본은
+gen_eval.queries=dev-small gen_eval.n=20).
 """
 
 import sys

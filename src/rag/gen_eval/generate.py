@@ -3,10 +3,13 @@
 생성은 rag.generate.Pipeline의 검색·프롬프트·생성 메서드를 그대로 쓴다. 검색과 프롬프트는 차례로
 만들고, 생성 API 호출만 gen_eval.concurrency개씩 동시에 보낸다(S24 결정 사항 1 (b)). 검색 단계의
 형태소 분석기·조건 추출기가 스레드 안전한지 확인하지 않았고, 생성 지연에 로컬 검색 CPU가 섞이지
-않게 하려는 것이다. 스트리밍으로 받아 답변 첫 토큰 시간을 재고, 검색 시간(retrieve_s)과 동시 수를
-함께 남긴다. 기록은 표본 순서대로 쓰므로 중간에 멈추면 쓴 데까지 남고, 이미 쓴 qid는 건너뛴다.
-레시피가 다른 기록이 있으면 멈춘다. 명세는 docs/slices/14-gen-eval.md, docs/slices/24-variance.md.
-인자는 Hydra override(예: +exp=exp017 gen_eval.n=20 gen_eval.gen_rep=1).
+않게 하려는 것이다. 스트리밍으로 받아 답변 첫 토큰 시간을 재고, 검색·프롬프트 조립 시간
+(retrieve_s)과 동시 수를 함께 남긴다. 기록은 표본 순서대로 쓰고, 생성이 실패한 질의만 빼고
+쓴 뒤 멈추므로 다시 실행하면 이어 쓴다. 이미 쓴 qid는 건너뛰고, 레시피가 다른 기록이 있으면
+멈춘다. 반복 번호(gen_eval.gen_rep)는 레시피가 아니라 경로와 기록 필드에 남긴다. 명세는
+docs/slices/14-gen-eval.md, docs/slices/24-variance.md. 인자는 Hydra override(기본은 판정용
+세트 dev-full 330질의, D-50. 예: +exp=exp017 gen_eval.gen_rep=1, S14 표본은
+gen_eval.queries=dev-small gen_eval.n=20).
 """
 
 import json
@@ -27,7 +30,9 @@ from rag.retrieve import read_query_emb
 def generate_all(pipe, items: list[tuple[str, str, object]], rec: dict, concurrency: int,
                  gen_rep: int, write) -> None:
     """items의 (qid, 질의, 질의 임베딩)을 검색은 차례로, 생성은 동시에 처리해 표본 순서대로
-    write(record)한다. 기록 형식은 Pipeline.run과 같고 retrieve_s·concurrency·gen_rep를 더한다."""
+    write(record)한다. 기록 형식은 Pipeline.run과 같고 retrieve_s(검색·프롬프트 조립 시간)·
+    concurrency·gen_rep를 더한다. 생성이 실패한 질의는 건너뛰고 나머지는 모두 쓴 뒤, 실패가
+    있으면 그 qid를 알리고 멈춘다. 다시 실행하면 쓰지 않은 질의만 생성한다."""
     k = pipe.cfg.generator.context_docs
 
     def gen(qid, query, contexts, messages, retrieve_s):
@@ -47,8 +52,15 @@ def generate_all(pipe, items: list[tuple[str, str, object]], rec: dict, concurre
             messages = pipe.messages(contexts, query)
             futures.append(ex.submit(gen, qid, query, contexts, messages,
                                      time.perf_counter() - t0))
-        for f in futures:
-            write(f.result())
+        failed = []
+        for (qid, _, _), f in zip(items, futures, strict=True):
+            try:
+                write(f.result())
+            except Exception as e:  # 429 등 한 질의의 실패로 끝난 다른 생성을 버리지 않는다
+                failed.append(f"{qid}: {type(e).__name__}: {e}")
+    if failed:
+        raise SystemExit(f"생성 실패 {len(failed)}건(다시 실행하면 이어 쓴다):\n"
+                         + "\n".join(failed))
 
 
 def main() -> None:

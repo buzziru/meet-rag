@@ -10,7 +10,8 @@
   gen_eval.item_cases를 주면 생성 기록 대신 판정 확인 사례를 이 평가로만 채점한다
 judge 응답은 요청 본문 해시로 paths.gen_judge_cache에 저장해 다시 실행할 때 쓴다
 (같은 입력이면 API를 부르지 않는다). 명세는 docs/slices/14-gen-eval.md.
-인자는 Hydra override(예: +exp=exp017 gen_eval.n=20).
+인자는 Hydra override(기본은 판정용 세트 dev-full 330질의, D-50. 예: +exp=exp017 judge.rep=1,
+S14 표본은 gen_eval.queries=dev-small gen_eval.n=20).
 """
 
 import hashlib

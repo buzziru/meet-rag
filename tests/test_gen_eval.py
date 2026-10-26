@@ -621,3 +621,31 @@ def test_default_eval_set_is_dev_full_330():
     # 판정용 세트(D-50): dev-full, 개발 질의 제외, seed 순서 앞 330개
     g = load_cfg(["index.scope=full"]).gen_eval
     assert (g.queries, g.n, g.concurrency) == ("dev-full", 330, 4)
+
+
+def test_generate_all_writes_others_when_one_generation_fails():
+    from types import SimpleNamespace
+
+    from rag.gen_eval.generate import generate_all
+
+    class FailingPipe:
+        cfg = SimpleNamespace(generator=SimpleNamespace(context_docs=1))
+
+        def retrieve(self, query, emb, k, qid):
+            return [{"n": 1, "doc_id": qid}]
+
+        def messages(self, contexts, query):
+            return [{"role": "user", "content": query}]
+
+        def generate(self, messages, stream, echo, langsmith_extra=None):
+            if messages[0]["content"] == "질의2":
+                raise RuntimeError("429")
+            return {"answer": "a", "thought": None, "usage": {}, "provider": "p",
+                    "first_token_s": 0.1, "total_s": 0.2}
+
+    out = []
+    items = [(f"q{i}", f"질의{i}", None) for i in range(5)]
+    with pytest.raises(SystemExit, match="생성 실패 1건"):
+        generate_all(FailingPipe(), items, {"model": "m"}, 4, 0, out.append)
+    # 실패한 q2만 빠지고 뒤에 끝난 생성도 쓴다. 다시 실행하면 q2만 남는다
+    assert [r["qid"] for r in out] == ["q0", "q1", "q3", "q4"]
