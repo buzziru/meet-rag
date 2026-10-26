@@ -172,4 +172,4 @@ judge의 신뢰는 지시 문구가 아니라 개발·동결·검증·사용을 
 | R6 | 부분 거부 답변의 관련성에 거부 문장을 뺀 내용만 넣는다(judge.py:274) | 답변 전체를 넣고, `relevance`에 찾지 못했다고 밝힌 부분은 감점하지 않는다는 규칙과 R6 예를 넣는다 | 지시·코드 |
 | P3 | `eval_qids`가 S14 표본과 S14c 사례 질의를 빼지 않는다(common.py:24) | 개발 질의 목록을 `configs/`에 두고 판정용 세트에서 뺀다 | 코드 |
 
-지시가 바뀌는 단계는 `verdicts`, `relevance`, `item_handling`, `items`다. `items` 출력이 바뀌면 `item_handling` 요청도 바뀐다. `statements`, `key_statements`, `key_checks`, `chunk_checks`는 바뀌지 않아 저장 응답을 그대로 쓴다.
+위 12개 행은 S22에서 모두 반영했다(judge 지시 `j_v8`, 커밋 79c4d86, `docs/slices/22-gen-eval-criteria.md`). 지시가 바뀌는 단계는 `verdicts`, `relevance`, `item_handling`, `items`다. `items` 출력이 바뀌면 `item_handling` 요청도 바뀐다. `statements`, `key_statements`, `key_checks`, `chunk_checks`는 바뀌지 않아 저장 응답을 그대로 쓴다.
