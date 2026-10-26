@@ -281,24 +281,42 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
            "first_token_s": gen["first_token_s"], "total_s": gen["total_s"],
            # S24 전 생성 기록에는 없다
            "retrieve_s": gen.get("retrieve_s"), "concurrency": gen.get("concurrency")}
-    ks = key_statements(judge, gen["query"], ref["answer_comment"]) if gold_n else None
-    if ks is not None:
-        out["key_statements"] = ks
-        if ks["keys"]:
+    full = kind == "full"  # 전체 거부는 거부 집계로만 본다(초안 "거부 답변의 처리")
+
+    def key_chain():
+        ks = key_statements(judge, gen["query"], ref["answer_comment"]) if gold_n else None
+        chunk = None
+        if ks and ks["keys"]:
             chunk = key_presence(judge, "chunk_checks", ks["keys"],
                                  excerpt=contexts[gold_n - 1]["text"])
+        inc = None if full else inclusion(judge, answer, ks)
+        return ks, chunk, inc
+
+    # 서로 입력이 이어지지 않는 네 사슬(포함도·근거 청크, 항목 평가, 충실성, 관련성)을 동시에
+    # 부른다. 요청 본문은 차례로 부를 때와 같아 캐시 키와 판정은 바뀌지 않는다(S24 사용자 지시)
+    with ThreadPoolExecutor(4) as ex:
+        key_f = ex.submit(key_chain)
+        # 항목 평가는 거부 여부와 관계없이 답변 전체로 본다(S14c)
+        item_f = (ex.submit(item_eval, judge, gen["query"], answer, contexts)
+                  if g.item_eval else None)
+        faith_f = None if full else ex.submit(faithfulness, judge, gen["query"], rest, contexts)
+        rel_f = None if full else ex.submit(relevance, judge, gen["query"], answer)
+    ks, chunk, inc = key_f.result()
+    if ks is not None:
+        out["key_statements"] = ks
+        if chunk is not None:
             out["chunk_keys"] = chunk
             if chunk["score"] is not None:
                 out["answer_in_chunk"] = chunk["score"] >= g.chunk_key_min
-    if g.item_eval:  # 거부 여부와 관계없이 답변 전체로 본다(S14c)
-        out["item_eval"] = item_eval(judge, gen["query"], answer, contexts)
-    if kind == "full":  # 전체 거부는 거부 집계로만 본다(초안 "거부 답변의 처리")
+    if item_f is not None:
+        out["item_eval"] = item_f.result()
+    if full:
         return out
     out["citations"] = citation_check(rest, len(contexts), list(g.filler_phrases))
     out["metadata"] = metadata_mismatches(rest, contexts, committees)
-    out["faithfulness"] = faithfulness(judge, gen["query"], rest, contexts)
-    out["relevance"] = relevance(judge, gen["query"], answer)
-    out["inclusion"] = inclusion(judge, answer, ks)
+    out["faithfulness"] = faith_f.result()
+    out["relevance"] = rel_f.result()
+    out["inclusion"] = inc
     return out
 
 
