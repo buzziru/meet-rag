@@ -6,7 +6,7 @@
 
 from omegaconf import OmegaConf
 
-from rag.gen_eval.checks import OUTCOMES
+from rag.gen_eval.checks import HANDLINGS, OUTCOMES, STATES, item_outcome
 from rag.gen_eval.judge import sha
 from rag.index import load_cfg
 
@@ -37,3 +37,13 @@ def test_default_judge_prompt_is_frozen_j_v8():
 
 def test_outcome_table_is_frozen():
     assert OUTCOMES == FROZEN_OUTCOMES
+    # 판정표 전체(5 상태 × 5 처리, 기준 문서 I8): 모호·회피는 상황 전달·미전달, 있음·일부·없음의
+    # "상황을 밝히고 답함"은 답함과 같다
+    for state in STATES:
+        for handling in HANDLINGS:
+            if state in ("모호", "회피"):
+                want = "상황 전달" if handling == "상황을 밝히고 답함" else "상황 미전달"
+            else:
+                same = "답함" if handling == "상황을 밝히고 답함" else handling
+                want = FROZEN_OUTCOMES[state, same]
+            assert item_outcome(state, handling) == want, (state, handling)
