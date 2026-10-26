@@ -15,8 +15,11 @@ OK = [
     'git commit -q --amend -m "refactor: BM25 검색기가 Kiwi 하나를 공유"',
     "git commit -m \"$(cat <<'EOF'\nfeat: 새 기능\n\n본문\nEOF\n)\"",
     "git commit -qm 'fix: 프롬프트 대조'",
+    "git commit -m @'\nchore: PowerShell here-string\n\n본문\n'@",
+    'git commit -m @"\r\ndocs: CRLF here-string\r\n"@',
 ]
 BAD = [
+    ("git commit -m @'\nperf: PowerShell here-string\n'@", "perf"),
     ("git commit -qm 'fix(judge): 프롬프트 대조'", "fix(judge):"),  # 범위 표기는 규약에 없다
     ('git commit -q -m "perf: BM25 검색기가 Kiwi 하나를 공유"', "perf"),
     ('git commit -m "Update readme"', "Update"),

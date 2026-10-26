@@ -66,7 +66,7 @@
           },
           {
             "type": "command",
-            "if": "Bash(*Delete()*)",
+            "if": "Bash(*Delete(*)",
             "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/data_delete_guard.py\"",
             "timeout": 30
           },
@@ -93,6 +93,12 @@
       {
         "matcher": "PowerShell",
         "hooks": [
+          {
+            "type": "command",
+            "if": "PowerShell(git commit *)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/commit_type_guard.py\"",
+            "timeout": 30
+          },
           {
             "type": "command",
             "if": "PowerShell(*rm *)",
@@ -149,7 +155,7 @@
           },
           {
             "type": "command",
-            "if": "PowerShell(*Delete()*)",
+            "if": "PowerShell(*Delete(*)",
             "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/data_delete_guard.py\"",
             "timeout": 30
           },
@@ -198,6 +204,17 @@
             "type": "command",
             "if": "Bash(*sed -i*)",
             "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/file_damage_check.py\" sed",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "PowerShell(*python*)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/file_damage_check.py\"",
             "timeout": 30
           }
         ]

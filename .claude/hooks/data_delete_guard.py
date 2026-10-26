@@ -24,16 +24,21 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+WORKTREE_REMOVE = r"\bgit\s+(?:-C\s+(\S+)\s+)?worktree\s+remove\b"  # git -C <경로>도 같다
 DELETE = re.compile(r"(?:^|[\s;&|(])(?:rm|rmdir|rd|del|erase|Remove-Item|ri)(?=\s)"
-                    r"|\bgit\s+worktree\s+remove\b|\bgit\s+clean\b|-delete\b|\.Delete\(\)"
+                    rf"|{WORKTREE_REMOVE}|\bgit\s+clean\b|-delete\b|\.Delete\("
                     r"|\b(?:shutil\.rmtree|os\.remove|os\.unlink|os\.rmdir)\b|\.unlink\(|\.rmdir\(",
                     re.IGNORECASE)
-# rm -r·-rf·-fR, Remove-Item -Recurse, rmdir /s, git worktree remove 등(-Force 같은 긴 플래그 제외)
-RECURSIVE = re.compile(r"\bgit\s+worktree\s+remove\b|\bgit\s+clean\b|\brmtree\b|-delete\b"
+# rm -r·-rf·-fR, Remove-Item -Recurse, rmdir /s, git worktree remove, .Delete($true) 등
+# (-Force 같은 긴 플래그 제외)
+RECURSIVE = re.compile(rf"{WORKTREE_REMOVE}|\bgit\s+clean\b|\brmtree\b|-delete\b"
                        r"|(?:^|\s)-(?=[a-zA-Z]{0,3}[rR])[a-zA-Z]{1,4}(?=\s|$)|--recursive\b"
-                       r"|-Recurse\b|(?:^|\s)/[sS](?=\s|$)", re.IGNORECASE)
+                       r"|-Recurse\b|(?:^|\s)/[sS](?=\s|$)|\.Delete\(\s*\$true\s*\)", re.IGNORECASE)
 SEP = re.compile(r"&&|\|\||[;|\n]")
-TAIL_VERB = re.compile(r"-delete\b|\.Delete\(\)", re.IGNORECASE)  # 대상이 동사 앞에 오는 형태
+TAIL_VERB = re.compile(r"-delete\b|\.Delete\(", re.IGNORECASE)  # 대상이 동사 앞에 오는 형태
+# (Get-Item <대상>).Delete(…)의 대상
+ITEM_DELETE = re.compile(r"\(\s*(?:Get-Item|gi)\s+(?:-(?:Literal)?Path\s+)?(\S+?)\s*\)"
+                         r"\s*\.Delete\(", re.IGNORECASE)
 CLEAN_IGNORED = re.compile(r"\bgit\s+clean\b[^\n;&|]*\s-[a-zA-Z]*[xX]")
 PY_DELETE = re.compile(r"\b(?:shutil\.rmtree|os\.remove|os\.unlink|os\.rmdir)\b"
                        r"|\.unlink\(|\.rmdir\(")
@@ -130,8 +135,11 @@ def decide(command: str, cwd: Path, root: Path = ROOT) -> tuple[str, str] | None
         if not verb:
             continue
         # 대상은 같은 구간의 동사 뒤 낱말이다. `x.Delete()`, `find x -delete`는 앞에 온다
-        targets = tokens(seg if TAIL_VERB.search(seg) else seg[verb.end():])
-        out = check_targets(targets, bool(RECURSIVE.search(seg)), cwd, data, ask)
+        item = ITEM_DELETE.findall(seg)
+        targets = item or tokens(seg if TAIL_VERB.search(seg) else seg[verb.end():])
+        # git -C <경로> worktree remove <대상>의 상대 경로는 <경로> 기준이다
+        base = to_path(verb.group(1), cwd) if verb.lastindex and verb.group(1) else cwd
+        out = check_targets(targets, bool(RECURSIVE.search(seg)), base, data, ask)
         if out:
             return out
     if not worktree:  # 메인 체크아웃의 data/ 삭제는 확인하지 않는다
