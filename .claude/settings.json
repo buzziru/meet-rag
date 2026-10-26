@@ -178,16 +178,6 @@
             "timeout": 30
           }
         ]
-      },
-      {
-        "matcher": "mcp__ccd_turn__wrap_up",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/wrap_up_report_guard.py\"",
-            "timeout": 30
-          }
-        ]
       }
     ],
     "PostToolUse": [
