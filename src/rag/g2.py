@@ -76,7 +76,7 @@ def prepare(cfg) -> None:
 
     qids, path = query_list(rcfg)
     texts = dict(zip(qids, read_texts(path, qids), strict=True))
-    emb = dict(zip(qids, query_embeddings(rcfg, qids, path, query_files(rcfg)["emb"]),
+    emb = dict(zip(qids, query_embeddings(rcfg, qids, query_files(rcfg)["emb"]),
                    strict=True))
     tokens = dict(zip(miss, ret.query_tokens([texts[q] for q in miss]), strict=True))
     ex = build_extractor(rcfg)
