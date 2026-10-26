@@ -71,8 +71,9 @@ paths:
   # 생성 호출 기록. 호출마다 JSON 하나
   generate_dir: data/runs/generate
   # 생성 평가(S14). 일괄 생성 기록(질의마다 한 줄), judge 결과, judge 응답 저장(요청 본문 해시마다 파일 하나)
-  gen_runs: data/gen_eval/runs/${retriever.run_name}-${prompt.version}-${gen_eval.queries}.jsonl
-  gen_judge: data/gen_eval/judge/${retriever.run_name}-${prompt.version}-${gen_eval.queries}-${judge.name}-${judge.prompt.version}.jsonl
+  # 반복 번호(gen_eval.gen_rep, judge.rep)는 0이면 붙지 않는다(rep resolver, S24)
+  gen_runs: data/gen_eval/runs/${retriever.run_name}-${prompt.version}-${gen_eval.queries}${rep:${gen_eval.gen_rep}}.jsonl
+  gen_judge: data/gen_eval/judge/${retriever.run_name}-${prompt.version}-${gen_eval.queries}${rep:${gen_eval.gen_rep}}-${judge.name}-${judge.prompt.version}${rep:${judge.rep}}.jsonl
   gen_judge_cache: data/gen_eval/judge_cache
   gen_dev_queries: configs/gen_eval/dev_queries.yaml  # judge 지시 개발에 쓴 질의. dev-full 표본에서 뺀다(S22)
   # multi-doc 후보 집합과 시작 묶음 (docs/slices/07-bundles.md)
@@ -233,6 +234,10 @@ gen_eval:
   queries: dev-small
   n: 20  # seed로 섞은 순서의 앞에서 자른다. n을 늘려도 앞 표본이 유지된다
   seed: ${seed}
+  # 생성 반복 번호(S24). 같은 질의를 같은 설정으로 다시 생성해 생성 잡음을 잰다. 0이면 반복 도입 전과 같은 경로다
+  gen_rep: 0
+  # 생성 호출 동시 수(S24 결정 사항 1·2). 검색은 차례로 하고 생성 API 호출만 이 수만큼 동시에 보낸다
+  concurrency: 4
   # 포함도용 핵심 진술 중 정답 문서의 근거 청크에 든 비율(judge chunk_checks)이 이 값 이상이면 청크에 답이
   # 있다고 본다. 거부 교차 집계에 쓴다(S14 결정 5, 사용자 결정 2026-10-19). 근거가 부족한 잠정값이라
   # report가 비율 분포를 함께 남기고, 그 분포를 근거로 나중에 정한다(PR #106 코멘트, 2026-10-20)

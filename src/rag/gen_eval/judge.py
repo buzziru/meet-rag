@@ -18,6 +18,7 @@ import json
 import os
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from langsmith import traceable
@@ -98,7 +99,7 @@ def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
             "refusal": cfg.prompt.refusal, "filler_phrases": list(g.filler_phrases),
             "check_patterns": {"date": DATE.pattern, "doc_date": DOC_DATE.pattern},
             "chunk_key_min": g.chunk_key_min, "item_eval": g.item_eval,
-            "git_commit": git_state()[0]}
+            "rep": j.rep, "git_commit": git_state()[0]}
     if gen_recipes:  # 판정 확인 사례(합성 답변)에는 생성 기록이 없다(S14c)
         rec |= {"gen_commits": sorted({r["git_commit"] for r in gen_recipes}),
                 "gen_recipe_sha256": sha(stable(gen_recipes[0]))}
@@ -120,11 +121,17 @@ class Judge:
         self.step = OmegaConf.to_container(j.step_params) if j.get("step_params") else {}
         self.cache = ROOT / cfg.paths.gen_judge_cache
         self.cache.mkdir(parents=True, exist_ok=True)
+        self.rep = j.rep
         self.lock = threading.Lock()
         self.calls = self.hits = 0
 
-    def ask(self, step: str, **values: str) -> tuple[dict | None, dict | None]:
-        """(파싱한 JSON 또는 None, usage). step은 지시 파일의 항목 이름."""
+    def ask(self, step: str, **values: str) -> tuple[dict | None, dict]:
+        """(파싱한 JSON 또는 None, usage). step은 지시 파일의 항목 이름.
+
+        usage에는 토큰과 함께 단계 이름, 지연(latency_s), 저장 응답 사용 여부(cached), 끝난 이유
+        (finish_reason)를 남긴다(S24). 저장 응답의 지연·끝난 이유는 저장할 때의 값이고, S24 전에
+        저장한 응답에는 없다. 반복 번호(judge.rep)가 0보다 크면 요청 본문 해시(캐시 키)에 넣어 같은
+        요청을 다시 묻는다. 0이면 키가 반복 도입 전과 같다(D-49)."""
         p = self.prompt[step]
         messages = [{"role": "system", "content": p.system},
                     {"role": "user", "content": render(p.user, **values)}]
@@ -132,22 +139,30 @@ class Judge:
         extra = over.pop("extra_body", self.extra)
         params = {**self.params, **over}
         body = {"model": self.j.model, "messages": messages, **params, "extra": extra}
+        if self.rep:
+            body["rep"] = self.rep
         path = self.cache / f"{sha(body)}.json"
-        if path.exists():
+        cached = path.exists()
+        if cached:
             saved = json.loads(path.read_text(encoding="utf-8"))
             with self.lock:
                 self.hits += 1
         else:
+            t0 = time.perf_counter()
             r = self.client.chat.completions.create(
                 model=self.j.model, messages=messages, extra_body=extra, **params)
             saved = {"content": r.choices[0].message.content,
-                     "usage": r.usage.model_dump() if r.usage else None}
+                     "usage": r.usage.model_dump() if r.usage else None,
+                     "latency_s": time.perf_counter() - t0,
+                     "finish_reason": r.choices[0].finish_reason}
             # 빈 응답과 끝나지 않은 응답(잘림 등)은 저장하지 않아 다시 실행하면 다시 묻는다(D-42)
-            if saved["content"] and r.choices[0].finish_reason == "stop":
+            if saved["content"] and saved["finish_reason"] == "stop":
                 path.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
             with self.lock:
                 self.calls += 1
-        return parse_json(saved["content"]), saved["usage"]
+        usage = {**(saved["usage"] or {}), "step": step, "cached": cached,
+                 "latency_s": saved.get("latency_s"), "finish_reason": saved.get("finish_reason")}
+        return parse_json(saved["content"]), usage
 
 
 def same_statements(rows, statements: list[str]) -> bool:
@@ -263,7 +278,9 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
     kind, refused, rest = refusal_split(answer, cfg.prompt.refusal, list(g.filler_phrases))
     out = {"qid": gen["qid"], "refusal": kind, "refused_sentences": refused, "gold_n": gold_n,
            "answer_in_chunk": None, "usage": gen["usage"], "provider": gen["provider"],
-           "first_token_s": gen["first_token_s"], "total_s": gen["total_s"]}
+           "first_token_s": gen["first_token_s"], "total_s": gen["total_s"],
+           # S24 전 생성 기록에는 없다
+           "retrieve_s": gen.get("retrieve_s"), "concurrency": gen.get("concurrency")}
     ks = key_statements(judge, gen["query"], ref["answer_comment"]) if gold_n else None
     if ks is not None:
         out["key_statements"] = ks

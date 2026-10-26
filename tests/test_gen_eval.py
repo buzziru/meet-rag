@@ -404,7 +404,7 @@ def test_judge_step_params_override_request_and_cache(tmp_path):
     j.params, j.extra = {"max_tokens": 10}, {"thinking": {"type": "disabled"}}
     j.step = {"verdicts": {"reasoning_effort": "low",
                            "extra_body": {"thinking": {"type": "enabled"}}}}
-    j.cache, j.lock, j.calls, j.hits = tmp_path, threading.Lock(), 0, 0
+    j.cache, j.lock, j.calls, j.hits, j.rep = tmp_path, threading.Lock(), 0, 0, 0
     j.ask("verdicts", x="a")
     j.ask("relevance", x="a")
     assert sent[0]["reasoning_effort"] == "low"
@@ -433,7 +433,7 @@ def test_judge_does_not_cache_empty_or_unfinished(tmp_path):
     j.prompt = {"relevance": SimpleNamespace(system="sys", user="{x}")}
     j.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     j.params, j.extra, j.step = {}, None, {}
-    j.cache, j.lock, j.calls, j.hits = tmp_path, threading.Lock(), 0, 0
+    j.cache, j.lock, j.calls, j.hits, j.rep = tmp_path, threading.Lock(), 0, 0, 0
     assert j.ask("relevance", x="a")[0] is None  # 빈 응답: 저장 안 함
     assert j.ask("relevance", x="a")[0] is None  # 잘린 응답: 저장 안 함
     assert j.ask("relevance", x="a")[0] == {"ok": 1}
@@ -541,3 +541,76 @@ def test_print_cases_stops_when_case_file_changed(tmp_path, monkeypatch):
     src.write_bytes(src.read_bytes() + b"\n")  # 읽는 내용은 같아도 파일이 바뀌면 멈춘다
     with pytest.raises(SystemExit, match="사례 파일과 다르다"):
         print_cases(cfg)
+
+
+def test_rep_paths_keep_rep_zero_unchanged():
+    base = load_cfg(["index.scope=full", "+exp=exp017"]).paths
+    assert base.gen_runs.endswith("-v2-dev-small.jsonl")
+    assert base.gen_judge.endswith("-v2-dev-small-deepseek_go_mixed-j_v8.jsonl")
+    rep = load_cfg(["index.scope=full", "+exp=exp017", "gen_eval.gen_rep=1", "judge.rep=2"]).paths
+    assert rep.gen_runs.endswith("-v2-dev-small-r1.jsonl")
+    assert rep.gen_judge.endswith("-v2-dev-small-r1-deepseek_go_mixed-j_v8-r2.jsonl")
+
+
+def test_judge_rep_changes_cache_key_and_records_call(tmp_path):
+    import threading
+    from types import SimpleNamespace
+
+    from rag.gen_eval.judge import Judge, sha
+
+    def create(**kw):
+        choice = SimpleNamespace(message=SimpleNamespace(content='{"ok": 1}'), finish_reason="stop")
+        return SimpleNamespace(choices=[choice], usage=SimpleNamespace(
+            model_dump=lambda: {"prompt_tokens": 3, "completion_tokens": 2}))
+
+    j = object.__new__(Judge)
+    j.j = SimpleNamespace(model="m")
+    j.prompt = {"relevance": SimpleNamespace(system="sys", user="{x}")}
+    j.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    j.params, j.extra, j.step = {}, None, {}
+    j.cache, j.lock, j.calls, j.hits, j.rep = tmp_path, threading.Lock(), 0, 0, 0
+    _, u = j.ask("relevance", x="a")
+    body = {"model": "m", "messages": [{"role": "system", "content": "sys"},
+                                       {"role": "user", "content": "a"}], "extra": None}
+    # 반복 0의 캐시 키는 반복 도입 전과 같다(D-49)
+    assert (tmp_path / f"{sha(body)}.json").exists()
+    assert u["step"] == "relevance" and u["cached"] is False and u["finish_reason"] == "stop"
+    assert u["latency_s"] >= 0 and u["prompt_tokens"] == 3
+    _, again = j.ask("relevance", x="a")
+    assert again["cached"] is True and again["latency_s"] == u["latency_s"]
+    j.rep = 1
+    _, rep1 = j.ask("relevance", x="a")
+    assert rep1["cached"] is False and len(list(tmp_path.iterdir())) == 2
+
+
+def test_generate_all_keeps_contexts_and_order_across_concurrency():
+    import random
+    import time
+    from types import SimpleNamespace
+
+    from rag.gen_eval.generate import generate_all
+
+    class StubPipe:
+        cfg = SimpleNamespace(generator=SimpleNamespace(context_docs=2))
+
+        def retrieve(self, query, emb, k, qid):
+            return [{"n": i, "doc_id": f"{qid}-{i}"} for i in range(1, k + 1)]
+
+        def messages(self, contexts, query):
+            return [{"role": "user", "content": query + str(len(contexts))}]
+
+        def generate(self, messages, stream, echo, langsmith_extra=None):
+            time.sleep(random.random() * 0.02)  # 끝나는 순서를 섞는다
+            return {"answer": messages[0]["content"], "thought": None, "usage": {},
+                    "provider": "p", "first_token_s": 0.1, "total_s": 0.2}
+
+    items = [(f"q{i}", f"질의{i}", None) for i in range(12)]
+    runs = {}
+    for c in (1, 4):
+        out = []
+        generate_all(StubPipe(), items, {"model": "m"}, c, 0, out.append)
+        runs[c] = out
+    assert [r["qid"] for r in runs[4]] == [q for q, _, _ in items]  # 표본 순서대로 쓴다
+    assert [r["contexts"] for r in runs[1]] == [r["contexts"] for r in runs[4]]
+    assert all(r["concurrency"] == 4 and r["retrieve_s"] >= 0 and r["gen_rep"] == 0
+               for r in runs[4])

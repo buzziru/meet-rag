@@ -245,10 +245,35 @@ def main() -> None:
     print(f"| 생성 비용 추정 | ${(tin * price.input + tout * price.output) / 1e6:.4f} |")
     print(f"| judge 입력·출력 토큰 | {usage_sum(judge_usage, 'prompt_tokens'):,} · "
           f"{usage_sum(judge_usage, 'completion_tokens'):,} |")
-    print(f"| 답변 첫 토큰 시간 중앙값·최대 | {np.median(first):.2f}초 · {max(first):.2f}초 |"
+    retrieve = [r["retrieve_s"] for r in rows if r.get("retrieve_s") is not None]
+    print(f"| 답변 첫 토큰 시간 중앙값·p95·최대 | {spread(first)} · {max(first):.2f}초 |"
           if first else "| 답변 첫 토큰 시간 | - |")
-    print(f"| 생성 전체 시간 중앙값 | {np.median(total):.2f}초 |")
+    print(f"| 생성 전체 시간 중앙값·p95 | {spread(total)} |")
+    print(f"| 검색 시간 중앙값·p95 | {spread(retrieve)} |")
+    print(f"| 생성 동시 수 | {dict(Counter(r.get('concurrency') for r in rows))} |")
     print(f"| 제공자 | {', '.join(f'{k} {v}' for k, v in providers.items())} |")
+    print_judge_calls(judge_usage)
+
+
+def spread(xs: list[float]) -> str:
+    return f"{np.median(xs):.2f}초 · {np.percentile(xs, 95):.2f}초" if xs else "-"
+
+
+def print_judge_calls(usages: list[dict]) -> None:
+    """judge 단계별 호출 수, 새로 부른 호출의 지연·토큰, 끝나지 않은 응답 수(S24). 지연은 저장
+    응답을 쓴 호출을 빼고 센다. S24 전 기록에는 단계 이름이 없어 표를 내지 않는다."""
+    if not any(u and "step" in u for u in usages):
+        return
+    print("\n| judge 단계 | 호출 | 새로 부름 | 지연 중앙값·p95 | 새 호출 입력·출력 토큰 "
+          "| 끝나지 않음 |\n| --- | ---: | ---: | ---: | ---: | ---: |")
+    for step in dict.fromkeys(u["step"] for u in usages if u and "step" in u):
+        us = [u for u in usages if u and u.get("step") == step]
+        new = [u for u in us if not u["cached"]]
+        lat = [u["latency_s"] for u in new if u.get("latency_s") is not None]
+        unfinished = sum(1 for u in new if u.get("finish_reason") != "stop")
+        print(f"| {step} | {len(us)} | {len(new)} | {spread(lat)} | "
+              f"{usage_sum(new, 'prompt_tokens'):,} · {usage_sum(new, 'completion_tokens'):,} | "
+              f"{unfinished} |")
 
 
 if __name__ == "__main__":
