@@ -17,6 +17,7 @@ model: sonnet
 - 재현성 기준(같은 명령 두 번)은 실제로 두 번 실행해 산출물이나 점수를 비교한다.
 - 이 저장소에는 `uv run pytest -q`, `uv run ruff check .`이 있다. 모든 SLICE에서 함께 돌린다.
 - 한글 출력이 깨지면 `PYTHONUTF8=1`을 붙여 다시 실행한다.
+- 시간은 셸 `time` 키워드나 Python(`time.perf_counter`)으로 잰다. Git Bash에는 `/usr/bin/time`·`bc`가 없어 명령이 조용히 실패한다. 결과 파일을 기다리는 `until … sleep` 같은 루프를 두지 않는다. 끝나지 않은 루프는 검증이 끝난 뒤에도 백그라운드 작업으로 남는다(S20).
 
 ## 실행하지 않는 것
 

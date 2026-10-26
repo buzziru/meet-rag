@@ -10,7 +10,10 @@ nbclient는 실행마다 커널을 새로 띄워, 한 셀이 실패하면 처음
   ... stop
 
 - 커널 작업 디렉터리는 notebooks/다(노트북 규약 ROOT = Path.cwd().parent)
-- run은 셀마다 출력을 노트북 파일에 쓰고, 오류가 난 셀에서 멈추며 그 셀 번호를 알려 준다
+- run은 먼저 `ruff check --fix`·`ruff format`을 노트북에 적용하고 남은 지적을 출력한다(PR 전
+  ruff 오류를 따로 고치지 않게)
+- run은 셀마다 출력을 노트북 파일에 LF로 쓰고, 오류가 난 셀에서 멈추며 그 셀 번호와 traceback
+  끝 TB_LINES줄을 알려 준다(전체 traceback은 노트북 출력에 남는다)
 - 끝나면 stop으로 커널을 내린다
 """
 
@@ -28,6 +31,7 @@ from jupyter_client import BlockingKernelClient
 ROOT = Path(__file__).resolve().parents[4]
 CONN = ROOT / "_workspace" / "nb_kernel.json"
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
+TB_LINES = 15
 
 
 def client() -> BlockingKernelClient:
@@ -89,7 +93,25 @@ def execute(kc: BlockingKernelClient, code: str) -> tuple[list[dict], int | None
     return outputs, reply.get("execution_count"), reply["status"] == "error"
 
 
+def lint(path: Path) -> None:
+    for args in (["check", "--fix", "--quiet"], ["format", "--quiet"]):
+        out = subprocess.run([sys.executable, "-m", "ruff", *args, str(path)], cwd=ROOT,
+                             capture_output=True, text=True, encoding="utf-8")
+        if out.returncode:
+            print(out.stdout + out.stderr)
+
+
+def error_tail(outputs: list[dict]) -> str:
+    """오류 출력의 traceback 끝 TB_LINES줄(ANSI 제거). 오류 출력이 없으면 그렇다고 적는다."""
+    err = next((o for o in outputs if o["output_type"] == "error"), None)
+    if err is None:
+        return "오류 출력이 없다(커널이 응답만 error로 보냄)"
+    lines = ANSI.sub("", "\n".join(err["traceback"])).splitlines()
+    return "\n".join(lines[-TB_LINES:])
+
+
 def run(path: Path, first: int, last: int | None) -> None:
+    lint(path)
     nb = json.loads(path.read_text(encoding="utf-8"))
     cells = nb["cells"]
     last = len(cells) - 1 if last is None else last
@@ -102,10 +124,10 @@ def run(path: Path, first: int, last: int | None) -> None:
             src = cell["source"]
             outputs, count, failed = execute(kc, "".join(src) if isinstance(src, list) else src)
             cell["outputs"], cell["execution_count"] = outputs, count
-            path.write_text(json.dumps(nb, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+            path.write_text(json.dumps(nb, ensure_ascii=False, indent=1) + "\n",
+                            encoding="utf-8", newline="\n")
             if failed:
-                err = next(o for o in outputs if o["output_type"] == "error")
-                print(ANSI.sub("", "\n".join(err["traceback"]))[-2000:])
+                print(error_tail(outputs))
                 sys.exit(f"셀 {i}에서 오류. 고친 뒤 run {path} --from {i}")
             print(f"[{i}] ok")
     finally:

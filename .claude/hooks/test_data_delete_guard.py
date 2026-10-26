@@ -36,6 +36,9 @@ def run(command, root):
     "Remove-Item -Recurse -Force {r}/wt2",
     "cmd /c rmdir /s /q {r}/wt2",
     "rm -rf {r}/wt2/data",  # 링크 자체에 재귀 삭제
+    "git -C {r} worktree remove --force wt2",  # -C 기준 상대 경로
+    "(Get-Item {r}/wt2).Delete($true)",
+    "(Get-Item -LiteralPath {r}/wt2/data).Delete($true)",
 ])
 def test_recursive_delete_through_link_is_denied(repo, command):
     out = run(command.format(r=repo.as_posix()), repo)
