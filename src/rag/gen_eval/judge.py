@@ -124,9 +124,12 @@ class HttpCounts:
         with self.lock:
             self.status[response.status_code] = self.status.get(response.status_code, 0) + 1
 
-    def summary(self) -> str:
+    def summary(self, calls: int) -> str:
+        """calls는 성공한 API 호출 수. 응답 없음은 타임아웃·연결 오류처럼 상태 코드가 없는 요청."""
         codes = ", ".join(f"{k} {v}" for k, v in sorted(self.status.items())) or "-"
-        return f"HTTP 요청 {self.requests}회(응답 상태 {codes})"
+        no_reply = self.requests - sum(self.status.values())
+        return (f"HTTP 요청 {self.requests}회(응답 상태 {codes}, 응답 없음 {no_reply}), "
+                f"성공 호출 밖 요청(재시도·실패) {self.requests - calls}회")
 
 
 class Judge:
@@ -367,9 +370,12 @@ def judge_cases(cfg) -> None:
     rec = judge_recipe(cfg, [])  # 합성 답변이라 생성 기록이 없다
     rec["item_cases_sha256"] = hashlib.sha256(src.read_bytes()).hexdigest()
     judge = Judge(cfg, session=f"meet-rag-judge-{sha(stable(rec))[:16]}")
-    with ThreadPoolExecutor(cfg.judge.concurrency) as ex:
-        rows = list(ex.map(lambda c: {"case": c["case"], **item_eval(
-            judge, c["query"], c["answer"], c["contexts"])}, cases))
+    try:
+        with ThreadPoolExecutor(cfg.judge.concurrency) as ex:
+            rows = list(ex.map(lambda c: {"case": c["case"], **item_eval(
+                judge, c["query"], c["answer"], c["contexts"])}, cases))
+    finally:  # 재시도를 다 쓰고 멈춘 실행에서도 오류 수를 남긴다
+        print(judge.http.summary(judge.calls))
     get_cached_client().flush()
     text = "".join(json.dumps({**r, "judge_recipe": rec}, ensure_ascii=False) + "\n" for r in rows)
     out.write_text(text, encoding="utf-8", newline="\n")
@@ -399,14 +405,16 @@ def main() -> None:
         return judge_record(judge, gens[qid], refs[qid], cfg, committees,
                             langsmith_extra={"metadata": {"qid": qid, **rec}})
 
-    with ThreadPoolExecutor(cfg.judge.concurrency) as ex:
-        rows = list(ex.map(one, qids))
+    try:
+        with ThreadPoolExecutor(cfg.judge.concurrency) as ex:
+            rows = list(ex.map(one, qids))
+    finally:  # 재시도를 다 쓰고 멈춘 실행에서도 오류 수를 남긴다
+        print(judge.http.summary(judge.calls))
     get_cached_client().flush()
     text = "".join(json.dumps({**r, "judge_recipe": rec}, ensure_ascii=False) + "\n" for r in rows)
     state = write_guarded(ROOT / cfg.paths.gen_judge, text, cfg.search.overwrite)
     print(f"{len(rows)}개 채점, API 호출 {judge.calls}회, 저장된 응답 {judge.hits}회 "
           f"-> {cfg.paths.gen_judge} ({state})")
-    print(f"{judge.http.summary()}, 재시도 {judge.http.requests - judge.calls}회")
 
 
 if __name__ == "__main__":
