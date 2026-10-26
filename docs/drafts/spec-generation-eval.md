@@ -7,7 +7,7 @@ SPEC에 더할 생성 단계 평가의 초안이다(D-38). 초안은 SPEC 밖에
 - 입력: 평가 질의 1건과 검색 기준 설정(D-36)이 고른 근거 문서 5개(D-11 `generator.context_docs`)
 - 출력: 근거 번호 `[n]`을 붙인 한국어 답변, 또는 근거에서 답을 찾지 못했다는 거부 답변
 - 생성 조건: OpenRouter `google/gemma-4-31b-it`, 제공자 CoreWeave 고정, 사고 과정 끔(D-37). 실험 간 비교는 `temperature` 0과 고정 프롬프트(`configs/prompt/`의 버전)로 한다
-- 평가 질의: dev-full(`summary_q` dev 분할 전체)에서 seed 순서의 앞 n개를 고정해 쓴다. n은 기준 설정의 변동 폭으로 정한다(D-44). multi-doc 질의는 동결 세트에서 일부를 뽑아 아래 보조 관찰로 따로 본다. 블라인드 확인 표본과 judge 지시 개발에 쓴 질의(S14 표본 20질의, S14c 확인 사례의 질의)는 판정용 질의에서 뺀다(아래 judge 검증, D-47). 생성 점수를 해석할 때 같은 세트의 검색 지표를 함께 보고한다(D-44)
+- 평가 질의: dev-full(`summary_q` dev 분할 전체)에서 seed 순서의 앞 n개를 고정해 쓴다. n은 기준 설정의 변동 폭으로 정한다(D-44). n = 330(D-50: 생성·judge를 모두 다시 돌린 같은 설정 두 실행의 평균 차이 95% 구간 반폭이 충실성 약 0.03). multi-doc 질의는 동결 세트에서 일부를 뽑아 아래 보조 관찰로 따로 본다. 블라인드 확인 표본과 judge 지시 개발에 쓴 질의(S14 표본 20질의, S14c 확인 사례의 질의)는 판정용 질의에서 뺀다(아래 judge 검증, D-47). 생성 점수를 해석할 때 같은 세트의 검색 지표를 함께 보고한다(D-44)
 - test: 검색 단계와 같이 생성 단계 마지막에 사용자 지시로 1회만 쓴다(D-38). 그 전에는 test 질의를 읽거나 보내지 않는다. 지금 SPEC은 test를 검색 단계 종료 1회로만 허용하므로, 이 규칙은 SPEC에 옮긴 뒤에 효력이 있다. CLAUDE.md 금지 절은 이 조건을 붙여 적었다. SPEC에 옮길 때 CLAUDE.md 외부 전송 줄과 코드 안내문(`src/rag/search.py`의 test 질의 docstring, `src/rag/eval/metrics.py`의 `--allow-test` 오류 문구, `configs/config.yaml`의 `search.queries`·`allow_test` 주석. 모두 "검색 단계 종료 시 1회"로 적혀 있다)을 함께 고친다(이슈 #120). protocol-guard P1·P6과 pr-briefer R6의 단계별 1회 문구는 하네스에서 먼저 고쳤고(ADR-0051), 옮길 때는 거기 남은 "SPEC 개정 전/뒤" 조건만 정리한다
 
 ## 기준

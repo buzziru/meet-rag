@@ -10,7 +10,8 @@
   gen_eval.item_cases를 주면 생성 기록 대신 판정 확인 사례를 이 평가로만 채점한다
 judge 응답은 요청 본문 해시로 paths.gen_judge_cache에 저장해 다시 실행할 때 쓴다
 (같은 입력이면 API를 부르지 않는다). 명세는 docs/slices/14-gen-eval.md.
-인자는 Hydra override(예: +exp=exp017 gen_eval.n=20).
+인자는 Hydra override(기본은 판정용 세트 dev-full 330질의, D-50. 예: +exp=exp017 judge.rep=1,
+S14 표본은 gen_eval.queries=dev-small gen_eval.n=20).
 """
 
 import hashlib
@@ -18,6 +19,7 @@ import json
 import os
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from langsmith import traceable
@@ -98,7 +100,7 @@ def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
             "refusal": cfg.prompt.refusal, "filler_phrases": list(g.filler_phrases),
             "check_patterns": {"date": DATE.pattern, "doc_date": DOC_DATE.pattern},
             "chunk_key_min": g.chunk_key_min, "item_eval": g.item_eval,
-            "git_commit": git_state()[0]}
+            "rep": j.rep, "git_commit": git_state()[0]}
     if gen_recipes:  # 판정 확인 사례(합성 답변)에는 생성 기록이 없다(S14c)
         rec |= {"gen_commits": sorted({r["git_commit"] for r in gen_recipes}),
                 "gen_recipe_sha256": sha(stable(gen_recipes[0]))}
@@ -120,11 +122,17 @@ class Judge:
         self.step = OmegaConf.to_container(j.step_params) if j.get("step_params") else {}
         self.cache = ROOT / cfg.paths.gen_judge_cache
         self.cache.mkdir(parents=True, exist_ok=True)
+        self.rep = j.rep
         self.lock = threading.Lock()
         self.calls = self.hits = 0
 
-    def ask(self, step: str, **values: str) -> tuple[dict | None, dict | None]:
-        """(파싱한 JSON 또는 None, usage). step은 지시 파일의 항목 이름."""
+    def ask(self, step: str, **values: str) -> tuple[dict | None, dict]:
+        """(파싱한 JSON 또는 None, usage). step은 지시 파일의 항목 이름.
+
+        usage에는 토큰과 함께 단계 이름, 지연(latency_s), 저장 응답 사용 여부(cached), 끝난 이유
+        (finish_reason)를 남긴다(S24). 저장 응답의 지연·끝난 이유는 저장할 때의 값이고, S24 전에
+        저장한 응답에는 없다. 반복 번호(judge.rep)가 0보다 크면 요청 본문 해시(캐시 키)에 넣어 같은
+        요청을 다시 묻는다. 0이면 키가 반복 도입 전과 같다(D-49)."""
         p = self.prompt[step]
         messages = [{"role": "system", "content": p.system},
                     {"role": "user", "content": render(p.user, **values)}]
@@ -132,22 +140,30 @@ class Judge:
         extra = over.pop("extra_body", self.extra)
         params = {**self.params, **over}
         body = {"model": self.j.model, "messages": messages, **params, "extra": extra}
+        if self.rep:
+            body["rep"] = self.rep
         path = self.cache / f"{sha(body)}.json"
-        if path.exists():
+        cached = path.exists()
+        if cached:
             saved = json.loads(path.read_text(encoding="utf-8"))
             with self.lock:
                 self.hits += 1
         else:
+            t0 = time.perf_counter()
             r = self.client.chat.completions.create(
                 model=self.j.model, messages=messages, extra_body=extra, **params)
             saved = {"content": r.choices[0].message.content,
-                     "usage": r.usage.model_dump() if r.usage else None}
+                     "usage": r.usage.model_dump() if r.usage else None,
+                     "latency_s": time.perf_counter() - t0,
+                     "finish_reason": r.choices[0].finish_reason}
             # 빈 응답과 끝나지 않은 응답(잘림 등)은 저장하지 않아 다시 실행하면 다시 묻는다(D-42)
-            if saved["content"] and r.choices[0].finish_reason == "stop":
+            if saved["content"] and saved["finish_reason"] == "stop":
                 path.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
             with self.lock:
                 self.calls += 1
-        return parse_json(saved["content"]), saved["usage"]
+        usage = {**(saved["usage"] or {}), "step": step, "cached": cached,
+                 "latency_s": saved.get("latency_s"), "finish_reason": saved.get("finish_reason")}
+        return parse_json(saved["content"]), usage
 
 
 def same_statements(rows, statements: list[str]) -> bool:
@@ -263,25 +279,45 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
     kind, refused, rest = refusal_split(answer, cfg.prompt.refusal, list(g.filler_phrases))
     out = {"qid": gen["qid"], "refusal": kind, "refused_sentences": refused, "gold_n": gold_n,
            "answer_in_chunk": None, "usage": gen["usage"], "provider": gen["provider"],
-           "first_token_s": gen["first_token_s"], "total_s": gen["total_s"]}
-    ks = key_statements(judge, gen["query"], ref["answer_comment"]) if gold_n else None
-    if ks is not None:
-        out["key_statements"] = ks
-        if ks["keys"]:
+           "first_token_s": gen["first_token_s"], "total_s": gen["total_s"],
+           # S24 전 생성 기록에는 없다
+           "retrieve_s": gen.get("retrieve_s"), "concurrency": gen.get("concurrency")}
+    full = kind == "full"  # 전체 거부는 거부 집계로만 본다(초안 "거부 답변의 처리")
+
+    def key_chain():
+        ks = key_statements(judge, gen["query"], ref["answer_comment"]) if gold_n else None
+        chunk = None
+        if ks and ks["keys"]:
             chunk = key_presence(judge, "chunk_checks", ks["keys"],
                                  excerpt=contexts[gold_n - 1]["text"])
+        inc = None if full else inclusion(judge, answer, ks)
+        return ks, chunk, inc
+
+    # 서로 입력이 이어지지 않는 네 사슬(포함도·근거 청크, 항목 평가, 충실성, 관련성)을 동시에
+    # 부른다. 요청 본문은 차례로 부를 때와 같아 캐시 키와 판정은 바뀌지 않는다(S24 사용자 지시)
+    with ThreadPoolExecutor(4) as ex:
+        key_f = ex.submit(key_chain)
+        # 항목 평가는 거부 여부와 관계없이 답변 전체로 본다(S14c)
+        item_f = (ex.submit(item_eval, judge, gen["query"], answer, contexts)
+                  if g.item_eval else None)
+        faith_f = None if full else ex.submit(faithfulness, judge, gen["query"], rest, contexts)
+        rel_f = None if full else ex.submit(relevance, judge, gen["query"], answer)
+    ks, chunk, inc = key_f.result()
+    if ks is not None:
+        out["key_statements"] = ks
+        if chunk is not None:
             out["chunk_keys"] = chunk
             if chunk["score"] is not None:
                 out["answer_in_chunk"] = chunk["score"] >= g.chunk_key_min
-    if g.item_eval:  # 거부 여부와 관계없이 답변 전체로 본다(S14c)
-        out["item_eval"] = item_eval(judge, gen["query"], answer, contexts)
-    if kind == "full":  # 전체 거부는 거부 집계로만 본다(초안 "거부 답변의 처리")
+    if item_f is not None:
+        out["item_eval"] = item_f.result()
+    if full:
         return out
     out["citations"] = citation_check(rest, len(contexts), list(g.filler_phrases))
     out["metadata"] = metadata_mismatches(rest, contexts, committees)
-    out["faithfulness"] = faithfulness(judge, gen["query"], rest, contexts)
-    out["relevance"] = relevance(judge, gen["query"], answer)
-    out["inclusion"] = inclusion(judge, answer, ks)
+    out["faithfulness"] = faith_f.result()
+    out["relevance"] = rel_f.result()
+    out["inclusion"] = inc
     return out
 
 

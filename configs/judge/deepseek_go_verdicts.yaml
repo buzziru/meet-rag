@@ -1,0 +1,14 @@
+# deepseek_go_nothink에서 verdicts 단계만 사고 과정을 낮은 강도로 켠 judge(S24, 사용자 제안 2026-10-26).
+# deepseek_go_mixed와 비교해 key_statements·items의 사고 과정을 끈다. 요청 본문이 단계마다 mixed(verdicts)나
+# nothink(나머지)와 같아 저장된 응답으로 비교할 수 있다
+defaults:
+  - deepseek_go_nothink
+  - _self_
+
+name: deepseek_go_verdicts
+step_params:
+  verdicts:
+    reasoning_effort: low
+    extra_body:
+      thinking:
+        type: enabled

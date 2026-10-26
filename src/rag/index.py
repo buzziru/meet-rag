@@ -31,6 +31,10 @@ if os.environ.get("HF_HOME") and not Path(os.environ["HF_HOME"]).is_absolute():
     os.environ["HF_HOME"] = str(ROOT / os.environ["HF_HOME"])
 
 
+# 반복 실행 번호를 경로에 붙인다. 0이면 빈 문자열이라 반복 0의 경로는 반복 도입 전과 같다(S24)
+OmegaConf.register_new_resolver("rep", lambda n: f"-r{n}" if int(n) else "", replace=True)
+
+
 def load_cfg(overrides=()):
     with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
         return compose(config_name="config", overrides=list(overrides))
