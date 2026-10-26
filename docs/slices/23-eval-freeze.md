@@ -15,7 +15,8 @@
 | judge 모델·경로 | `deepseek-v4.1-flash`, opencode Go(`https://opencode.ai/inference/go/openai/v1`). API 모델이라 가중치 버전을 고정할 수 없어 이름과 제공자를 남긴다(D-46) |
 | 지시 | `configs/judge/prompt/j_v8.yaml`, 해시(`judge_recipe`의 `prompt_sha256`) `fc8b5603…`(전체 값은 구현 때 기록) |
 | 단계별 사고 과정 | `deepseek_go_mixed`: 기본 끔, `verdicts`·`key_statements`·`items`만 low. 실행 설정이라 다음 항목에서 다시 정한다 |
-| temperature, `max_tokens` | 0.0, 16384 |
+| temperature | 0.0 |
+| `max_tokens` | 16384. 사고 과정을 high 이상으로 켰을 때 정한 값이라 실행 설정으로 보고, 변동 폭 측정 결과를 보고 바꿀 수 있다(결정 사항 2) |
 | 집계 코드 | `src/rag/gen_eval/report.py`·`checks.py`, S22 병합 커밋 8eb1284 |
 | 판정표(I8) | `src/rag/gen_eval/checks.py`의 `OUTCOMES`·`item_outcome` |
 | 캐시 키 | 요청 본문(model, messages, params, extra_body) sha256. 반복 재채점은 다음 항목에서 반복 번호를 키에 더하되, 반복 0은 지금 키와 같게 둔다 |
@@ -42,6 +43,8 @@
    - (a) 고정하지 않는다: PLAN대로 변동 폭 측정에서 사고 과정 끔·low를 반복해 일관성으로 고른 뒤 고정한다. 그 사이 judge 결과 파일 이름(`judge.name`)이 설정을 구분한다
    - (b) 지금 값으로 고정한다: 변동 폭 측정에서 설정을 비교할 수 없게 된다
    - 추천은 (a)다(PLAN 결정 2026-10-22)
+
+결정: 1 (a), 2 (a)(사용자 결정 2026-10-26). `max_tokens`(16384)도 사고 과정을 high 이상으로 켰을 때 정한 값이라 실행 설정으로 보고, 변동 폭 측정 결과를 보고 바꿀 수 있다(같은 결정).
 
 ## 완료 기준
 
