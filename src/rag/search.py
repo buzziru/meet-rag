@@ -52,7 +52,7 @@ def embed_queries(cfg, texts: list[str]) -> np.ndarray:
 
 
 def check_test(cfg) -> None:
-    """test 질의는 검색 단계 종료 시 1회만 쓴다(SPEC).
+    """test 질의는 단계(검색·생성)마다 종료 시 1회만 쓴다(SPEC).
 
     명시적으로 허용해야 하고 질의 임베딩은 로컬에서만 한다.
     """
@@ -60,7 +60,7 @@ def check_test(cfg) -> None:
         raise SystemExit("search.queries=test는 index.scope=full에서만 쓴다")
     if not cfg.search.allow_test:
         raise SystemExit("search.queries=test는 search.allow_test=true가 있어야 쓴다 "
-                         "(검색 단계 종료 시 1회)")
+                         "(단계마다 종료 시 1회)")
     if cfg.search.mode in ("export-queries", "embed-queries"):
         raise SystemExit("test 질의는 VM 업로드 파일로 내보내지 않는다. "
                          "질의 임베딩은 로컬에서 한다")

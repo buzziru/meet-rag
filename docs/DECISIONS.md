@@ -576,3 +576,10 @@
 - 감수하는 것: judge를 사람과 독립 대조한 기록이 없다(D-51). 동일 가중은 원래 점수 척도에서 충실성 1%p와 관련성 1%p를 같게 보는 가치 판단이고, 관련성은 3단계 값이라 종합 지표의 흔들림을 더 크게 좌우한다. 반폭은 100질의 측정의 √n 어림이다
 - 남은 일: SPEC에 옮기며 함께 고치기로 한 SPEC 밖 안내문(CLAUDE.md 외부 전송 줄, `src/rag/search.py` test docstring, 보호 경로 `src/rag/eval/metrics.py`의 `--allow-test` 오류 문구, `configs/config.yaml` 주석, protocol-guard·pr-briefer의 "SPEC 개정 전/뒤" 조건, 초안 "문제" 절의 test 항목)은 후속 PR에서 고친다. `src/rag/eval/`은 보호 경로라 그 PR에서 사용자 승인을 받는다. 그 PR 전까지 SPEC과 CLAUDE.md 금지 절의 test 문구가 어긋나는데, 더 엄격한 CLAUDE.md를 따르므로(protocol-guard P6) 생성 단계 test 1회는 그 PR 뒤에 지시한다
 - 날짜: 2026-10-27
+
+## D-54 보호 경로 `src/rag/eval/metrics.py`의 test 오류 문구를 단계별 1회로 고친다
+
+- 결정: `load_gold`의 `--allow-test` 오류 문구 "(검색 단계 종료 시 1회)"를 "(단계마다 종료 시 1회)"로 바꾼다. 문자열만 바꾸고 동작(test 층은 `--allow-test`가 있어야 채점)은 그대로다
+- 이유: SPEC 개정(D-53)으로 test는 단계(검색·생성)마다 종료 시 1회가 됐고, D-53 남은 일이 이 문구를 함께 고치기로 했다. CLAUDE.md 금지 절, `src/rag/search.py`, `configs/config.yaml`, protocol-guard도 같은 PR에서 맞춘다
+- 승인: 사용자 승인 2026-10-27(대화, 안내문 정리 목록)
+- 날짜: 2026-10-27

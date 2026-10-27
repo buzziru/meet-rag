@@ -38,7 +38,7 @@ def load_gold(cfg, layer: str, allow_test: bool = False) -> pd.DataFrame:
     if layer not in LAYERS:
         raise ValueError(f"알 수 없는 평가 층: {layer}")
     if layer == "test" and not allow_test:
-        raise SystemExit("test 층은 --allow-test가 있어야 채점한다 (검색 단계 종료 시 1회)")
+        raise SystemExit("test 층은 --allow-test가 있어야 채점한다 (단계마다 종료 시 1회)")
 
     splits = pd.read_csv(ROOT / cfg.paths.splits, dtype=str)
     splits = splits[splits["split"] == ("test" if layer == "test" else "dev")]
