@@ -29,6 +29,7 @@ A2(S4 등 전체 인덱스)와 B3(재임베딩 실험)에서 GPU 임베딩이 �
 
 비밀 값(API 키):
 - VM에는 API 키를 보내지 않는다. API 호출(생성, judge, 재작성)은 로컬에서 하고 VM은 GPU 계산만 한다. `colab_job.py`는 `doppler run` 없이 띄운다. 로컬 `colab` CLI에 환경 변수 전체가 넘어가므로(`colab_job.py`의 `ENV`), 키가 없는 환경에서 띄워야 넘어갈 여지가 없다(사용자 결정 2026-10-27, ADR-0068)
+- `HF_HOME`은 비밀 값이 아니라 `colab_job.py launch`가 HF 기본 캐시 위치(`/root/.cache/huggingface`)로 넘긴다. 없으면 `rag.index.pinned`가 멈춘다. `launch` 밖에서 VM에 `rag.*`를 돌릴 때(`colab console` 복구, `colab exec`)는 명령 앞에 `HF_HOME=/root/.cache/huggingface`를 붙인다
 - 키가 필요한 VM 작업이 생기면 Colab 보안 비밀(`google.colab.userdata`)로 시도한다. CLI로 만든 세션에서 쓸 수 있는지 먼저 웹 자료와 실험으로 확인하고, 실험의 Colab 사용은 승인 지점(3)을 거친다. 실행 코드에 키를 넣어 보내지 않는다. `colab exec` 코드는 로컬 실행 기록(`~/.config/colab-cli/history/`)과 `outputs/notebooks/`의 세션 기록에 남고, `outputs/`는 결과 공개 때 공개된다
 
 ## 오류 처리
