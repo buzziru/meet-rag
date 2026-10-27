@@ -21,19 +21,21 @@ from datetime import datetime
 
 from langsmith.run_trees import get_cached_client
 
-from rag.gen_eval.common import done_qids, eval_qids
+from rag.gen_eval.common import done_qids, eval_qids, load_refs
 from rag.generate import Pipeline, recipe
 from rag.index import ROOT, load_cfg
 from rag.retrieve import read_query_emb
 
 
 def generate_all(pipe, items: list[tuple[str, str, object]], rec: dict, concurrency: int,
-                 gen_rep: int, write) -> None:
+                 gen_rep: int, write, golds: dict[str, str] | None = None,
+                 contexts: str = "retrieved") -> None:
     """items의 (qid, 질의, 질의 임베딩)을 검색은 차례로, 생성은 동시에 처리해 표본 순서대로
     write(record)한다. 기록 형식은 Pipeline.run과 같고 retrieve_s(검색·프롬프트 조립 시간)·
     concurrency·gen_rep를 더한다. 생성이 실패한 질의는 건너뛰고 나머지는 모두 쓴 뒤, 실패가
     있으면 그 qid를 알리고 멈춘다. 검색 오류나 Ctrl+C로 멈출 때도 끝난 생성은 쓴다. 다시
-    실행하면 쓰지 않은 질의만 생성한다."""
+    실행하면 쓰지 않은 질의만 생성한다. contexts가 retrieved가 아니면 golds(qid별 정답 문서)로
+    근거를 바꾸고, 근거가 검색 기준과 같아지는 질의는 생성하지 않는다(S26)."""
     k = pipe.cfg.generator.context_docs
 
     def gen(qid, query, contexts, messages, retrieve_s):
@@ -66,13 +68,21 @@ def generate_all(pipe, items: list[tuple[str, str, object]], rec: dict, concurre
             pending.pop(0)
             write(r)
 
+    variant = {} if contexts == "retrieved" else {"contexts": contexts}
+    same = 0  # 근거가 검색 기준과 같아 생성하지 않은 질의 수
     ex = ThreadPoolExecutor(concurrency)
     try:
         for qid, query, emb in items:
             t0 = time.perf_counter()
-            contexts = pipe.retrieve(query, emb, k, qid)
-            messages = pipe.messages(contexts, query)
-            pending.append((qid, ex.submit(gen, qid, query, contexts, messages,
+            if variant:
+                ctx = pipe.retrieve(query, emb, k, qid, gold=golds[qid], **variant)
+                if ctx is None:
+                    same += 1
+                    continue
+            else:
+                ctx = pipe.retrieve(query, emb, k, qid)
+            messages = pipe.messages(ctx, query)
+            pending.append((qid, ex.submit(gen, qid, query, ctx, messages,
                                            time.perf_counter() - t0)))
             flush(block=False)  # 검색하는 동안 끝난 생성은 바로 써 둔다
         flush()
@@ -84,6 +94,8 @@ def generate_all(pipe, items: list[tuple[str, str, object]], rec: dict, concurre
         raise
     finally:
         ex.shutdown()
+    if variant:
+        print(f"근거가 검색 기준과 같아 생성하지 않은 질의 {same}개(비교에는 검색 기준 결과)")
     if failed:
         raise SystemExit(f"생성 실패 {len(failed)}건(다시 실행하면 이어 쓴다):\n"
                          + "\n".join(failed))
@@ -96,8 +108,12 @@ def main() -> None:
         raise SystemExit(f"gen_eval.concurrency는 1 이상이다: {g.concurrency}")
     qids = eval_qids(cfg)
     path = ROOT / cfg.paths.gen_runs
+    if g.contexts not in ("retrieved", "oracle", "no_gold"):
+        raise SystemExit(f"gen_eval.contexts는 retrieved·oracle·no_gold 중 하나다: {g.contexts}")
     pipe = Pipeline(cfg)
     rec = recipe(cfg, pipe.index_meta, True)
+    if g.contexts != "retrieved":  # 기본값은 넣지 않아 S25 생성 기록의 레시피와 같다
+        rec["contexts"] = g.contexts
     done = done_qids(path, rec)
     todo = [q for q in qids if q not in done]
     print(f"표본 {len(qids)}개 중 남은 {len(todo)}개, 동시 {g.concurrency} -> {cfg.paths.gen_runs}")
@@ -122,8 +138,10 @@ def main() -> None:
             print(f"[{n}/{len(todo)}] {r['qid']} provider={r['provider']} "
                   f"first={r['first_token_s']}")
 
+        golds = ({q: r["doc_id"] for q, r in load_refs(cfg, todo).items()}
+                 if g.contexts != "retrieved" else None)
         generate_all(pipe, [(q, texts[q], emb[pos[q]]) for q in todo], rec, g.concurrency,
-                     g.gen_rep, write)
+                     g.gen_rep, write, golds, g.contexts)
     get_cached_client().flush()
 
 

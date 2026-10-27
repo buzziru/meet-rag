@@ -829,3 +829,51 @@ def test_judge_configs_pass_timeout_and_retries():
     for judge in ("deepseek_go", "deepseek_go_mixed", "deepseek_openrouter"):
         j = load_cfg([f"judge={judge}"]).judge
         assert (j.timeout, j.max_retries) == (120, 1)
+
+
+def test_swap_gold_oracle_and_no_gold():
+    """오라클은 정답이 상위 k개에 없을 때만 k번째를 바꾸고, 거부 세트는 정답을 빼고 다음 문서로
+    채운다. 근거가 바뀌지 않으면 None(S26)."""
+    from rag.generate import swap_gold
+    docs = ["a", "b", "c", "d", "e", "f", "g"]
+    stages = [{"rank": i} for i in range(1, 8)]
+    assert swap_gold(docs, stages, 5, "b", "oracle") is None
+    assert swap_gold(docs, stages, 5, "g", "oracle") == (["a", "b", "c", "d", "g"],
+                                                       [*stages[:4], {"rank": 7}])
+    assert swap_gold(docs, stages, 5, "z", "oracle") == (["a", "b", "c", "d", "z"],
+                                                       [*stages[:4], {}])
+    out_docs, out_stages = swap_gold(docs, stages, 5, "b", "no_gold")
+    assert out_docs[:5] == ["a", "c", "d", "e", "f"] and out_stages[1] == {"rank": 3}
+    assert swap_gold(docs, stages, 5, "g", "no_gold") is None
+    with pytest.raises(SystemExit):
+        swap_gold(docs, stages, 5, "b", "bogus")
+
+
+def test_generate_all_skips_unchanged_contexts():
+    """근거가 검색 기준과 같아지는 질의(retrieve가 None)는 생성하지 않는다(S26)."""
+    from types import SimpleNamespace
+
+    from rag.gen_eval.generate import generate_all
+    seen = []
+
+    class VariantPipe:
+        cfg = SimpleNamespace(generator=SimpleNamespace(context_docs=1))
+
+        def retrieve(self, query, emb, k, qid, gold=None, contexts="retrieved"):
+            seen.append((qid, gold, contexts))
+            return None if qid == "q1" else [{"n": 1, "doc_id": gold}]
+
+        def messages(self, contexts, query):
+            return [{"role": "user", "content": query}]
+
+        def generate(self, messages, stream, echo, langsmith_extra=None):
+            return {"answer": "a", "thought": None, "usage": {}, "provider": "p",
+                    "first_token_s": 0.1, "total_s": 0.2}
+
+    out = []
+    items = [(f"q{i}", f"질의{i}", None) for i in range(3)]
+    golds = {f"q{i}": f"d{i}" for i in range(3)}
+    generate_all(VariantPipe(), items, {"model": "m"}, 2, 0, out.append, golds, "oracle")
+    assert [r["qid"] for r in out] == ["q0", "q2"]
+    assert [r["contexts"][0]["doc_id"] for r in out] == ["d0", "d2"]
+    assert seen[0] == ("q0", "d0", "oracle")

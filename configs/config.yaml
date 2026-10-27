@@ -72,8 +72,8 @@ paths:
   generate_dir: data/runs/generate
   # 생성 평가(S14). 일괄 생성 기록(질의마다 한 줄), judge 결과, judge 응답 저장(요청 본문 해시마다 파일 하나)
   # 반복 번호(gen_eval.gen_rep, judge.rep)는 0이면 붙지 않는다(rep resolver, S24)
-  gen_runs: data/gen_eval/runs/${retriever.run_name}-${prompt.version}-${gen_eval.queries}${rep:${gen_eval.gen_rep}}.jsonl
-  gen_judge: data/gen_eval/judge/${retriever.run_name}-${prompt.version}-${gen_eval.queries}${rep:${gen_eval.gen_rep}}-${judge.name}-${judge.prompt.version}${rep:${judge.rep}}.jsonl
+  gen_runs: data/gen_eval/runs/${retriever.run_name}-${prompt.version}-${gen_eval.queries}${ctx:${gen_eval.contexts}}${rep:${gen_eval.gen_rep}}.jsonl
+  gen_judge: data/gen_eval/judge/${retriever.run_name}-${prompt.version}-${gen_eval.queries}${ctx:${gen_eval.contexts}}${rep:${gen_eval.gen_rep}}-${judge.name}-${judge.prompt.version}${rep:${judge.rep}}.jsonl
   gen_judge_cache: data/gen_eval/judge_cache
   gen_dev_queries: configs/gen_eval/dev_queries.yaml  # judge 지시 개발에 쓴 질의. dev-full 표본에서 뺀다(S22)
   # multi-doc 후보 집합과 시작 묶음 (docs/slices/07-bundles.md)
@@ -238,6 +238,10 @@ gen_eval:
   seed: ${seed}
   # 생성 반복 번호(S24). 같은 질의를 같은 설정으로 다시 생성해 생성 잡음을 잰다. 0이면 반복 도입 전과 같은 경로다
   gen_rep: 0
+  # 생성 근거 조건(S26 오라클 진단). retrieved는 검색 기준 근거, oracle은 정답 문서가 상위 5개에 없으면
+  # 5번째를 정답 문서로 바꾸고, no_gold는 정답 문서를 빼고 다음 문서로 채운다. 근거가 검색 기준과 같아지는
+  # 질의는 생성하지 않는다. retrieved가 아니면 생성·judge 경로에 -oracle·-no_gold가 붙는다
+  contexts: retrieved
   # 생성 호출 동시 수(S24 결정 사항 1·2). 검색은 차례로 하고 생성 API 호출만 이 수만큼 동시에 보낸다
   concurrency: 4
   # 포함도용 핵심 진술 중 정답 문서의 근거 청크에 든 비율(judge chunk_checks)이 이 값 이상이면 청크에 답이
