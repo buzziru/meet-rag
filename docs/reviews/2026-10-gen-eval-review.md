@@ -92,4 +92,52 @@
 
 ## 결과
 
-(리뷰 뒤 채운다)
+2026-10-27, `docs/gen-eval-review`(main 9ff6f27 기준). 영역 G1\~G3을 서브에이전트 3개가 읽기 전용으로 리뷰했다(합계 약 59만 토큰, 영역당 약 7분). 영역 사이 중복은 없었다. 심각도 높음·중간은 메인이 `file:line`을 직접 읽어 확인했다. 새 API 호출은 없고, 수치 재현은 기존 judge 결과와 `data/` 밖 임시 파일로 했다.
+
+### 요약
+
+- judge가 정상 형식으로 답하는 한 점수를 틀리게 내는 버그는 없다. 충실성·관련성·포함도·근거 청크 판정·항목 판정표·`item_counts`가 기준 문서·SPEC·D-41·D-47과 맞고, `report.criterion`과 `compare.per_query`는 같은 질의를 같은 이유로 뺀다. 베이스라인 n(충실성 314, 관련성 321, 종합 314, 포함도 258, 과잉 거부 307)이 SPEC 수치와 같다
+- 판정이 조용히 틀리는 경로가 하나 있다(G2-1). 짝지은 질의가 0개인 기준은 구간이 NaN이 되고 `gen_verdict`가 이를 통과로 본다
+- 중간은 형식 오류·잘못된 입력에서 엉뚱하게 멈추거나 다른 파일을 집계하는 경로(G1-1, G2-2, G2-3), 생성 클라이언트의 timeout·재시도 미설정(G3-1), 동결 테스트가 막지 못하는 judge 입력 렌더링(G1-3)이다
+- G1-2(filler 부분 문자열로 전체 거부 오분류)는 S25 베이스라인 전체 거부 9질의 중 거부 문장 밖 문장이 있는 질의가 0개라 낮음으로 내렸다
+
+### 높음
+
+| ID | 기준 | 위치 | 문제 | 영향 | 제안 | 확인 |
+| --- | --- | --- | --- | --- | --- | --- |
+| G2-1 | 1c, 2b | `src/rag/gen_eval/compare.py:53-63`, `:113-118`, `src/rag/eval/bootstrap.py:8-17` | 짝지은 질의가 0개인 기준은 `paired_bootstrap`이 (nan, nan, nan)을 내고, `gen_verdict`의 실패 조건(`lo <= 0`, `hi > max`, `lo < floor`)이 NaN 비교에서 모두 거짓이라 통과로 본다 | `item_eval=false`로 채점한 두 파일을 비교하면 과잉 거부 n 0, 구간 NaN인데 판정 `채택`, 걸린 조건 없음(에이전트 재현). `--out` JSON에 비표준 `NaN` | 기준별 짝지은 n이 0이면 원인을 적고 멈춘다. compare.py와 테스트 | 메인 확인(코드), 에이전트 재현 |
+
+### 중간
+
+| ID | 기준 | 위치 | 문제 | 영향 | 제안 | 확인 |
+| --- | --- | --- | --- | --- | --- | --- |
+| G1-1 | 1d, 4b | `src/rag/gen_eval/judge.py:231-232` | 관련성 `label`을 dict 소속으로 검사해 list·dict 값이면 `TypeError`가 난다. 다른 단계는 형식 오류로 센다(P6) | `{"label": ["답함"]}` → 실행 전체가 멈추고, 응답이 캐시에 남아 다시 실행해도 같은 자리에서 멈춘다. 점수는 틀리지 않는다 | `isinstance(label, str)` 검사와 테스트. 동결 대상 아님 | 메인 확인 |
+| G1-3 | 3b, 3c, 5b | `src/rag/gen_eval/judge.py:44`, `:72-74`, `:166-175`, `tests/test_gen_eval_freeze.py` | 동결 테스트는 지시 해시와 판정표만 대조한다. judge 입력 렌더링(`format_contexts`, `json.dumps`)과 관련성 점수표(1·0.5·0)는 테스트로도 레시피 키로도 막히지 않는다 | 렌더링을 바꾸면 테스트가 통과하고 judge 입력이 달라지는데, compare의 `JUDGE_KEYS`가 같아 옛 렌더링 기준과 새 렌더링 후보를 멈추지 않고 비교한다. 지금 버그가 아니라 앞으로의 위험 | 고정 합성 입력의 단계별 요청 본문 sha와 `RELEVANCE` 기대값을 동결 테스트에 더한다. D-49 기록과 함께 | 메인 확인(테스트 범위) |
+| G2-2 | 1c, 1d | `src/rag/gen_eval/report.py:113-114`, `:125-126`, `src/rag/gen_eval/judge.py:288` | `item_handling` 형식 오류 기록은 `{"error", "items"}`(counts 없음)인데 `require_s22`가 이를 S22 이전 기록으로 보고 멈춘다. 지나더라도 `item_summary`가 `outcome`에서 `KeyError` | 형식 오류 한 질의로 report와 compare가 "S22 이전 judge 기록이다"로 멈춘다(합성 입력 재현). 지금 j_v8 파일에는 이 오류가 없다 | S22 판별을 다른 표지로, `error`가 있는 평가는 표에서 뺀다. report.py와 테스트 | 메인 확인 |
+| G2-3 | 2c | `src/rag/gen_eval/report.py:210-216`, `configs/config.yaml:77` | judge 경로에 n이 없고 report가 qid 집합을 `eval_qids`와 대조하지 않는다 | CLAUDE.md의 `rag.gen_eval.report +exp=exp017`이 S24 100질의 파일을 집계한다(머리줄에 질의 수는 나옴) | 시작할 때 qid 집합이 다르면 경고, 또는 명령에 `-n330` 경로를 적는다 | 메인 확인 |
+| G3-1 | 4b, 4c | `src/rag/generate.py:120-121`, `:194-204`, `configs/generator/openrouter.yaml` | 생성 `OpenAI()`에 `timeout`·`max_retries`가 없어 SDK 기본값(read 600초, 재시도 2회)을 쓴다. #160은 judge만 고쳤다 | 앞 질의 스트림이 멈추면 뒤에 끝난 생성을 쓰지 못한 채 최대 600초×재시도 기다리고, 그때 강제 종료하면 비용을 낸 생성이 사라진다. 재시도 대기가 `first_token_s`·`total_s`에 기록 없이 섞인다 | generator config에 timeout·재시도를 두고 넘긴다. 필요하면 재시도 수 출력 | 메인 확인(코드), 멈춘 사례는 관찰하지 않음 |
+
+### 낮음
+
+| ID | 기준 | 위치 | 문제 |
+| --- | --- | --- | --- |
+| G1-2 | 1b, 1c | `src/rag/gen_eval/checks.py:24`, `:60` | filler를 부분 문자열로 찾아 내용 문장도 filler로 볼 수 있다. 거부 문장과 함께면 전체 거부로 분류. S25 전체 거부 9질의 중 해당 0개(메인 확인). 고치면 그 질의는 재채점 |
+| G1-4 | 3c, 5b | `tests/test_gen_eval_freeze.py:3-4` | docstring이 D-50의 실행 설정 동결을 반영하지 않는다. 바꾸면 compare에서 멈춰 섞이지는 않는다 |
+| G1-5 | 4a, 4b | `src/rag/gen_eval/judge.py:176-178`, `:191` | 캐시를 원자적으로 쓰지 않아 동시 쓰기·강제 종료 때 잘린 파일이 남을 수 있다(추정) |
+| G1-6 | 4c | `src/rag/gen_eval/judge.py:328-334` | 질의 안 사슬 동시 호출이 contextvars를 넘기지 않아 추적이 부모에 붙지 않는다(대량 실행은 추적 끔) |
+| G2-4 | 1c, 1d | `src/rag/gen_eval/compare.py:117-125` | 결과에 실행별 제외 이유와 형식 오류 수가 없다(K8·P6) |
+| G2-5 | 3 | `src/rag/gen_eval/compare.py:120-125` | 결과에 `gold_sha256`과 판정 기준값·bootstrap 설정이 없다 |
+| G2-6 | 2a, 6 | `src/rag/gen_eval/report.py:7-8`, `:119-136` | 머리 설명이 옛 문구이고, report의 과잉 거부(합친 비율 0.020)가 D-53 정의(질의 평균 0.024)와 다르다 |
+| G2-7 | 5a | `tests/test_gen_eval.py:892-946` | compare `main`의 짝지은 제외, NaN 구간, 형식 오류 경로에 테스트가 없다 |
+| G3-2 | 4b | `src/rag/gen_eval/generate.py:63`, `:88`, `:93` | 마지막 `flush()`가 timeout 없는 대기라 Windows에서 Ctrl+C가 늦게 듣는다(재현) |
+| G3-3 | 4c, 3d | `src/rag/generate.py:202-223` | 생성 `finish_reason`을 기록하지 않아 잘린 답변이 성공으로 남는다. 지금 기록은 `completion_tokens` 최대 451로 영향 없음 |
+| G3-4 | 3a | `src/rag/generate.py:119`, `src/rag/index.py:114-118` | 생성 레시피에 코퍼스 지문이 없다(추정, 위험 작음) |
+| G3-5 | 5a | `src/rag/gen_eval/generate.py:111-118` | 기본값에서 `contexts`를 레시피에 넣지 않는 규칙과 `KeyboardInterrupt` 경로에 테스트가 없다 |
+| G3-6 | 6 | `src/rag/gen_eval/generate.py:111-112`, `src/rag/generate.py:87-90` | `contexts` 검사 중복, 실행될 수 없는 검사, 가려진 인자 이름 |
+| G3-7 | 4c | `src/rag/gen_eval/generate.py:42-48` | 추적을 끈 실행에도 `langsmith_run_id`가 남고, `retrieve` 추적에 qid 메타데이터가 없다 |
+
+지난 리뷰 C-14(LangSmith `flush`가 `finally` 밖)는 그대로 남아 있다(G3 관찰).
+
+### 동결 대상이 걸린 항목
+
+G1-3은 동결 테스트를 넓히는 것이라 점수를 바꾸지 않는다. G1-2는 `checks.py` 판별을 바꾸면 해당 질의를 다시 채점해야 하지만 S25 베이스라인에는 해당 질의가 없다. 나머지는 judge 지시·집계 규칙을 바꾸지 않는다.
