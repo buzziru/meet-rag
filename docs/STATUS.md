@@ -9,7 +9,7 @@
 - 베이스라인(gen-full): 충실성 0.803, 관련성 0.871, 포함도 0.512(보조), 과잉 거부율 2.4%
 - 오라클 진단(S26, #162): 정답 문서가 근거에 없던 질의 11/330, 넣어도 평균 거의 불변. 점수 한계는 생성(또는 평가)과 RAG에 맞지 않게 만들어진 질의에 있음
 - 실행 환경이 Orca로 바뀜. 하네스 맞춤 병합(#163, ADR-0064·0065): worktree는 `.claude/worktrees/<이름>`, 규약 브랜치로 옮겨 작업, 삭제는 `orca worktree rm --worktree path:<경로>`(훅이 링크·`_workspace` 검사, `--force`는 링크를 따라감). 작업자 세션은 `orca orchestration worker-start --worktree new-child --agent claude`
-- 이번 세션 병합: #157~#164(이슈 #156 처리, S26, SPEC 개정, 하네스). 이슈 #156 닫음
+- 이번 세션 병합: #157\~#164(이슈 #156 처리, S26, SPEC 개정, 하네스). 이슈 #156 닫음
 
 ## 실행 중 작업
 - 없음
@@ -25,7 +25,7 @@
 1. [F] 하네스: PR 리뷰 반영 때 본문 "판단할 곳"을 고치는 방식 통일. 질문을 지우지 않고 "(결정: 요지, 커밋)"을 붙이는 방식(사용자 의견, PR #164 방식). 근거와 반영안은 `_workspace/00_main_harness-pending.md` 마지막 항목
 2. [A] SPEC 뒤 안내문 정리: CLAUDE.md 외부 전송 줄, `src/rag/search.py` test docstring, 보호 경로 `src/rag/eval/metrics.py` 오류 문구(사용자 승인 필요), config 주석, protocol-guard·pr-briefer 조건(D-53 남은 일, PLAN)
 3. [A] 생성 설정 비교 SLICE: 기준·후보 judge 결과로 짝지은 제외, 회의 단위 bootstrap, 채택·보류·기각과 두 안전 조건 판정
-4. [F] 하네스 생성 평가 반영(exp-judge 생성 EXP 갈래 등) → 생성 실험 순서 정리(H10·H18~H20·H22~H24) → [B] H10
+4. [F] 하네스 생성 평가 반영(exp-judge 생성 EXP 갈래 등) → 생성 실험 순서 정리(H10·H18\~H20·H22\~H24) → [B] H10
 
 ## 사용자 확인 필요
 - 없음
