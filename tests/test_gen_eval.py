@@ -877,3 +877,70 @@ def test_generate_all_skips_unchanged_contexts():
     assert [r["qid"] for r in out] == ["q0", "q2"]
     assert [r["contexts"][0]["doc_id"] for r in out] == ["d0", "d2"]
     assert seen[0] == ("q0", "d0", "oracle")
+
+
+def _judged(qid, faith=None, rel=None, inc=None, over=0, judged=2, recipe=None, refusal="none"):
+    """compare가 읽는 judge 기록의 최소 형태(S22 형식)."""
+    return {"qid": qid, "refusal": refusal,
+            "faithfulness": None if faith is None else {"score": faith, "verdicts": []},
+            "relevance": None if rel is None else {"score": rel},
+            "inclusion": None if inc is None else {"score": inc},
+            "item_eval": {"items": [], "counts": {"over_refusal": over, "judged": judged}},
+            "judge_recipe": recipe or {"name": "j", "model": "m", "refusal": "r"}}
+
+
+def test_gen_compare_per_query_pairs_missing_values():
+    from rag.gen_eval.compare import per_query
+    df = per_query([_judged("a", 1.0, 0.5, 0.2, over=1, judged=2),
+                    _judged("b", None, None, refusal="full", judged=0)])
+    assert df.loc["a", "composite"] == 0.75 and df.loc["a", "over_refusal"] == 0.5
+    assert df.loc["b"].isna().all()  # 전체 거부, 판정 대상 항목 0
+
+
+def test_gen_verdict_branches():
+    from types import SimpleNamespace
+
+    from rag.gen_eval.compare import gen_verdict
+    spec = SimpleNamespace(min_gain=0.02, over_refusal_max=0.02,
+                           floors={"faithfulness": -0.05, "relevance": -0.035})
+    ok = {"faithfulness": (0.03, 0.01, 0.05), "relevance": (0.03, 0.01, 0.05),
+          "composite": (0.03, 0.01, 0.05), "inclusion": (0, -1, 1),
+          "over_refusal": (0.0, -0.01, 0.01)}
+    assert gen_verdict(ok, spec) == ("채택", [])
+    small = ok | {"composite": (0.01, 0.001, 0.02)}
+    assert gen_verdict(small, spec) == ("보류", ["종합 지표 점 추정 < 0.02"])
+    flat = ok | {"composite": (0.03, -0.01, 0.06)}
+    assert gen_verdict(flat, spec) == ("보류", ["종합 지표 구간 하한 ≤ 0"])
+    split = ok | {"faithfulness": (0.1, 0.06, 0.14), "relevance": (-0.02, -0.04, 0.0)}
+    assert gen_verdict(split, spec) == ("보류", ["답변 관련성 하락(하한 < -0.035)"])
+    faith = ok | {"faithfulness": (-0.02, -0.06, 0.02)}
+    assert gen_verdict(faith, spec) == ("보류", ["충실성 하락(하한 < -0.05)"])
+    over = ok | {"over_refusal": (0.01, 0.0, 0.03)}
+    assert gen_verdict(over, spec) == ("보류", ["과잉 거부 증가(상한 > 0.02)"])
+    # 기각은 안전 조건과 관계없이 기각이고, 걸린 안전 조건만 함께 낸다
+    worse = ok | {"composite": (-0.02, -0.035, -0.005), "relevance": (-0.06, -0.09, -0.03)}
+    assert gen_verdict(worse, spec) == ("기각", ["답변 관련성 하락(하한 < -0.035)"])
+
+
+def test_gen_compare_check_inputs_stops(tmp_path):
+    from rag.gen_eval.compare import check_inputs
+    base, cand = tmp_path / "b.jsonl", tmp_path / "c.jsonl"
+    rows = [_judged("a", 1, 1), _judged("b", 1, 1)]
+    runs = {"base": base, "cand": cand}
+    with pytest.raises(SystemExit, match="같은 파일"):
+        check_inputs({"base": base, "cand": base}, {"base": rows, "cand": rows}, ["a", "b"])
+    with pytest.raises(SystemExit, match="gen-full"):
+        check_inputs(runs, {"base": rows, "cand": rows[:1]}, ["a", "b"])
+    other = [_judged(q, 1, 1, recipe={"name": "j", "model": "m2", "refusal": "r"}) for q in "ab"]
+    with pytest.raises(SystemExit, match="judge 설정이 다르다: model"):
+        check_inputs(runs, {"base": rows, "cand": other}, ["a", "b"])
+    rule = [_judged(q, 1, 1, recipe={"name": "j", "model": "m", "refusal": "r",
+                                     "chunk_key_min": 0.5}) for q in "ab"]
+    with pytest.raises(SystemExit, match="chunk_key_min"):
+        check_inputs(runs, {"base": rows, "cand": rule}, ["a", "b"])
+    # 생성 프롬프트 실험이 바꾸는 값은 멈추지 않고 차이만 낸다(PR #167 리뷰)
+    prompt = [_judged(q, 1, 1, recipe={"name": "j", "model": "m", "refusal": "r2",
+                                       "filler_phrases": ["새 문구"]}) for q in "ab"]
+    assert check_inputs(runs, {"base": rows, "cand": prompt}, ["a", "b"]) == {
+        "refusal": {"base": "r", "cand": "r2"},
+        "filler_phrases": {"base": None, "cand": ["새 문구"]}}

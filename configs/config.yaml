@@ -1,5 +1,6 @@
 defaults:
   - eval: spec_v1
+  - eval@eval_gen: gen_v1  # 생성 설정 비교의 판정 기준값(S27)
   - chunking: fixed
   - retriever: dense
   - generator: openrouter
