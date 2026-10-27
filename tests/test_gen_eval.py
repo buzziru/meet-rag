@@ -98,9 +98,11 @@ def test_unlisted_table_crosses_no_statements(tmp_path):
     assert [k for _, k in unlisted_table(cfg, rows)] == [1, 1, 1]
     # 진술 없음은 judge 형식 오류가 아니라 뺀 이유로 센다
     assert criterion(rows, "faithfulness") == ([1.0], {"no_statements": 2}, 0)
-    with pytest.raises(SystemExit):  # 다른 생성 기록이면 멈춘다
-        other = {**rec, "gen_recipe_sha256": "x"}
-        unlisted_table(cfg, [{**r, "judge_recipe": other} for r in rows])
+    # 다른 생성 기록이거나 없으면 이 표만 내지 않는다(report의 나머지는 judge 결과만으로 낸다)
+    other = {**rec, "gen_recipe_sha256": "x"}
+    assert "레시피 해시 다름" in unlisted_table(cfg, [{**r, "judge_recipe": other} for r in rows])
+    gone = load_cfg([f"paths.gen_runs={tmp_path / 'none.jsonl'}"])
+    assert "없는 qid 3개" in unlisted_table(gone, rows)
 
 
 def test_sentences_attach_trailing_citation():

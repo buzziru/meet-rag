@@ -51,16 +51,17 @@ def criterion(rows: list[dict], key: str) -> tuple[list[float], Counter, int]:
     return scores, excluded, errors
 
 
-def unlisted_table(cfg, rows: list[dict]) -> list[tuple[str, int]]:
+def unlisted_table(cfg, rows: list[dict]) -> list[tuple[str, int]] | str:
     """(구분, 답변 수). 지정 거부 문구 없이 거부한 답변을 충실성 '진술 없음'과 교차해 센다.
     거부 판별과 지표는 바꾸지 않는다. 답변은 judge 결과를 만든 생성 기록(paths.gen_runs)에서
-    읽고, 레시피 해시가 다르면 멈춘다(이슈 #156)."""
+    읽는다. 생성 기록이 없거나 맞지 않으면 이 표만 내지 않도록 이유를 돌려준다(이슈 #156)."""
     rec = rows[0]["judge_recipe"]
-    gens = {r["qid"]: r for r in read_jsonl(ROOT / cfg.paths.gen_runs)}
+    path = ROOT / cfg.paths.gen_runs
+    gens = {r["qid"]: r for r in read_jsonl(path)} if path.exists() else {}
     missing = [r["qid"] for r in rows if r["qid"] not in gens]
     if missing or sha(stable(gens[rows[0]["qid"]]["recipe"])) != rec.get("gen_recipe_sha256"):
-        raise SystemExit(f"{cfg.paths.gen_runs}이 judge 결과를 만든 생성 기록이 아니다"
-                         f"(없는 qid {len(missing)}개 또는 레시피 해시 다름)")
+        return (f"{cfg.paths.gen_runs}이 judge 결과를 만든 생성 기록이 아니라 내지 않는다"
+                f"(없는 qid {len(missing)}개 또는 레시피 해시 다름)")
     parts = list(cfg.gen_eval.unlisted_refusal)
     pairs = Counter((unlisted_refusal(gens[r["qid"]]["answer"], rec["refusal"], parts),
                      (r.get("faithfulness") or {}).get("error") == "진술 없음") for r in rows)
@@ -228,10 +229,14 @@ def main() -> None:
     print(f"\n충실성 판정에서 발언자를 구분할 수 없는 진술 {sum(unclear)}개, 그런 진술이 든 질의 "
           f"{sum(1 for k in unclear if k)}개(기준 문서 F7)")
 
-    print("\n생성 답변 형식: 지정 거부 문구를 쓰지 않은 거부(거부로 세지 않고 지표도 그대로)\n\n"
-          "| 구분 | 답변 |\n| --- | ---: |")
-    for name, k in unlisted_table(cfg, rows):
-        print(f"| {name} | {k} |")
+    print("\n생성 답변 형식: 지정 거부 문구를 쓰지 않은 거부(거부로 세지 않고 지표도 그대로)\n")
+    table = unlisted_table(cfg, rows)
+    if isinstance(table, str):
+        print(table)
+    else:
+        print("| 구분 | 답변 |\n| --- | ---: |")
+        for name, k in table:
+            print(f"| {name} | {k} |")
 
     print("\n| 근거 상태 | 질의 | 거부(전체·부분) |\n| --- | ---: | ---: |")
     for name, k, ref in refusal_table(rows):
