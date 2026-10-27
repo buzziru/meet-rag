@@ -25,6 +25,14 @@ def refusal_split(answer: str, phrase: str,
     return ("partial" if content else "full"), refused, "\n".join(rest)
 
 
+def unlisted_refusal(answer: str, phrase: str, parts: list[str]) -> bool:
+    """지정 거부 문구 없이 거부한 문장이 있는가. 조각(parts)이 모두 들고 거부 문구는 없는
+    문장이다(공백 차이는 무시). refusal_split은 이 문장을 내용 문장으로 본다(이슈 #156)."""
+    key, parts = SPACE.sub("", phrase), [SPACE.sub("", p) for p in parts]
+    flat = (SPACE.sub("", s) for s in sentences(answer))
+    return any(key not in s and all(p in s for p in parts) for s in flat)
+
+
 def sentences(answer: str) -> list[str]:
     """문장 목록. 인용 번호만 남은 조각("[1]")은 앞 문장에, 목록 번호만 남은 조각("1.")은
     뒤 문장에 붙인다."""

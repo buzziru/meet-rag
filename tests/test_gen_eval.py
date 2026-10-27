@@ -14,6 +14,7 @@ from rag.gen_eval.checks import (
     metadata_mismatches,
     refusal_split,
     sentences,
+    unlisted_refusal,
 )
 from rag.gen_eval.common import done_qids, sample_qids
 from rag.gen_eval.judge import (
@@ -29,6 +30,7 @@ from rag.gen_eval.judge import (
     parse_json,
     relevance,
     render,
+    sha,
 )
 from rag.gen_eval.judge import main as judge_main
 from rag.gen_eval.report import (
@@ -38,6 +40,7 @@ from rag.gen_eval.report import (
     item_summary,
     refusal_table,
     require_s22,
+    unlisted_table,
 )
 from rag.gen_eval.review import main as review_main
 from rag.index import load_cfg
@@ -62,6 +65,44 @@ def test_refusal_split_full_partial_none():
     kind, refused, rest = refusal_split(PARTIAL, REFUSAL, FILLERS)
     assert kind == "partial" and rest == "A 위원은 B를 제안했습니다[1]."
     assert refused == ["C의 시행 시기는 제공된 회의록에서 답을 찾지 못했습니다."]
+
+
+UNLISTED = ["제공된 회의록에서", "찾지 못했"]
+
+
+def test_unlisted_refusal_only_without_phrase():
+    # S25 베이스라인의 형태: 지정 문구 사이에 대상이 끼어 refusal_split이 거부로 보지 않는다
+    ans = "제공된 회의록에서 청장의 대응 계획에 대한 답을 찾지 못했습니다."
+    assert refusal_split(ans, REFUSAL, FILLERS)[0] is None
+    assert unlisted_refusal(ans, REFUSAL, UNLISTED)
+    assert unlisted_refusal("A입니다[1]. 다만, 제공된 회의록에서는 대책을 찾지 못했습니다.",
+                            REFUSAL, UNLISTED)
+    assert not unlisted_refusal(PARTIAL, REFUSAL, UNLISTED)  # 지정 문구 거부
+    assert not unlisted_refusal("자료를 찾지 못했다고 답했습니다[1].", REFUSAL, UNLISTED)
+
+
+def test_unlisted_table_crosses_no_statements(tmp_path):
+    answers = {"q1": "제공된 회의록에서 X에 대한 답을 찾지 못했습니다.",
+               "q2": "제공된 회의록에서 Y는 찾지 못했습니다. Z입니다[1].",
+               "q3": "아니요, 위원 [1]"}
+    path = tmp_path / "runs.jsonl"
+    path.write_text("".join(json.dumps({"qid": q, "answer": a, "recipe": {"a": 1}},
+                                       ensure_ascii=False) + "\n" for q, a in answers.items()),
+                    encoding="utf-8")
+    cfg = load_cfg([f"paths.gen_runs={path}"])
+    rec = {"refusal": REFUSAL, "gen_recipe_sha256": sha({"a": 1})}
+    none = {"score": None, "error": "진술 없음"}
+    rows = [{"qid": "q1", "faithfulness": none, "judge_recipe": rec},
+            {"qid": "q2", "faithfulness": {"score": 1.0}, "judge_recipe": rec},
+            {"qid": "q3", "faithfulness": none, "judge_recipe": rec}]
+    assert [k for _, k in unlisted_table(cfg, rows)] == [1, 1, 1]
+    # 진술 없음은 judge 형식 오류가 아니라 뺀 이유로 센다
+    assert criterion(rows, "faithfulness") == ([1.0], {"no_statements": 2}, 0)
+    # 다른 생성 기록이거나 없으면 이 표만 내지 않는다(report의 나머지는 judge 결과만으로 낸다)
+    other = {**rec, "gen_recipe_sha256": "x"}
+    assert "레시피 해시 다름" in unlisted_table(cfg, [{**r, "judge_recipe": other} for r in rows])
+    gone = load_cfg([f"paths.gen_runs={tmp_path / 'none.jsonl'}"])
+    assert "없는 qid 3개" in unlisted_table(gone, rows)
 
 
 def test_sentences_attach_trailing_citation():

@@ -1,7 +1,7 @@
 """judge 결과(paths.gen_judge)를 집계해 표로 낸다(S14).
 
 기준별 평균과 계산한 질의 수, 뺀 질의 수(전체 거부 포함 이유별), 충실성 판정의 발언자 구분 불가
-진술 수(S22), 전체·부분 거부(S14b), 거부 교차 집계,
+진술 수(S22), 전체·부분 거부(S14b), 지정 거부 문구를 쓰지 않은 거부(이슈 #156), 거부 교차 집계,
 인용·메타데이터 오류, 토큰·비용, 첫 토큰 시간을 낸다. 항목 평가 결과가 있으면 정보 상태 × 처리 표,
 거부 정확도, 틀린 처리 유형을 낸다(S14c). gen_eval.item_cases를 주면 판정 확인 사례의 judge 결과를
 정답과 대조한다. 종합 지표와 기준 비교·판정은
@@ -16,8 +16,9 @@ from hashlib import sha256
 
 import numpy as np
 
-from rag.gen_eval.checks import HANDLINGS, STATES, item_outcome
-from rag.gen_eval.common import read_jsonl
+from rag.gen_eval.checks import HANDLINGS, STATES, item_outcome, unlisted_refusal
+from rag.gen_eval.common import read_jsonl, stable
+from rag.gen_eval.judge import sha
 from rag.index import ROOT, load_cfg
 
 
@@ -43,9 +44,30 @@ def criterion(rows: list[dict], key: str) -> tuple[list[float], Counter, int]:
             scores.append(c["score"])
         elif c.get("excluded"):
             excluded[c["excluded"]] += 1
+        elif c.get("error") == "진술 없음":  # judge 형식 오류가 아니다(이슈 #156)
+            excluded["no_statements"] += 1
         else:
             errors += 1
     return scores, excluded, errors
+
+
+def unlisted_table(cfg, rows: list[dict]) -> list[tuple[str, int]] | str:
+    """(구분, 답변 수). 지정 거부 문구 없이 거부한 답변을 충실성 '진술 없음'과 교차해 센다.
+    거부 판별과 지표는 바꾸지 않는다. 답변은 judge 결과를 만든 생성 기록(paths.gen_runs)에서
+    읽는다. 생성 기록이 없거나 맞지 않으면 이 표만 내지 않도록 이유를 돌려준다(이슈 #156)."""
+    rec = rows[0]["judge_recipe"]
+    path = ROOT / cfg.paths.gen_runs
+    gens = {r["qid"]: r for r in read_jsonl(path)} if path.exists() else {}
+    missing = [r["qid"] for r in rows if r["qid"] not in gens]
+    if missing or sha(stable(gens[rows[0]["qid"]]["recipe"])) != rec.get("gen_recipe_sha256"):
+        return (f"{cfg.paths.gen_runs}이 judge 결과를 만든 생성 기록이 아니라 내지 않는다"
+                f"(없는 qid {len(missing)}개 또는 레시피 해시 다름)")
+    parts = list(cfg.gen_eval.unlisted_refusal)
+    pairs = Counter((unlisted_refusal(gens[r["qid"]]["answer"], rec["refusal"], parts),
+                     (r.get("faithfulness") or {}).get("error") == "진술 없음") for r in rows)
+    return [("지정 문구 없는 거부, 충실성 진술 없음으로 빠짐", pairs[True, True]),
+            ("지정 문구 없는 거부, 그 밖(기준을 채점함)", pairs[True, False]),
+            ("진술 없음, 지정 문구 없는 거부 아님", pairs[False, True])]
 
 
 def refusal_table(rows: list[dict]) -> list[tuple[str, int, int]]:
@@ -206,6 +228,15 @@ def main() -> None:
                    for v in (r.get("faithfulness") or {}).get("verdicts", [])) for r in rows]
     print(f"\n충실성 판정에서 발언자를 구분할 수 없는 진술 {sum(unclear)}개, 그런 진술이 든 질의 "
           f"{sum(1 for k in unclear if k)}개(기준 문서 F7)")
+
+    print("\n생성 답변 형식: 지정 거부 문구를 쓰지 않은 거부(거부로 세지 않고 지표도 그대로)\n")
+    table = unlisted_table(cfg, rows)
+    if isinstance(table, str):
+        print(table)
+    else:
+        print("| 구분 | 답변 |\n| --- | ---: |")
+        for name, k in table:
+            print(f"| {name} | {k} |")
 
     print("\n| 근거 상태 | 질의 | 거부(전체·부분) |\n| --- | ---: | ---: |")
     for name, k, ref in refusal_table(rows):
