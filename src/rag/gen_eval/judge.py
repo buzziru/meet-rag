@@ -20,7 +20,7 @@ import os
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 
 from langsmith import traceable
 from langsmith.run_trees import get_cached_client
@@ -108,11 +108,11 @@ def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
 
 
 class HttpCounts:
-    """HTTP 요청 수와 응답 상태 코드별 수. OpenAI SDK는 429·5xx·연결 오류를 기본 2회 다시 시도하고
-    재시도마다 요청을 새로 보내므로, 요청 수 − 성공 호출 수가 재시도 수이고 상태 코드로 오류 종류를
-    안다(S25 D-51, 동시 수를 올리기 전에 확인할 값). 결과 파일에는 넣지 않고 실행 출력에만 낸다.
-    대량 실행은 출력을 `_workspace/<작업>_run.log`로 남겨 이 수를 보존한다(사용자 결정 2026-10-26,
-    PR #154)."""
+    """HTTP 요청 수와 응답 상태 코드별 수. OpenAI SDK는 429·5xx·연결 오류를 judge.max_retries회
+    다시 시도하고 재시도마다 요청을 새로 보내므로, 요청 수 − 성공 호출 수가 재시도 수이고 상태 코드로
+    오류 종류를 안다(S25 D-51, 동시 수를 올리기 전에 확인할 값). 결과 파일에는 넣지 않고 실행
+    출력에만 낸다. 대량 실행은 출력을 `_workspace/<작업>_run.log`로 남겨 이 수를 보존한다
+    (사용자 결정 2026-10-26, PR #154)."""
 
     def __init__(self):
         self.requests, self.status = 0, {}
@@ -143,6 +143,7 @@ class Judge:
         self.http = HttpCounts()
         self.client = wrap_openai(OpenAI(
             base_url=j.base_url, api_key=os.environ[j.api_key_env], timeout=j.timeout,
+            max_retries=j.max_retries,
             default_headers={"User-Agent": j.user_agent, "x-opencode-session": session},
             http_client=DefaultHttpxClient(event_hooks={"request": [self.http.on_request],
                                                         "response": [self.http.on_response]})))
@@ -188,7 +189,10 @@ class Judge:
                      "finish_reason": r.choices[0].finish_reason}
             # 빈 응답과 끝나지 않은 응답(잘림 등)은 저장하지 않아 다시 실행하면 다시 묻는다(D-42)
             if saved["content"] and saved["finish_reason"] == "stop":
-                path.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
+                # 쓰는 도중 끊기면 반쯤 쓴 파일이 캐시로 읽혀 그 요청에서 매번 멈추므로 바꿔치기한다
+                tmp = path.with_name(f"{path.name}.{threading.get_ident()}.tmp")
+                tmp.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
+                os.replace(tmp, path)
             with self.lock:
                 self.calls += 1
         usage = {**(saved["usage"] or {}), "step": step, "cached": cached,
@@ -361,6 +365,27 @@ def check_item_steps(cfg) -> None:
                          "gen_eval.item_eval=false로 실행한다")
 
 
+def run_all(fn, items: list, concurrency: int, name) -> list:
+    """items를 동시에 처리해 입력 순서대로 돌려준다. 하나라도 실패하면(Ctrl+C 포함) 아직 시작하지
+    않은 항목을 취소하고, 실행 중인 항목이 끝나면 실패한 항목과 원인을 모두 적고 멈춘다. 성공한
+    응답은 judge 캐시에 남아 다시 실행하면 이어진다. 입력 순서로 결과를 꺼내는 map은 앞 항목이
+    늦으면 뒤 항목의 실패를 늦게 알아 그동안 남은 항목을 계속 채점했다(이슈 #156)."""
+    ex = ThreadPoolExecutor(concurrency)
+    futures = [ex.submit(fn, x) for x in items]
+    try:
+        wait(futures, return_when=FIRST_EXCEPTION)
+    finally:
+        ex.shutdown(cancel_futures=True)
+    failed = [f"{name(x)}: {type(f.exception()).__name__}: {f.exception()}"
+              for x, f in zip(items, futures, strict=True)
+              if not f.cancelled() and f.exception()]
+    if failed:
+        skipped = sum(f.cancelled() for f in futures)
+        raise SystemExit(f"judge 실패 {len(failed)}건, 시작하지 않고 취소 {skipped}건"
+                         "(다시 실행하면 저장된 응답으로 이어진다):\n" + "\n".join(failed))
+    return [f.result() for f in futures]
+
+
 def judge_cases(cfg) -> None:
     """판정 확인 사례(S14c)를 항목 평가로만 채점한다. 사례 줄은 case·query·answer·contexts를 담는다.
     결과는 judge 지시·설정에 따라 달라지므로 출력이 있으면 시작할 때 멈춘다. 사례 파일의 해시를
@@ -373,9 +398,9 @@ def judge_cases(cfg) -> None:
     rec["item_cases_sha256"] = hashlib.sha256(src.read_bytes()).hexdigest()
     judge = Judge(cfg, session=f"meet-rag-judge-{sha(stable(rec))[:16]}")
     try:
-        with ThreadPoolExecutor(cfg.judge.concurrency) as ex:
-            rows = list(ex.map(lambda c: {"case": c["case"], **item_eval(
-                judge, c["query"], c["answer"], c["contexts"])}, cases))
+        rows = run_all(lambda c: {"case": c["case"], **item_eval(
+            judge, c["query"], c["answer"], c["contexts"])}, cases, cfg.judge.concurrency,
+            lambda c: c["case"])
     finally:  # 재시도를 다 쓰고 멈춘 실행에서도 오류 수를 남긴다
         print(judge.http.summary(judge.calls))
     get_cached_client().flush()
@@ -408,8 +433,7 @@ def main() -> None:
                             langsmith_extra={"metadata": {"qid": qid, **rec}})
 
     try:
-        with ThreadPoolExecutor(cfg.judge.concurrency) as ex:
-            rows = list(ex.map(one, qids))
+        rows = run_all(one, qids, cfg.judge.concurrency, str)
     finally:  # 재시도를 다 쓰고 멈춘 실행에서도 오류 수를 남긴다
         print(judge.http.summary(judge.calls))
     get_cached_client().flush()

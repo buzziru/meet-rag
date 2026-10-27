@@ -45,19 +45,25 @@ def generate_all(pipe, items: list[tuple[str, str, object]], rec: dict, concurre
                 "langsmith_run_id": str(run_id), "recipe": rec}
 
     with ThreadPoolExecutor(concurrency) as ex:
-        futures = []
-        for qid, query, emb in items:
-            t0 = time.perf_counter()
-            contexts = pipe.retrieve(query, emb, k, qid)
-            messages = pipe.messages(contexts, query)
-            futures.append(ex.submit(gen, qid, query, contexts, messages,
-                                     time.perf_counter() - t0))
-        failed = []
-        for (qid, _, _), f in zip(items, futures, strict=True):
-            try:
-                write(f.result())
-            except Exception as e:  # 429 등 한 질의의 실패로 끝난 다른 생성을 버리지 않는다
-                failed.append(f"{qid}: {type(e).__name__}: {e}")
+        try:
+            futures = []
+            for qid, query, emb in items:
+                t0 = time.perf_counter()
+                contexts = pipe.retrieve(query, emb, k, qid)
+                messages = pipe.messages(contexts, query)
+                futures.append(ex.submit(gen, qid, query, contexts, messages,
+                                         time.perf_counter() - t0))
+            failed = []
+            for (qid, _, _), f in zip(items, futures, strict=True):
+                try:
+                    write(f.result())
+                except Exception as e:  # 429 등 한 질의의 실패로 끝난 다른 생성을 버리지 않는다
+                    failed.append(f"{qid}: {type(e).__name__}: {e}")
+        except BaseException:
+            # 검색 오류나 Ctrl+C면 남은 생성은 쓰이지 않으므로 시작하지 않은 유료 호출을
+            # 취소한다(이슈 #156)
+            ex.shutdown(cancel_futures=True)
+            raise
     if failed:
         raise SystemExit(f"생성 실패 {len(failed)}건(다시 실행하면 이어 쓴다):\n"
                          + "\n".join(failed))

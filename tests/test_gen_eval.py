@@ -677,3 +677,31 @@ def test_http_counts_record_sdk_retries():
                                  "성공 호출 밖 요청(재시도·실패) 1회")
     counts.requests += 1  # 타임아웃처럼 응답 없이 끝난 요청
     assert "응답 없음 1" in counts.summary(1)
+
+
+def test_run_all_stops_on_first_failure_and_names_it():
+    """한 항목이 실패하면 시작하지 않은 항목을 취소하고 실패 항목과 원인을 적는다(이슈 #156)."""
+    import threading
+    import time
+
+    from rag.gen_eval.judge import run_all
+    started, lock = [], threading.Lock()
+
+    def fn(x):
+        with lock:
+            started.append(x)
+        if x == 2:
+            raise RuntimeError("timeout")
+        time.sleep(0.05)  # API 호출처럼 메인이 실패를 알아챌 시간이 있게 한다
+        return x * 10
+
+    with pytest.raises(SystemExit, match=r"judge 실패 1건(.|\n)*q2: RuntimeError: timeout"):
+        run_all(fn, list(range(100)), 1, lambda x: f"q{x}")
+    assert len(started) <= 5  # 실패 뒤 항목은 거의 시작하지 않는다(100개 중)
+    assert run_all(lambda x: x * 10, [3, 1, 2], 4, str) == [30, 10, 20]  # 입력 순서
+
+
+def test_judge_configs_pass_timeout_and_retries():
+    for judge in ("deepseek_go", "deepseek_go_mixed", "deepseek_openrouter"):
+        j = load_cfg([f"judge={judge}"]).judge
+        assert (j.timeout, j.max_retries) == (120, 1)
