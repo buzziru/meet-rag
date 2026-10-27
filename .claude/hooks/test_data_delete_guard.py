@@ -42,6 +42,8 @@ def run(command, root):
     # Orca도 --force면 junction을 따라가 원본을 지운다(2026-10-27 실험, ADR-0064)
     "orca worktree rm --worktree path:{r}/wt2 --force --json",
     "orca worktree rm --worktree path:{r}/wt2 --json",
+    "orca worktree rm --worktree=path:{r}/wt2 --force --json",  # Orca는 붙임 형태도 받는다
+    'orca worktree rm --worktree "path:{r}/wt2" --force',
 ])
 def test_recursive_delete_through_link_is_denied(repo, command):
     out = run(command.format(r=repo.as_posix()), repo)
@@ -180,3 +182,20 @@ def test_orca_worktree_rm_without_links_passes_and_selector_asks(repo):
     assert run(f"orca worktree rm --worktree path:{repo.as_posix()}/wt --json", repo) is None
     out = run("orca worktree rm --worktree name:harness --force --json", repo)
     assert out and out[0] == "ask" and "path:" in out[1]
+
+
+@pytest.mark.parametrize("command", [
+    "orca worktree rm --worktree=id:abc --json",
+    "orca worktree rm --worktree id:abc --force",
+])
+def test_orca_worktree_rm_non_path_selector_asks(repo, command):
+    out = run(command, repo)
+    assert out and out[0] == "ask"
+
+
+@pytest.mark.parametrize("command", [
+    "orca worktree ps --json",
+    'rg "orca worktree rm --force" docs',  # 따옴표 안 문서 본문은 명령이 아니다
+])
+def test_orca_non_delete_commands_pass(repo, command):
+    assert run(command, repo) is None

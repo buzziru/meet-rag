@@ -12,8 +12,8 @@
   명령, `git clean -x/-X`, `data/` 경로가 든 Python 삭제 호출은 사용자 확인을 띄운다(ask).
   메인 체크아웃의 `data/` 삭제는 그대로 둔다. 막으려는 것은 분리된 세션의 임의 삭제다(사용자
   결정 2026-10-22)
-- worktree(`.git`이 파일인 디렉터리)를 재귀 삭제·`git worktree remove`할 때 그 `_workspace/`에
-  파일이 있으면 막는다(deny). `_workspace/`는 세션 사이에 작업 기록을 넘기는 곳인데 .gitignore
+- worktree(`.git`이 파일인 디렉터리)를 재귀 삭제·`git worktree remove`·`orca worktree rm`할 때
+  그 `_workspace/`에 파일이 있으면 막는다(deny). `_workspace/`는 세션 사이에 작업 기록을 넘기는 곳인데 .gitignore
   대상이라 git이 경고 없이 지운다. 2026-10-26 하위 세션 진행 기록을 옮기기 전에 지웠다(ADR-0062)
 따옴표 안의 공백이 든 문자열(커밋 메시지 등)과 heredoc 본문은 명령으로 보지 않는다. 명령 해석은
 낱말 단위 근사다. 놓치는 형태가 있어도 위임 지시 규칙(meet-rag 스킬)이 함께 막는다.
@@ -145,6 +145,8 @@ def decide(command: str, cwd: Path, root: Path = ROOT) -> tuple[str, str] | None
         item = ITEM_DELETE.findall(seg)
         targets = item or tokens(seg if TAIL_VERB.search(seg) else seg[verb.end():])
         if re.search(ORCA_RM, seg, re.IGNORECASE):
+            # Orca는 --worktree=<선택자> 붙임 형태도 받는다(2026-10-27 확인)
+            targets = [t.split("=", 1)[1] if t.startswith("--worktree=") else t for t in targets]
             # id:·name: 같은 선택자는 경로를 알 수 없어 링크·_workspace/를 확인하지 못한다
             other = [t for t in targets if re.match(r"^[a-zA-Z]{2,}:", t.strip("\"'"))
                      and not t.strip("\"'").startswith("path:")]
