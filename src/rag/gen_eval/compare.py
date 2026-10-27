@@ -19,12 +19,13 @@ from rag.gen_eval.judge import sha
 from rag.gen_eval.report import require_s22
 from rag.index import load_cfg, write_guarded
 
-# judge_recipe 중 채점 방식을 정하는 값. 다르면 차이가 생성이 아니라 채점에서 나온다
+# judge_recipe 중 평가자(judge 모델·지시·채점 규칙)를 정하는 값. 다르면 차이가 생성이 아니라
+# 채점에서 나오므로 멈춘다
 JUDGE_KEYS = ("name", "model", "base_url", "params", "extra_body", "step_params",
-              "prompt_version", "prompt_sha256", "filler_phrases", "check_patterns",
-              "chunk_key_min", "item_eval")
-# 거부 문구는 생성 프롬프트에서 오므로 프롬프트 실험에서 바뀔 수 있다. 멈추지 않고 차이만 낸다
-CHECK_KEYS = ("refusal",)
+              "prompt_version", "prompt_sha256", "chunk_key_min", "item_eval")
+# 생성 프롬프트(거부 문구, 도입 문구)나 검색 조건(날짜 정규식)에서 오는 값. 실험이 바꾸는 것이라
+# 멈추지 않고 차이만 낸다(PR #167 리뷰)
+CHECK_KEYS = ("refusal", "filler_phrases", "check_patterns")
 METRICS = ("faithfulness", "relevance", "composite", "inclusion", "over_refusal")
 
 

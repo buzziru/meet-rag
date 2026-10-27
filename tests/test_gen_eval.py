@@ -934,6 +934,13 @@ def test_gen_compare_check_inputs_stops(tmp_path):
     other = [_judged(q, 1, 1, recipe={"name": "j", "model": "m2", "refusal": "r"}) for q in "ab"]
     with pytest.raises(SystemExit, match="judge 설정이 다르다: model"):
         check_inputs(runs, {"base": rows, "cand": other}, ["a", "b"])
-    prompt = [_judged(q, 1, 1, recipe={"name": "j", "model": "m", "refusal": "r2"}) for q in "ab"]
+    rule = [_judged(q, 1, 1, recipe={"name": "j", "model": "m", "refusal": "r",
+                                     "chunk_key_min": 0.5}) for q in "ab"]
+    with pytest.raises(SystemExit, match="chunk_key_min"):
+        check_inputs(runs, {"base": rows, "cand": rule}, ["a", "b"])
+    # 생성 프롬프트 실험이 바꾸는 값은 멈추지 않고 차이만 낸다(PR #167 리뷰)
+    prompt = [_judged(q, 1, 1, recipe={"name": "j", "model": "m", "refusal": "r2",
+                                       "filler_phrases": ["새 문구"]}) for q in "ab"]
     assert check_inputs(runs, {"base": rows, "cand": prompt}, ["a", "b"]) == {
-        "refusal": {"base": "r", "cand": "r2"}}
+        "refusal": {"base": "r", "cand": "r2"},
+        "filler_phrases": {"base": None, "cand": ["새 문구"]}}
