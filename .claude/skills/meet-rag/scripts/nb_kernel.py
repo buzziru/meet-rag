@@ -10,8 +10,9 @@ nbclient는 실행마다 커널을 새로 띄워, 한 셀이 실패하면 처음
   ... stop
 
 - 커널 작업 디렉터리는 notebooks/다(노트북 규약 ROOT = Path.cwd().parent)
-- run은 먼저 `ruff check --fix`·`ruff format`을 노트북에 적용하고 남은 지적을 출력한다(PR 전
-  ruff 오류를 따로 고치지 않게)
+- run은 먼저 `ruff check --fix`를 노트북에 적용하고 남은 지적을 출력한다(PR 전 ruff 오류를
+  따로 고치지 않게). 줄 길이와 `ruff format`은 노트북에 적용하지 않는다. 사람이 읽는 기록이라
+  기계적 줄 나눔이 가독성을 낮춰, 노트북 규약 §2.3이 맡는다(ADR-0063)
 - run은 셀마다 출력을 노트북 파일에 LF로 쓰고, 오류가 난 셀에서 멈추며 그 셀 번호와 traceback
   끝 TB_LINES줄을 알려 준다(전체 traceback은 노트북 출력에 남는다)
 - 끝나면 stop으로 커널을 내린다
@@ -94,11 +95,10 @@ def execute(kc: BlockingKernelClient, code: str) -> tuple[list[dict], int | None
 
 
 def lint(path: Path) -> None:
-    for args in (["check", "--fix", "--quiet"], ["format", "--quiet"]):
-        out = subprocess.run([sys.executable, "-m", "ruff", *args, str(path)], cwd=ROOT,
-                             capture_output=True, text=True, encoding="utf-8")
-        if out.returncode:
-            print(out.stdout + out.stderr)
+    out = subprocess.run([sys.executable, "-m", "ruff", "check", "--fix", "--quiet", str(path)],
+                         cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    if out.returncode:
+        print(out.stdout + out.stderr)
 
 
 def error_tail(outputs: list[dict]) -> str:

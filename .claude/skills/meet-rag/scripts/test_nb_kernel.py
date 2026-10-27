@@ -17,7 +17,7 @@ def test_error_tail_without_error_output():
     assert "오류 출력이 없다" in error_tail([])
 
 
-def test_lint_fixes_and_formats_notebook(tmp_path):
+def test_lint_fixes_but_does_not_format_notebook(tmp_path):
     nb = {"cells": [{"cell_type": "code", "metadata": {}, "outputs": [], "execution_count": None,
                      "source": ["import sys\n", "import os\n", "x=[1,2]\n", "print(os, sys, x)"]}],
           "metadata": {}, "nbformat": 4, "nbformat_minor": 5}
@@ -26,4 +26,4 @@ def test_lint_fixes_and_formats_notebook(tmp_path):
     lint(path)
     src = "".join(json.loads(path.read_text(encoding="utf-8"))["cells"][0]["source"])
     assert src.index("import os") < src.index("import sys")  # isort(I001) 자동 수정
-    assert "x = [1, 2]" in src  # ruff format
+    assert "x=[1,2]" in src  # ruff format은 적용하지 않는다(ADR-0063)
