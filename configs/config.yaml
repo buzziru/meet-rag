@@ -171,7 +171,7 @@ index:
 # 검색 실행 방식 (docs/slices/05-retrieve.md)
 search:
   mode: run  # run | rerank-pairs(재정렬 후보 쌍, EXP-005) | export-queries(로컬) | embed-queries(VM)
-  queries: summary_q  # summary_q | multidoc(G3 동결 세트, index.scope=full만) | test(S13, 검색 단계 종료 시 1회)
+  queries: summary_q  # summary_q | multidoc(G3 동결 세트, index.scope=full만) | test(단계마다 종료 시 1회, 검색은 S13)
   allow_test: false  # search.queries=test는 이 값이 true일 때만 쓴다(SPEC, S13)
   overwrite: false  # 같은 경로에 내용이 다른 순위 파일이 있으면 멈춘다. true면 덮어쓴다(S12)
 
