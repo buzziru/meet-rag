@@ -69,3 +69,11 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+# 노트북은 결정 근거와 사람의 리뷰·회고용 기록이라 기계적 줄 나눔을 하지 않는다.
+# 가독성은 노트북 규약(.claude/rules/notebook.md §2.3)이 맡는다(ADR-0063)
+[tool.ruff.lint.per-file-ignores]
+"notebooks/**/*.ipynb" = ["E501"]
+
+[tool.ruff.format]
+exclude = ["notebooks/**/*.ipynb"]
