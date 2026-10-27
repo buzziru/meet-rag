@@ -47,10 +47,13 @@ def generate_all(pipe, items: list[tuple[str, str, object]], rec: dict, concurre
 
     pending, failed = [], []  # 아직 쓰지 않은 (qid, future), 생성이 실패한 질의
 
-    def flush():
-        """표본 순서대로 끝난 생성을 쓴다. 429 등 한 질의의 실패로 다른 생성을 버리지 않는다."""
+    def flush(block: bool = True):
+        """표본 순서대로 끝난 생성을 쓴다. 429 등 한 질의의 실패로 다른 생성을 버리지 않는다.
+        block=False면 맨 앞이 아직 끝나지 않았을 때 기다리지 않고 돌아간다."""
         while pending:
             qid, f = pending[0]
+            if not block and not f.done():
+                return
             if f.cancelled():
                 pending.pop(0)
                 continue
@@ -71,6 +74,7 @@ def generate_all(pipe, items: list[tuple[str, str, object]], rec: dict, concurre
             messages = pipe.messages(contexts, query)
             pending.append((qid, ex.submit(gen, qid, query, contexts, messages,
                                            time.perf_counter() - t0)))
+            flush(block=False)  # 검색하는 동안 끝난 생성은 바로 써 둔다
         flush()
     except BaseException:
         # 검색 오류나 Ctrl+C: 시작하지 않은 생성은 취소하고, 비용을 낸 생성은 실행 중인 것까지
