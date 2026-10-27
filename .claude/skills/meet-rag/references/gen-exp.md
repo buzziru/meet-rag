@@ -21,7 +21,7 @@ B 흐름에서 EXP 문서 판정 기준이 SPEC "생성 단계 평가 > 판정"(
 
 `rag.*`는 `doppler run -- uv run python -m …`로 부르고, 대량 실행이라 `LANGSMITH_TRACING=false`를 붙인다(D-50).
 
-1. gen-small 작동 확인: `rag.gen_eval.generate +exp=expNNN gen_eval.queries=dev-small gen_eval.n=20` → `rag.gen_eval.judge`(같은 override) → `rag.gen_eval.report`(같은 override). 생성·judge 오류가 없는지, 바꾼 설정이 생성 기록에 들어갔는지(프롬프트 버전, 근거), report의 judge 형식 오류·끝나지 않은 응답 수를 본다. 점수는 판정에 쓰지 않는다
+1. gen-small 작동 확인: `rag.gen_eval.generate +exp=expNNN gen_eval.queries=dev-small gen_eval.n=20` → `rag.gen_eval.judge`(같은 override) → `rag.gen_eval.report`(같은 override). 생성·judge 오류가 없는지, 바꾼 설정이 생성 기록에 들어갔는지(프롬프트 버전, 근거), report의 judge 형식 오류·끝나지 않은 응답 수를 본다. 어긋나면 gen-full로 넘어가지 않고 고친 뒤 같은 확인을 다시 한다. 점수는 판정에 쓰지 않는다
 2. gen-full: `rag.gen_eval.generate +exp=expNNN` → `rag.gen_eval.judge +exp=expNNN` → `rag.gen_eval.report +exp=expNNN`(기본이 gen-full 330질의)
 3. 비교: `rag.gen_eval.compare --base <기준 judge.jsonl> --cand <후보 judge.jsonl> --out <EXP 문서 실행 절에 적은 경로>`
 
@@ -37,7 +37,7 @@ judge 지시는 동결이라(D-49) 바꾸려면 새 버전 파일과 재검증, 
 
 ### 형식 오류율
 
-report의 judge 형식 오류 수와 끝나지 않은 응답 수를 실행마다 EXP 결과 절에 적는다(D-51 결정 4. S25는 새 호출 1,731회 중 형식 오류 3건, 약 0.2%). 기준 실행보다 늘었으면 판정 전에 사용자에게 알린다. 구조화된 응답으로 바꿀지 다시 논의하는 조건이다(D-51 결정 4).
+report의 judge 형식 오류 수와 끝나지 않은 응답 수를 실행마다 EXP 결과 절에 적는다(D-51 결정 4. S25는 새 호출 1,731회 중 형식 오류 3건, 약 0.2%). 새 호출 대비 비율이 기준 실행보다 높으면 판정(B4) 전에 사용자에게 알리고 답을 받은 뒤 진행한다. 구조화된 응답으로 바꿀지 다시 논의하는 조건이다(D-51 결정 4).
 
 ## B4 판정 입력
 
