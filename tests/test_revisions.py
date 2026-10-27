@@ -57,6 +57,15 @@ def test_pinned_stops_without_commit(section):
         pinned(OmegaConf.create(section))
 
 
-def test_pinned_returns_commit():
+def test_pinned_returns_commit(monkeypatch):
+    monkeypatch.setenv("HF_HOME", "/tmp/hf")
     rev = "8b418a58414668e75532ed045c22d9ca018ae2b2"
     assert pinned(OmegaConf.create({"model_name": "m", "revision": rev})) == rev
+
+
+def test_pinned_stops_without_hf_home(monkeypatch):
+    """doppler run 없이 실행하면 HF_HOME이 없어 기본 캐시에 다시 받으므로 멈춘다(ADR-0068)."""
+    monkeypatch.delenv("HF_HOME", raising=False)
+    rev = "8b418a58414668e75532ed045c22d9ca018ae2b2"
+    with pytest.raises(SystemExit, match="doppler run"):
+        pinned(OmegaConf.create({"model_name": "m", "revision": rev}))

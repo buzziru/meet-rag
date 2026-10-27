@@ -7,7 +7,6 @@ LangSmith로 추적하고, 호출마다 질의·근거·답변·레시피를 pat
 
 import hashlib
 import json
-import os
 import sys
 import time
 import uuid
@@ -21,7 +20,16 @@ from omegaconf import OmegaConf
 from openai import OpenAI
 
 from rag.conditions import build_extractor
-from rag.index import ROOT, corpus_meta, encoder, file_sha256, git_state, load_cfg, load_model
+from rag.index import (
+    ROOT,
+    corpus_meta,
+    encoder,
+    file_sha256,
+    git_state,
+    load_cfg,
+    load_model,
+    require_env,
+)
 from rag.llm import answer_start, split_thought
 from rag.retrieve import (
     ChunkStore,
@@ -110,7 +118,7 @@ class Pipeline:
         # 조건 색인·추출기가 읽은 코퍼스를 같이 쓴다(S17)
         self.doc_meta = {d["doc_id"]: {k: d[k] for k in CONTEXT_META} for d in corpus_meta(cfg)}
         self.client = wrap_openai(OpenAI(base_url=cfg.generator.base_url,
-                                         api_key=os.environ[cfg.generator.api_key_env]))
+                                         api_key=require_env(cfg.generator.api_key_env)))
         self._model = None
         # 재정렬 점수는 EXP-017이 Colab에서 만든 파일을 읽는다. 실시간 재정렬은 배포 SLICE(S14)
         use_rerank = self.retriever.use_rerank

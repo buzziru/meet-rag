@@ -48,6 +48,7 @@ ROOT = Path(__file__).resolve().parents[4]
 REPO_URL = "https://github.com/buzziru/meet-rag.git"
 VM_REPO = "/content/meet-rag"
 LOG = "/content/job.log"
+VM_HF_HOME = "/root/.cache/huggingface"  # HF 기본 캐시 위치(VM 사용자 root)
 DONE, FAIL = "JOB_DONE", "JOB_FAILED"
 ENV = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "MSYS_NO_PATHCONV": "1"}
 NOISE = re.compile(
@@ -181,7 +182,10 @@ def upload(session: str, local: str, remote: str) -> None:
 
 
 def launch(session: str, uv_args: list[str]) -> None:
-    start_bg(session, f"cd {VM_REPO} && date && uv run --extra cu126 {shlex.join(uv_args)}")
+    # 로컬은 HF_HOME을 Doppler에서 받고 없으면 rag.index.pinned가 멈춘다(ADR-0068). VM에는
+    # Doppler를 쓰지 않으므로 HF 기본 캐시 위치를 그대로 넘겨 전과 같은 곳에 받는다
+    start_bg(session, f"cd {VM_REPO} && date && HF_HOME={VM_HF_HOME} "
+                      f"uv run --extra cu126 {shlex.join(uv_args)}")
     print(f"launched: {shlex.join(uv_args)}  (로그 {LOG})")
 
 

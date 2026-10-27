@@ -8,7 +8,6 @@
 
 import hashlib
 import json
-import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -19,7 +18,7 @@ from langsmith.wrappers import wrap_openai
 from omegaconf import OmegaConf
 from openai import OpenAI
 
-from rag.index import ROOT
+from rag.index import ROOT, require_env
 from rag.llm import split_thought
 
 
@@ -66,7 +65,7 @@ class Rewriter:
 
     def __init__(self, cfg):
         w = self.w = cfg.rewriter
-        self.client = wrap_openai(OpenAI(base_url=w.base_url, api_key=os.environ[w.api_key_env],
+        self.client = wrap_openai(OpenAI(base_url=w.base_url, api_key=require_env(w.api_key_env),
                                          timeout=w.timeout))
         # OpenRouter는 reasoning으로 사고 과정을 끈다. Google 경로는 끌 수 없어 보내지 않는다(D-11)
         self.extra = None if w.reasoning else {"reasoning": {"enabled": False}}

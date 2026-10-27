@@ -11,7 +11,6 @@
 
 import hashlib
 import json
-import os
 import sys
 import time
 import urllib.request
@@ -25,7 +24,7 @@ from langsmith import traceable
 from langsmith.run_trees import get_cached_client
 from sentence_transformers import CrossEncoder
 
-from rag.index import ROOT, load_cfg, pinned, refuse_existing, write_guarded  # .env를 읽는다
+from rag.index import ROOT, load_cfg, pinned, refuse_existing, require_env, write_guarded
 from rag.retrieve import rerank_basis, rerank_basis_path
 
 
@@ -105,7 +104,7 @@ def jev_body(group: list[dict], jv) -> dict:
 @traceable(run_type="llm", name="jev_rerank", process_inputs=lambda i: {"body": i["body"]})
 def jev_post(body: dict, raw: str, jv) -> dict:
     """요청 본문 raw(body를 직렬화한 것)를 보내 응답을 받는다. 추적 입력에는 body만 남긴다."""
-    headers = {"Authorization": f"Bearer {os.environ[jv.api_key_env]}",
+    headers = {"Authorization": f"Bearer {require_env(jv.api_key_env)}",
                "Content-Type": "application/json"}
     req = urllib.request.Request(jv.url, data=raw.encode(), headers=headers)
     with urllib.request.urlopen(req, timeout=jv.timeout) as r:
