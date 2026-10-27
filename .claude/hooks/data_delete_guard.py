@@ -5,8 +5,9 @@
 `data/gen_eval`·`data/conditions`를 지웠다(섀도 복사본으로만 되살림).
 
 - 링크(junction·심볼릭 링크)를 만드는 것과 링크만 지우는 비재귀 명령은 그대로 둔다
-- 재귀 삭제·`git worktree remove`의 대상이 링크이거나 안에 링크가 있으면 막는다(deny). 링크를
-  따라가 원본을 지우는 경우만 막고, 링크를 먼저 지우면 통과한다. 세션과 관계없이 건다
+- 재귀 삭제·`git worktree remove`·`orca worktree rm`의 대상이 링크이거나 안에 링크가 있으면
+  막는다(deny). 링크를 따라가 원본을 지우는 경우만 막고, 링크를 먼저 지우면 통과한다. 세션과
+  관계없이 건다
 - worktree에서 도는 세션(`.git`이 파일)이 `data/`(원본 포함, 링크를 따라간 위치 포함)를 지우는
   명령, `git clean -x/-X`, `data/` 경로가 든 Python 삭제 호출은 사용자 확인을 띄운다(ask).
   메인 체크아웃의 `data/` 삭제는 그대로 둔다. 막으려는 것은 분리된 세션의 임의 삭제다(사용자
@@ -28,13 +29,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKTREE_REMOVE = r"\bgit\s+(?:-C\s+(\S+)\s+)?worktree\s+remove\b"  # git -C <경로>도 같다
+# Orca의 worktree 삭제도 git worktree remove라 같게 본다. --force는 링크를 따라가 원본을
+# 지운다(2026-10-27 실험, ADR-0064). 대상은 --worktree path:<경로> 선택자다
+ORCA_RM = r"\borca(?:\.exe|\.cmd)?\s+worktree\s+rm\b"
 DELETE = re.compile(r"(?:^|[\s;&|(])(?:rm|rmdir|rd|del|erase|Remove-Item|ri)(?=\s)"
-                    rf"|{WORKTREE_REMOVE}|\bgit\s+clean\b|-delete\b|\.Delete\("
+                    rf"|{WORKTREE_REMOVE}|{ORCA_RM}|\bgit\s+clean\b|-delete\b|\.Delete\("
                     r"|\b(?:shutil\.rmtree|os\.remove|os\.unlink|os\.rmdir)\b|\.unlink\(|\.rmdir\(",
                     re.IGNORECASE)
 # rm -r·-rf·-fR, Remove-Item -Recurse, rmdir /s, git worktree remove, .Delete($true) 등
 # (-Force 같은 긴 플래그 제외)
-RECURSIVE = re.compile(rf"{WORKTREE_REMOVE}|\bgit\s+clean\b|\brmtree\b|-delete\b"
+RECURSIVE = re.compile(rf"{WORKTREE_REMOVE}|{ORCA_RM}|\bgit\s+clean\b|\brmtree\b|-delete\b"
                        r"|(?:^|\s)-(?=[a-zA-Z]{0,3}[rR])[a-zA-Z]{1,4}(?=\s|$)|--recursive\b"
                        r"|-Recurse\b|(?:^|\s)/[sS](?=\s|$)|\.Delete\(\s*\$true\s*\)", re.IGNORECASE)
 SEP = re.compile(r"&&|\|\||[;|\n]")
@@ -140,6 +144,15 @@ def decide(command: str, cwd: Path, root: Path = ROOT) -> tuple[str, str] | None
         # 대상은 같은 구간의 동사 뒤 낱말이다. `x.Delete()`, `find x -delete`는 앞에 온다
         item = ITEM_DELETE.findall(seg)
         targets = item or tokens(seg if TAIL_VERB.search(seg) else seg[verb.end():])
+        if re.search(ORCA_RM, seg, re.IGNORECASE):
+            # id:·name: 같은 선택자는 경로를 알 수 없어 링크·_workspace/를 확인하지 못한다
+            other = [t for t in targets if re.match(r"^[a-zA-Z]{2,}:", t.strip("\"'"))
+                     and not t.strip("\"'").startswith("path:")]
+            if other:
+                return "ask", (f"`orca worktree rm`의 대상 {other[0]}은 경로가 아니라 링크와 "
+                               "`_workspace/`를 확인하지 못했다. "
+                               "`--worktree path:<경로>`로 지정한다")
+            targets = [t.strip("\"'").removeprefix("path:") for t in targets]
         # git -C <경로> worktree remove <대상>의 상대 경로는 <경로> 기준이다
         base = to_path(verb.group(1), cwd) if verb.lastindex and verb.group(1) else cwd
         out = check_targets(targets, bool(RECURSIVE.search(seg)), base, data, ask)

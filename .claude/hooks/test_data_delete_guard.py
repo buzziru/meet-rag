@@ -39,6 +39,9 @@ def run(command, root):
     "git -C {r} worktree remove --force wt2",  # -C 기준 상대 경로
     "(Get-Item {r}/wt2).Delete($true)",
     "(Get-Item -LiteralPath {r}/wt2/data).Delete($true)",
+    # Orca도 --force면 junction을 따라가 원본을 지운다(2026-10-27 실험, ADR-0064)
+    "orca worktree rm --worktree path:{r}/wt2 --force --json",
+    "orca worktree rm --worktree path:{r}/wt2 --json",
 ])
 def test_recursive_delete_through_link_is_denied(repo, command):
     out = run(command.format(r=repo.as_posix()), repo)
@@ -151,6 +154,7 @@ def test_hook_outputs_permission_decision(repo):
     "git worktree remove {r}/wt3",
     "git -C {r} worktree remove --force wt3",
     "rm -rf {r}/wt3",
+    "orca worktree rm --worktree path:{r}/wt3 --json",
 ])
 def test_worktree_with_workspace_notes_is_denied(repo, command):
     """worktree의 `_workspace/` 기록은 .gitignore 대상이라 git이 경고 없이 지운다(ADR-0062)."""
@@ -169,3 +173,10 @@ def test_plain_directory_with_workspace_is_not_a_worktree(repo):
     (d / "_workspace").mkdir(parents=True)
     (d / "_workspace" / "x.md").write_text("x", encoding="utf-8")
     assert run(f"rm -rf {d.as_posix()}", repo) is None
+
+
+def test_orca_worktree_rm_without_links_passes_and_selector_asks(repo):
+    """링크·기록이 없는 worktree는 그대로 지우고, 경로가 아닌 선택자는 확인을 띄운다."""
+    assert run(f"orca worktree rm --worktree path:{repo.as_posix()}/wt --json", repo) is None
+    out = run("orca worktree rm --worktree name:harness --force --json", repo)
+    assert out and out[0] == "ask" and "path:" in out[1]
