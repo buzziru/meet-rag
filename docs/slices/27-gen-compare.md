@@ -17,7 +17,7 @@
 
 1. 명령은 검색 판정(`rag.eval.compare`)과 같은 모양으로 judge 결과 파일 두 개를 받는다: `uv run python -m rag.gen_eval.compare --base <기준 judge.jsonl> --cand <후보 judge.jsonl> [--out <결과.json> [--overwrite]]`. `+exp` override로 경로를 만들지 않는 것은 기준과 후보가 서로 다른 실험 config에서 나오기 때문이다
 2. 판정은 gen-full(판정용 330질의)에서만 한다. 두 파일의 qid 집합이 `eval_qids`(gen_eval 기본 설정)의 gen-full 표본과 같지 않으면 원인을 적고 멈춘다. 검색 판정이 dev-full 고정인 것과 같다(gen-small은 작동 확인용, SPEC)
-3. 읽을 때 확인하고 어긋나면 멈추는 것(구현 원칙 "사람이 넣는 입력"): 두 경로가 같은 파일, S22 이전 형식(`require_s22`), judge가 다름(`judge_recipe`의 `name`·`model`·`base_url`·`params`·`extra_body`·`step_params`·`prompt_version`·`prompt_sha256`). judge가 다르면 차이가 생성 설정이 아니라 채점 방식에서 나온다. 거부 문구·`filler_phrases` 등 코드 판정 설정은 생성 프롬프트 실험에서 바뀔 수 있어 멈추지 않고 차이를 출력한다
+3. 읽을 때 확인하고 어긋나면 멈추는 것(구현 원칙 "사람이 넣는 입력"): 두 경로가 같은 파일, S22 이전 형식(`require_s22`), judge가 다름(`judge_recipe`의 `name`·`model`·`base_url`·`params`·`extra_body`·`step_params`·`prompt_version`·`prompt_sha256`과 judge 쪽 코드 판정 설정 `filler_phrases`·`check_patterns`·`chunk_key_min`·`item_eval`), 한 파일 안에서 이 값이 섞임. judge가 다르면 차이가 생성 설정이 아니라 채점 방식에서 나온다. 거부 문구(`refusal`)는 생성 프롬프트에서 오는 값이라 프롬프트 실험에서 바뀔 수 있어 멈추지 않고 차이를 출력한다. 커밋·생성 레시피는 한 파일 안에서 섞여도 된다(근거가 같은 질의에 기준 결과를 쓰는 S26 방식). 감사 지적으로 구현에 맞춰 고침: 처음 지시서는 `filler_phrases` 등도 차이만 낸다고 적었다
 4. 질의 단위 값은 노트북 `per_query`와 같게 계산한다. 종합 지표는 질의마다 충실성·관련성 평균이고, 둘 중 하나라도 없는 질의는 NaN이다. 기준마다 두 실행 모두 값이 있는 질의만 쓴다(짝지은 제외, D-47 결정 6). 과잉 거부율은 질의마다 `over_refusal / judged`이고 `judged`가 0인 질의는 두 실행에서 함께 뺀다
 5. 구간은 `rag.eval.bootstrap.paired_bootstrap`을 그대로 부르고, 재표본 단위·반복·seed·alpha는 `configs/eval/spec_v1.yaml`의 `bootstrap`을 읽는다(SPEC: 검색 판정과 같은 회의, 10,000회, seed 20260929). 회의는 `load_gold(cfg, "dev-full")`의 `conference_number`다
 6. 판정 함수는 순수 함수(`gen_verdict`)로 두고 테스트한다. 채택: 종합 지표 하한 > 0, 점 추정 ≥ δ, 충실성 하한 ≥ −0.05, 관련성 하한 ≥ −0.035, 과잉 거부율 상한 ≤ δ_r. 기각: 종합 지표 상한 < 0. 그 밖은 보류이고, 보류이면 걸린 조건(종합 지표 구간, 점 추정 < δ, 충실성 하락, 관련성 하락, 과잉 거부)을 함께 낸다
@@ -53,3 +53,9 @@
 - multi-doc 보조 관찰: 필요한 실험에서 정한다(D-53 결정 7)
 - judge 지시·판정표(D-49 동결), `src/rag/eval/`(읽기만)
 - 생성·judge 반복이 여러 개인 결과의 평균 비교: SPEC 판정은 실행 하나씩이다
+
+## 결과 (2026-10-27)
+
+- 커밋: 구현 8a3a3fc. `uv run pytest -q` 322 passed, `uv run ruff check .` 통과
+- slice-verifier: 완료 기준 1\~5 통과. 복사본 비교는 모든 차이 0·보류, 오라클 11질의를 바꿔 넣은 330행은 보류(충실성 −0.0039 [−0.0085, −0.0004], 관련성 0, 종합 지표 −0.0020 [−0.0060, +0.0013], 포함도 n 258), `--out` 두 번 같은 내용, 100질의 파일은 멈춤. 임시 파일은 `data/` 밖에 만들었다
+- protocol-auditor: 위반 없음. 지시서 "메인이 정한 것" 3이 구현과 어긋난 것을 지시서 쪽에서 고쳤다
