@@ -110,6 +110,6 @@ A-3·D-3의 eval 모듈은 보호 경로(CLAUDE.md 금지 절: `src/rag/eval/`, 
 - 생성 근거 불변: 기존 생성 기록 20건의 근거 dict가 20/20 같다(`LANGSMITH_TRACING=false`, 생성 API 호출 없음. `Pipeline`이 클라이언트를 만들 때 읽는 키 환경 변수에는 더미 값을 넣었다). 새 레시피에 `embedding_revision`(`55ec6e9…`), `query_prompt`(`query: `)가 들어간다
 - 결정 사항 7의 영향: 이 기록은 S15 전에 만들어 레시피에 `conditions`·`name_titles`·`rerank_scores_sha256`도 없다. 같은 경로에 이어 생성할 수 없는 상태는 이 조각 전(S15)부터였다
 - 수정 허용에서 뺀 S14c 파일(`gen_eval/judge.py`·`checks.py`·`report.py`, `configs/judge/`, `tests/test_gen_eval.py`): 이 조각 때문에 고칠 것은 없다. judge는 생성 기록 안의 레시피끼리만 대조하고 `gen_recipe_sha256`만 남겨, 새 키가 생기면 새 생성 기록의 해시가 바뀔 뿐이다(S14c 브랜치 diff로 확인, 2026-10-22). 두 브랜치가 함께 고치는 파일은 `docs/PLAN.md`(서로 다른 줄)다
-- 관찰: 질의 목록이 다른 캐시를 로컬에서 다시 임베딩해 덮어쓰는 기존 동작(범위 밖)은 그대로다
+- 관찰: 질의 목록이 다른 캐시를 로컬에서 다시 임베딩해 덮어쓰는 기존 동작(범위 밖)은 그대로다. 이후 PR #144에서 캐시가 없거나 목록이 다르면 멈추도록 바뀌었다
 - 관찰: VM에서 만든 캐시는 `colab_job.py fetch`가 VM 디렉터리를 묶어 받으므로(`.claude/skills/meet-rag/scripts/colab_job.py:222`) 캐시 디렉터리를 받으면 지문 파일도 함께 온다. 파일 하나만 `colab download`로 받으면 지문이 빠지고, 다음 실행이 지문 없음으로 멈춘다(오염은 아님)
 - 관찰: test 질의 캐시 2개에는 지문이 없어 `search.queries=test`로 읽으면 멈춘다. 생성 단계 test 1회는 검색 순위를 다시 만들지 않으면 해당하지 않고, 다시 만들 때는 그 준비에서 받아들이거나 다시 임베딩한다
