@@ -27,6 +27,10 @@ A2(S4 등 전체 인덱스)와 B3(재임베딩 실험)에서 GPU 임베딩이 �
 - `colab exec -f nb.ipynb`가 만드는 `*_output.ipynb`와 `colab log -o`로 내보낸 기록은 `outputs/notebooks/`에 둔다. `outputs/`는 프로젝트 진행 중 커밋하지 않고(`.gitignore`) 완료 후 결과 공개 때 공개한다. 출력에 질의가 조금 들어가는 것은 괜찮다. 회의록 발언 원문은 AI Hub 생성물이 아니지만, 질의응답쌍과 그 분할은 AI Hub 고유 자료일 수 있어 대량으로 남기지 않는다
 - `colab auth`, `colab drivemount`는 사람이 터미널에서 해야 하므로 필요하면 사용자에게 요청한다
 
+비밀 값(API 키):
+- VM에는 API 키를 보내지 않는다. API 호출(생성, judge, 재작성)은 로컬에서 하고 VM은 GPU 계산만 한다. `colab_job.py`는 `doppler run` 없이 띄운다. 로컬 `colab` CLI에 환경 변수 전체가 넘어가므로(`colab_job.py`의 `ENV`), 키가 없는 환경에서 띄워야 넘어갈 여지가 없다(사용자 결정 2026-10-27, ADR-0068)
+- 키가 필요한 VM 작업이 생기면 Colab 보안 비밀(`google.colab.userdata`)로 시도한다. CLI로 만든 세션에서 쓸 수 있는지 먼저 웹 자료와 실험으로 확인하고, 실험의 Colab 사용은 승인 지점(3)을 거친다. 실행 코드에 키를 넣어 보내지 않는다. `colab exec` 코드는 로컬 실행 기록(`~/.config/colab-cli/history/`)과 `outputs/notebooks/`의 세션 기록에 남고, `outputs/`는 결과 공개 때 공개된다
+
 ## 오류 처리
 
 - Colab 명령이 멈추거나 끊기면(`colab exec`의 시간 초과, "Connection was lost") `colab_job.py`가 시간 제한 안에서 다시 시도한다. 그래도 실패하면 기다리지 않고 `colab restart-kernel -s <세션>`(VM은 그대로, 커널만 다시)을 한 뒤 다시 하고, 계속 안 되면 같은 셸 명령을 `colab console`로 보낸다(터미널 경로라 커널 연결과 별개다). 파일 전송은 console로 하지 않고 `colab_job.py upload`로만 한다. console에는 업로드 검사(dev가 아닌 질의·분할·`.env` 차단)가 없기 때문이다. EXP-009에서 `colab exec`가 40분 멈추는 동안 `colab console`과 `colab upload`는 동작했다(colab-operator Recovery 절, ADR-0036). `launch`가 실패했으면 다시 띄우기 전에 짧은 `poll`로 작업이 이미 떴는지 확인한다. 로그 파일은 `setup`과 같으므로 완료 표시가 아니라 로그 첫 줄의 `date` 시각이 `launch` 시각 뒤인지로 판단한다(응답만 끊기고 VM에서는 떴을 수 있고, 두 번 띄우면 같은 산출물을 동시에 쓴다). 단계마다 성공 표시를 확인한 뒤 다음 단계로 간다: `setup`은 Python·torch 버전 줄, `upload`는 `wc` 줄, `launch`는 짧은 `poll`의 진행 표시다. `setup`은 저장소 폴더를 지우고 다시 만들므로, 실패한 `setup` 뒤 업로드를 먼저 하지 않는다(EXP-009에서 실패한 `setup`을 확인하지 않고 업로드·실행으로 넘어가 다시 실패했다)
