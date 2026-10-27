@@ -189,10 +189,7 @@ class Judge:
                      "finish_reason": r.choices[0].finish_reason}
             # 빈 응답과 끝나지 않은 응답(잘림 등)은 저장하지 않아 다시 실행하면 다시 묻는다(D-42)
             if saved["content"] and saved["finish_reason"] == "stop":
-                # 쓰는 도중 끊기면 반쯤 쓴 파일이 캐시로 읽혀 그 요청에서 매번 멈추므로 바꿔치기한다
-                tmp = path.with_name(f"{path.name}.{threading.get_ident()}.tmp")
-                tmp.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
-                os.replace(tmp, path)
+                path.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
             with self.lock:
                 self.calls += 1
         usage = {**(saved["usage"] or {}), "step": step, "cached": cached,
@@ -366,14 +363,19 @@ def check_item_steps(cfg) -> None:
 
 
 def run_all(fn, items: list, concurrency: int, name) -> list:
-    """items를 동시에 처리해 입력 순서대로 돌려준다. 하나라도 실패하면(Ctrl+C 포함) 아직 시작하지
-    않은 항목을 취소하고, 실행 중인 항목이 끝나면 실패한 항목과 원인을 모두 적고 멈춘다. 성공한
-    응답은 judge 캐시에 남아 다시 실행하면 이어진다. 입력 순서로 결과를 꺼내는 map은 앞 항목이
-    늦으면 뒤 항목의 실패를 늦게 알아 그동안 남은 항목을 계속 채점했다(이슈 #156)."""
+    """items를 동시에 처리해 입력 순서대로 돌려준다. 하나라도 실패하면 아직 시작하지 않은 항목을
+    취소하고, 실행 중인 항목이 끝나면 실패한 항목과 원인을 모두 적고 멈춘다. Ctrl+C도 시작하지
+    않은 항목을 취소하고 그대로 올린다. 성공한 응답은 judge 캐시에 남아 다시 실행하면 이어진다.
+    입력 순서로 결과를 꺼내는 map은 앞 항목이 늦으면 뒤 항목의 실패를 늦게 알아 그동안 남은
+    항목을 계속 채점했다(이슈 #156)."""
     ex = ThreadPoolExecutor(concurrency)
     futures = [ex.submit(fn, x) for x in items]
     try:
-        wait(futures, return_when=FIRST_EXCEPTION)
+        # Windows에서는 timeout 없는 대기가 Ctrl+C로 깨지 않아 1초마다 깨어난다
+        while True:
+            done, pending = wait(futures, timeout=1, return_when=FIRST_EXCEPTION)
+            if not pending or any(f.exception() for f in done):
+                break
     finally:
         ex.shutdown(cancel_futures=True)
     failed = [f"{name(x)}: {type(f.exception()).__name__}: {f.exception()}"

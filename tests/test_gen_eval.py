@@ -701,6 +701,31 @@ def test_run_all_stops_on_first_failure_and_names_it():
     assert run_all(lambda x: x * 10, [3, 1, 2], 4, str) == [30, 10, 20]  # 입력 순서
 
 
+def test_run_all_does_not_wait_for_slow_earlier_item():
+    """앞 항목이 늦어도 뒤 항목의 실패에서 바로 멈춘다. map은 앞 항목이 끝날 때까지 실패를 몰라
+    다른 워커가 남은 항목을 계속 처리했다(이슈 #156)."""
+    import threading
+    import time
+
+    from rag.gen_eval.judge import run_all
+    started, lock = [], threading.Lock()
+
+    def fn(x):
+        with lock:
+            started.append(x)
+        if x == 0:
+            time.sleep(2)  # 응답이 늦는 앞 질의
+        elif x == 1:
+            raise RuntimeError("timeout")
+        else:
+            time.sleep(0.05)
+        return x
+
+    with pytest.raises(SystemExit, match="q1: RuntimeError"):
+        run_all(fn, list(range(100)), 2, lambda x: f"q{x}")
+    assert len(started) <= 6  # map이면 앞 질의 2초 동안 약 40개를 더 시작한다
+
+
 def test_judge_configs_pass_timeout_and_retries():
     for judge in ("deepseek_go", "deepseek_go_mixed", "deepseek_openrouter"):
         j = load_cfg([f"judge={judge}"]).judge
