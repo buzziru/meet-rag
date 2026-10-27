@@ -10,7 +10,7 @@ SPEC 개정 초안 `docs/drafts/spec-generation-eval.md`에 기준(충실성, �
 
 - 코드로 판정할 항목(인용 번호 유효성, 거부 문구, 발언자·회의 일자의 메타데이터 일치)은 LLM 없이 처리하고, judge에는 남는 기준만 맡긴다
 - judge는 사람 채점으로 보정한 뒤 쓴다. 이후 주기적으로 소량을 다시 사람이 확인한다. 블라인드 확인을 S25에서 1질의 검수 뒤 중단해(D-51) 지금 judge는 사람과 독립 대조 없이 쓴다
-- multi-doc 질의(G3 동결 세트)는 검색 단계와 같이 생성에서도 보조 관찰로 함께 보고하고 판정에 쓰지 않는다(D-38)
+- multi-doc 질의(G3 동결 세트)는 생성에서 판정에 쓰지 않고, 여러 문서를 합쳐 답하는 것을 겨냥한 실험에서만 일부로 본다(D-38, D-53 결정 7)
 - 진행 순서(제안. 번호는 착수 때 확정)
   - [ ] SPEC 개정 뒤 안내문 정리(D-53 남은 일): CLAUDE.md 외부 전송 줄, `src/rag/search.py` test docstring, 보호 경로 `src/rag/eval/metrics.py`의 `--allow-test` 오류 문구(사용자 승인 필요), `configs/config.yaml` 주석, protocol-guard·pr-briefer의 "SPEC 개정 전/뒤" 조건을 생성 단계 test 1회 규칙에 맞춘다
   - [ ] 생성 설정 비교(SLICE, SPEC 개정 뒤 H10 착수 전): 두 생성 설정의 judge 결과를 받아 기준마다 두 실행 모두 계산한 질의만 남기고(짝지은 제외, D-47 결정 6) 질의 쌍 차이를 회의 단위 paired bootstrap 95% 구간으로 내는 명령. 생성 평가 모듈에는 실행 하나의 report만 있다(이슈 #156)
