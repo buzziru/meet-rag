@@ -17,7 +17,7 @@
 - `configs/config.yaml`: `gen_eval.contexts`(`retrieved` 기본, `oracle`, `no_gold`). `paths.gen_runs`·`paths.gen_judge`에 `retrieved`가 아닐 때만 `-oracle`·`-no_gold`가 붙는다. 기본값의 경로와 생성 레시피는 바뀌지 않는다
 - `rag.generate.Pipeline.retrieve`: 정답 문서와 조건을 받아 근거를 바꾼다. 근거가 기본 검색과 같으면 `None`을 돌려준다. 기본 호출(`rag.generate` CLI, 베이스라인)은 동작이 같다
 - `rag.gen_eval.generate`: 조건이 `retrieved`가 아니면 정답 문서를 읽어 넘기고, `None`인 질의는 건너뛰고 수를 출력한다. 생성 레시피에 `contexts`를 더한다(기본값이면 넣지 않아 S25 레시피 해시가 같다)
-- 노트북 `notebooks/37_01_오라클진단.ipynb`: 조건별 기준 점수, 거부 수, 정보 상태별 처리 표, 오라클로 바뀐 11질의의 점수 차이. 판단 재료만 두고 결정은 적지 않는다
+- 노트북 `notebooks/36_01_오라클진단.ipynb`: 조건별 기준 점수, 거부 수, 정보 상태별 처리 표, 오라클로 바뀐 11질의의 점수 차이. 판단 재료만 두고 결정은 적지 않는다
 
 ## 완료 기준
 
@@ -31,7 +31,7 @@
 
 ## 수정 허용 파일
 
-`configs/config.yaml`(`gen_eval.contexts`, `paths.gen_runs`·`paths.gen_judge` 템플릿), `src/rag/index.py`(경로 resolver), `src/rag/generate.py`, `src/rag/gen_eval/generate.py`, `tests/test_gen_eval.py`, `notebooks/37_01_오라클진단.ipynb`, 이 문서, `docs/PLAN.md`·`docs/PLAN-done.md`
+`configs/config.yaml`(`gen_eval.contexts`, `paths.gen_runs`·`paths.gen_judge` 템플릿), `src/rag/index.py`(경로 resolver), `src/rag/generate.py`, `src/rag/gen_eval/generate.py`, `tests/test_gen_eval.py`, `notebooks/36_01_오라클진단.ipynb`, 이 문서, `docs/PLAN.md`·`docs/PLAN-done.md`
 
 ## 범위 밖
 

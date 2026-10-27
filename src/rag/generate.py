@@ -71,6 +71,27 @@ def recipe(cfg, index_meta: dict, stream: bool) -> dict:
     }
 
 
+def swap_gold(docs: list[str], stages: list[dict], k: int, gold: str | None,
+              contexts: str) -> tuple[list[str], list[dict]] | None:
+    """오라클 진단의 근거 문서(S26). oracle은 정답 문서가 상위 k개에 없으면 k번째 자리를 정답
+    문서로 바꾸고, no_gold는 정답 문서를 빼고 다음 문서로 채운다. 순위를 옮기지 않는 것은 순서
+    효과를 섞지 않으려는 것이다. 근거가 바뀌지 않으면 None."""
+    if contexts not in ("oracle", "no_gold"):
+        raise SystemExit(f"gen_eval.contexts는 retrieved·oracle·no_gold 중 하나다: {contexts}")
+    if gold is None:
+        raise SystemExit("정답 문서 없이 근거를 바꿀 수 없다")
+    has_gold = gold in docs[:k]
+    if contexts == "oracle":
+        if has_gold:
+            return None
+        stage = stages[docs.index(gold)] if gold in docs else {}
+        return [*docs[:k - 1], gold], [*stages[:k - 1], stage]
+    if not has_gold:
+        return None
+    keep = [i for i, d in enumerate(docs) if d != gold]
+    return [docs[i] for i in keep], [stages[i] for i in keep]
+
+
 class Pipeline:
     """인덱스·코퍼스 메타·클라이언트를 한 번 불러 두고 질의마다 run을 부른다."""
 
@@ -129,10 +150,17 @@ class Pipeline:
 
     @traceable(name="retrieve", process_inputs=lambda i: {"k": i["k"]})
     def retrieve(self, query: str, q_emb: np.ndarray, k: int, qid: str | None = None,
-                 ) -> list[dict]:
+                 gold: str | None = None, contexts: str = "retrieved") -> list[dict] | None:
         """상위 k개 문서의 근거. score는 문서 순위를 정한 최종 점수(hybrid면 RRF, dense면 청크
-        점수)이고, 근거 청크의 dense 점수와 단계별 순위를 함께 남긴다(PR #71 코멘트)."""
+        점수)이고, 근거 청크의 dense 점수와 단계별 순위를 함께 남긴다(PR #71 코멘트).
+        contexts가 retrieved가 아니면 정답 문서(gold)로 근거를 바꾸고(swap_gold, S26), 바뀌지
+        않으면 None이다."""
         scores, docs, stages = self.rank(query, q_emb, qid)
+        if contexts != "retrieved":
+            swapped = swap_gold(docs, stages, k, gold, contexts)
+            if swapped is None:
+                return None
+            docs, stages = swapped
         picked = best_chunks(scores, self.doc_chunks, docs[:k])
         rows = [self.store.get(i) for i in picked]
         out = []

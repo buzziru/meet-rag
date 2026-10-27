@@ -33,6 +33,8 @@ if os.environ.get("HF_HOME") and not Path(os.environ["HF_HOME"]).is_absolute():
 
 # 반복 실행 번호를 경로에 붙인다. 0이면 빈 문자열이라 반복 0의 경로는 반복 도입 전과 같다(S24)
 OmegaConf.register_new_resolver("rep", lambda n: f"-r{n}" if int(n) else "", replace=True)
+# 생성 근거 조건(S26). 기본 retrieved는 경로에 붙지 않아 이전 기록 경로가 그대로다
+OmegaConf.register_new_resolver("ctx", lambda c: "" if c == "retrieved" else f"-{c}", replace=True)
 
 
 def load_cfg(overrides=()):
