@@ -583,3 +583,10 @@
 - 이유: SPEC 개정(D-53)으로 test는 단계(검색·생성)마다 종료 시 1회가 됐고, D-53 남은 일이 이 문구를 함께 고치기로 했다. CLAUDE.md 금지 절, `src/rag/search.py`, `configs/config.yaml`, protocol-guard도 같은 PR에서 맞춘다
 - 승인: 사용자 승인 2026-10-27(대화, 안내문 정리 목록)
 - 날짜: 2026-10-27
+
+## D-55 생성 판정 기준값을 보호 경로 `configs/eval/gen_v1.yaml`에 둔다 (S27)
+
+- 결정: 생성 설정 비교(`rag.gen_eval.compare`)의 판정 기준값(최소 개선 폭 δ 0.02, 하락 허용폭 충실성 −0.05·관련성 −0.035, 과잉 거부 δ_r 0.02, D-53)을 새 파일 `configs/eval/gen_v1.yaml`에 두고, `configs/config.yaml` defaults의 `eval@eval_gen`으로 읽는다. 재표본 단위·반복·seed·alpha는 검색 판정과 같은 `spec_v1.yaml`의 `bootstrap`을 쓴다
+- 이유: 검색 판정 기준값(`spec_v1.yaml`)과 같은 보호 경로에 두어, 실험 config의 override로 판정 선이 바뀌지 않게 한다(S27 결정 사항 1 (a))
+- 승인: 사용자 승인 2026-10-27(대화, S27 결정 사항 1 (a))
+- 날짜: 2026-10-27

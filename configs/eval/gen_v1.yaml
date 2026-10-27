@@ -1,0 +1,7 @@
+# 생성 단계 평가 프로토콜 v1 (docs/SPEC.md "생성 단계 평가 > 판정", D-53). 실험 중 수정하지 않는다
+# 재표본 단위·반복·seed·alpha는 검색 판정과 같은 spec_v1.yaml의 bootstrap을 쓴다
+min_gain: 0.02  # 종합 지표(충실성·관련성 평균) 최소 개선 폭 δ
+floors:  # 기준별 하락 안전 조건: 차이(후보 − 기준) 95% 구간 하한
+  faithfulness: -0.05
+  relevance: -0.035
+over_refusal_max: 0.02  # 과잉 거부 안전 조건 δ_r: 차이 95% 구간 상한
