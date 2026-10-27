@@ -227,7 +227,17 @@ def pinned(section) -> str:
     if not (isinstance(rev, str) and COMMIT.fullmatch(rev)):
         raise SystemExit(f"{section.get('model_name') or section.get('model')}의 revision이 커밋 "
                          f"해시가 아니다({rev!r}). configs/에 40자리 커밋 해시를 고정한다(D-46)")
+    require_env("HF_HOME")  # 없으면 기본 캐시에 모델을 다시 받는다
     return rev
+
+
+def require_env(name: str) -> str:
+    """Doppler가 넣는 환경 변수(API 키, HF_HOME). 없으면 `doppler run` 없이 실행한 것이라 원인을
+    적고 멈춘다(ADR-0068). KeyError나 기본 캐시로 조용히 넘어가지 않게 한다."""
+    if not os.environ.get(name):
+        raise SystemExit(f"환경 변수 {name}이(가) 없다. Doppler에서 받도록 "
+                         "`doppler run -- uv run python -m …`으로 실행한다(ADR-0068)")
+    return os.environ[name]
 
 
 def load_model(cfg, max_seq_length: int):

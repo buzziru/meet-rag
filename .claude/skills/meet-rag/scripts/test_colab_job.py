@@ -136,3 +136,11 @@ def test_fetch_through_data_junction(tmp_path, monkeypatch):
                    check=True, capture_output=True)
     colab_job.fetch("x", "data/runs", wt, [])
     assert (real / "data/run.csv").exists()
+
+
+def test_launch_sets_hf_home_on_vm(monkeypatch):
+    """VM에는 Doppler가 없어 HF_HOME을 직접 넘긴다. 없으면 rag.index.pinned가 멈춘다(ADR-0068)."""
+    sent = []
+    monkeypatch.setattr(colab_job, "start_bg", lambda session, cmd: sent.append(cmd))
+    colab_job.launch("s", ["python", "-m", "rag.index", "index.scope=full"])
+    assert "HF_HOME=/root/.cache/huggingface uv run --extra cu126 python -m rag.index" in sent[0]

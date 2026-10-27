@@ -16,7 +16,6 @@ S14 표본은 gen_eval.queries=dev-small gen_eval.n=20).
 
 import hashlib
 import json
-import os
 import sys
 import threading
 import time
@@ -40,7 +39,7 @@ from rag.gen_eval.checks import (
     refusal_split,
 )
 from rag.gen_eval.common import eval_qids, load_refs, read_jsonl, stable
-from rag.index import ROOT, git_state, load_cfg, refuse_existing, write_guarded
+from rag.index import ROOT, git_state, load_cfg, refuse_existing, require_env, write_guarded
 
 RELEVANCE = {"답함": 1.0, "일부": 0.5, "답하지 않음": 0.0}
 
@@ -142,7 +141,7 @@ class Judge:
         self.j, self.prompt = j, j.prompt
         self.http = HttpCounts()
         self.client = wrap_openai(OpenAI(
-            base_url=j.base_url, api_key=os.environ[j.api_key_env], timeout=j.timeout,
+            base_url=j.base_url, api_key=require_env(j.api_key_env), timeout=j.timeout,
             max_retries=j.max_retries,
             default_headers={"User-Agent": j.user_agent, "x-opencode-session": session},
             http_client=DefaultHttpxClient(event_hooks={"request": [self.http.on_request],
