@@ -652,6 +652,34 @@ def test_generate_all_writes_others_when_one_generation_fails():
     assert [r["qid"] for r in out] == ["q0", "q1", "q3", "q4"]
 
 
+def test_generate_all_writes_finished_generations_on_retrieve_error():
+    """검색 오류로 멈춰도 이미 비용을 낸 생성은 쓴다(이슈 #156)."""
+    from types import SimpleNamespace
+
+    from rag.gen_eval.generate import generate_all
+
+    class BrokenRetrieve:
+        cfg = SimpleNamespace(generator=SimpleNamespace(context_docs=1))
+
+        def retrieve(self, query, emb, k, qid):
+            if qid == "q3":
+                raise SystemExit("재정렬 점수 없음")
+            return [{"n": 1, "doc_id": qid}]
+
+        def messages(self, contexts, query):
+            return [{"role": "user", "content": query}]
+
+        def generate(self, messages, stream, echo, langsmith_extra=None):
+            return {"answer": "a", "thought": None, "usage": {}, "provider": "p",
+                    "first_token_s": 0.1, "total_s": 0.2}
+
+    out = []
+    items = [(f"q{i}", f"질의{i}", None) for i in range(6)]
+    with pytest.raises(SystemExit, match="재정렬 점수 없음"):
+        generate_all(BrokenRetrieve(), items, {"model": "m"}, 2, 0, out.append)
+    assert [r["qid"] for r in out] == ["q0", "q1", "q2"]  # 검색 오류 앞 질의의 생성은 남긴다
+
+
 def test_http_counts_record_sdk_retries():
     """SDK가 429를 다시 시도하면 요청마다 상태 코드가 남는다(D-51)."""
     import httpx
