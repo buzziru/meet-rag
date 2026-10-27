@@ -15,7 +15,6 @@ from functools import cache
 from pathlib import Path
 
 import numpy as np
-from dotenv import load_dotenv
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
@@ -25,8 +24,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CHUNKS = "chunks.jsonl"  # 인덱스 디렉터리의 청크 파일. 줄 순서가 임베딩 행 순서다
 COMMIT = re.compile(r"[0-9a-f]{40}")  # HF 커밋 해시(revision 고정, D-46)
 
-# HF_HOME은 .env에서 읽는다. transformers를 import하기 전에 정해야 캐시 위치가 바뀐다
-load_dotenv(ROOT / ".env")
+# HF_HOME은 Doppler가 넣는다(`doppler run --`). transformers를 import하기 전에 정해야
+# 캐시 위치가 바뀐다
 if os.environ.get("HF_HOME") and not Path(os.environ["HF_HOME"]).is_absolute():
     os.environ["HF_HOME"] = str(ROOT / os.environ["HF_HOME"])
 

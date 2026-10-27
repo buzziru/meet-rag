@@ -5,9 +5,10 @@ nbclient는 실행마다 커널을 새로 띄워, 한 셀이 실패하면 처음
 띄워 두고 셀을 하나씩 실행하므로 앞 셀의 상태가 남는다.
 
 사용 (저장소 루트에서):
-  uv run python .claude/skills/meet-rag/scripts/nb_kernel.py start
+  doppler run -- uv run python .claude/skills/meet-rag/scripts/nb_kernel.py start
   ... run notebooks/X.ipynb [--from N] [--to M]   # N·M은 0부터 센 셀 번호(마크다운 포함)
   ... stop
+  (start만 `doppler run --`으로 띄운다. 커널이 그 환경의 API 키와 HF_HOME을 물려받는다)
 
 - 커널 작업 디렉터리는 notebooks/다(노트북 규약 ROOT = Path.cwd().parent)
 - run은 먼저 `ruff check --fix`를 노트북에 적용하고 남은 지적을 출력한다(PR 전 ruff 오류를
