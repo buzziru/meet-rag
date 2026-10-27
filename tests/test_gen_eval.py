@@ -693,6 +693,64 @@ def test_generate_all_writes_others_when_one_generation_fails():
     assert [r["qid"] for r in out] == ["q0", "q1", "q3", "q4"]
 
 
+def test_generate_all_writes_finished_generations_on_retrieve_error():
+    """검색 오류로 멈춰도 이미 비용을 낸 생성은 쓴다(이슈 #156)."""
+    from types import SimpleNamespace
+
+    from rag.gen_eval.generate import generate_all
+
+    class BrokenRetrieve:
+        cfg = SimpleNamespace(generator=SimpleNamespace(context_docs=1))
+
+        def retrieve(self, query, emb, k, qid):
+            if qid == "q3":
+                raise SystemExit("재정렬 점수 없음")
+            return [{"n": 1, "doc_id": qid}]
+
+        def messages(self, contexts, query):
+            return [{"role": "user", "content": query}]
+
+        def generate(self, messages, stream, echo, langsmith_extra=None):
+            return {"answer": "a", "thought": None, "usage": {}, "provider": "p",
+                    "first_token_s": 0.1, "total_s": 0.2}
+
+    out = []
+    items = [(f"q{i}", f"질의{i}", None) for i in range(6)]
+    with pytest.raises(SystemExit, match="재정렬 점수 없음"):
+        generate_all(BrokenRetrieve(), items, {"model": "m"}, 2, 0, out.append)
+    assert [r["qid"] for r in out] == ["q0", "q1", "q2"]  # 검색 오류 앞 질의의 생성은 남긴다
+
+
+def test_generate_all_writes_while_still_retrieving():
+    """검색이 끝나기를 기다리지 않고, 끝난 생성은 그때그때 쓴다(강제 종료에도 남게)."""
+    import time
+    from types import SimpleNamespace
+
+    from rag.gen_eval.generate import generate_all
+    events = []
+
+    class SlowRetrieve:
+        cfg = SimpleNamespace(generator=SimpleNamespace(context_docs=1))
+
+        def retrieve(self, query, emb, k, qid):
+            time.sleep(0.05)
+            events.append(("r", qid))
+            return [{"n": 1, "doc_id": qid}]
+
+        def messages(self, contexts, query):
+            return [{"role": "user", "content": query}]
+
+        def generate(self, messages, stream, echo, langsmith_extra=None):
+            return {"answer": "a", "thought": None, "usage": {}, "provider": "p",
+                    "first_token_s": 0.1, "total_s": 0.2}
+
+    items = [(f"q{i}", f"질의{i}", None) for i in range(6)]
+    generate_all(SlowRetrieve(), items, {"model": "m"}, 2, 0,
+                 lambda r: events.append(("w", r["qid"])))
+    assert events.index(("w", "q0")) < events.index(("r", "q5"))
+    assert [q for e, q in events if e == "w"] == [q for q, _, _ in items]  # 표본 순서 유지
+
+
 def test_http_counts_record_sdk_retries():
     """SDK가 429를 다시 시도하면 요청마다 상태 코드가 남는다(D-51)."""
     import httpx
@@ -718,3 +776,56 @@ def test_http_counts_record_sdk_retries():
                                  "성공 호출 밖 요청(재시도·실패) 1회")
     counts.requests += 1  # 타임아웃처럼 응답 없이 끝난 요청
     assert "응답 없음 1" in counts.summary(1)
+
+
+def test_run_all_stops_on_first_failure_and_names_it():
+    """한 항목이 실패하면 시작하지 않은 항목을 취소하고 실패 항목과 원인을 적는다(이슈 #156)."""
+    import threading
+    import time
+
+    from rag.gen_eval.judge import run_all
+    started, lock = [], threading.Lock()
+
+    def fn(x):
+        with lock:
+            started.append(x)
+        if x == 2:
+            raise RuntimeError("timeout")
+        time.sleep(0.05)  # API 호출처럼 메인이 실패를 알아챌 시간이 있게 한다
+        return x * 10
+
+    with pytest.raises(SystemExit, match=r"judge 실패 1건(.|\n)*q2: RuntimeError: timeout"):
+        run_all(fn, list(range(100)), 1, lambda x: f"q{x}")
+    assert len(started) <= 5  # 실패 뒤 항목은 거의 시작하지 않는다(100개 중)
+    assert run_all(lambda x: x * 10, [3, 1, 2], 4, str) == [30, 10, 20]  # 입력 순서
+
+
+def test_run_all_does_not_wait_for_slow_earlier_item():
+    """앞 항목이 늦어도 뒤 항목의 실패에서 바로 멈춘다. map은 앞 항목이 끝날 때까지 실패를 몰라
+    다른 워커가 남은 항목을 계속 처리했다(이슈 #156)."""
+    import threading
+    import time
+
+    from rag.gen_eval.judge import run_all
+    started, lock = [], threading.Lock()
+
+    def fn(x):
+        with lock:
+            started.append(x)
+        if x == 0:
+            time.sleep(2)  # 응답이 늦는 앞 질의
+        elif x == 1:
+            raise RuntimeError("timeout")
+        else:
+            time.sleep(0.05)
+        return x
+
+    with pytest.raises(SystemExit, match="q1: RuntimeError"):
+        run_all(fn, list(range(100)), 2, lambda x: f"q{x}")
+    assert len(started) <= 6  # map이면 앞 질의 2초 동안 약 40개를 더 시작한다
+
+
+def test_judge_configs_pass_timeout_and_retries():
+    for judge in ("deepseek_go", "deepseek_go_mixed", "deepseek_openrouter"):
+        j = load_cfg([f"judge={judge}"]).judge
+        assert (j.timeout, j.max_retries) == (120, 1)

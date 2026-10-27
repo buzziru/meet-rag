@@ -32,7 +32,8 @@ def generate_all(pipe, items: list[tuple[str, str, object]], rec: dict, concurre
     """items의 (qid, 질의, 질의 임베딩)을 검색은 차례로, 생성은 동시에 처리해 표본 순서대로
     write(record)한다. 기록 형식은 Pipeline.run과 같고 retrieve_s(검색·프롬프트 조립 시간)·
     concurrency·gen_rep를 더한다. 생성이 실패한 질의는 건너뛰고 나머지는 모두 쓴 뒤, 실패가
-    있으면 그 qid를 알리고 멈춘다. 다시 실행하면 쓰지 않은 질의만 생성한다."""
+    있으면 그 qid를 알리고 멈춘다. 검색 오류나 Ctrl+C로 멈출 때도 끝난 생성은 쓴다. 다시
+    실행하면 쓰지 않은 질의만 생성한다."""
     k = pipe.cfg.generator.context_docs
 
     def gen(qid, query, contexts, messages, retrieve_s):
@@ -44,20 +45,45 @@ def generate_all(pipe, items: list[tuple[str, str, object]], rec: dict, concurre
                 "concurrency": concurrency, "gen_rep": gen_rep,
                 "langsmith_run_id": str(run_id), "recipe": rec}
 
-    with ThreadPoolExecutor(concurrency) as ex:
-        futures = []
+    pending, failed = [], []  # 아직 쓰지 않은 (qid, future), 생성이 실패한 질의
+
+    def flush(block: bool = True):
+        """표본 순서대로 끝난 생성을 쓴다. 429 등 한 질의의 실패로 다른 생성을 버리지 않는다.
+        block=False면 맨 앞이 아직 끝나지 않았을 때 기다리지 않고 돌아간다."""
+        while pending:
+            qid, f = pending[0]
+            if not block and not f.done():
+                return
+            if f.cancelled():
+                pending.pop(0)
+                continue
+            try:
+                r = f.result()
+            except Exception as e:
+                pending.pop(0)
+                failed.append(f"{qid}: {type(e).__name__}: {e}")
+                continue
+            pending.pop(0)
+            write(r)
+
+    ex = ThreadPoolExecutor(concurrency)
+    try:
         for qid, query, emb in items:
             t0 = time.perf_counter()
             contexts = pipe.retrieve(query, emb, k, qid)
             messages = pipe.messages(contexts, query)
-            futures.append(ex.submit(gen, qid, query, contexts, messages,
-                                     time.perf_counter() - t0))
-        failed = []
-        for (qid, _, _), f in zip(items, futures, strict=True):
-            try:
-                write(f.result())
-            except Exception as e:  # 429 등 한 질의의 실패로 끝난 다른 생성을 버리지 않는다
-                failed.append(f"{qid}: {type(e).__name__}: {e}")
+            pending.append((qid, ex.submit(gen, qid, query, contexts, messages,
+                                           time.perf_counter() - t0)))
+            flush(block=False)  # 검색하는 동안 끝난 생성은 바로 써 둔다
+        flush()
+    except BaseException:
+        # 검색 오류나 Ctrl+C: 시작하지 않은 생성은 취소하고, 비용을 낸 생성은 실행 중인 것까지
+        # 끝나는 대로 쓴 뒤 멈춘다. 다시 실행하면 쓰지 않은 질의만 생성한다(이슈 #156)
+        ex.shutdown(cancel_futures=True)
+        flush()
+        raise
+    finally:
+        ex.shutdown()
     if failed:
         raise SystemExit(f"생성 실패 {len(failed)}건(다시 실행하면 이어 쓴다):\n"
                          + "\n".join(failed))

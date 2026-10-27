@@ -12,6 +12,7 @@ params:
   temperature: 0.0
   max_tokens: 16384
 extra_body: null
-timeout: 300
+timeout: 120  # deepseek_go.yaml과 같다
+max_retries: 1
 concurrency: 4
 rep: 0  # judge 반복 번호(S24). deepseek_go.yaml과 같다
