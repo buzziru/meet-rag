@@ -22,6 +22,8 @@ description: meet-rag EXP의 dev-full 결과를 SPEC 판정 규칙으로 채택�
 
 S9 이후 EXP는 multi-doc 결과도 적는다(PLAN). `src/rag/eval_multi/`의 비교 명령으로 기준·후보 multi-doc 순위 파일의 지표 차이와 95% 구간을 낸다. 판정에는 쓰지 않는다(SPEC "보조 관찰"). 예외는 메타데이터 가설이다(3절).
 
+메타데이터 가설이면 메인이 준 single-doc 비교 결과 JSON(`rag.eval.compare --out`)을 `--single`로 넘겨 판정까지 함수로 낸다(S18, D-43): `uv run python -m rag.eval_multi.compare --base <기준-multidoc.csv> --cand <후보-multidoc.csv> --single <single-doc 결과.json>`. 결과 JSON 끝의 `metadata_verdict`(`verdict`, `stage`, Recall@5·Complete@5 차이와 구간, 읽은 single-doc 결과의 경로·sha256)가 판정이다. 명령이 single-doc 결과의 형식(dev-full 비교인지), 같은 실험의 순위 쌍인지, 지금 `min_gain`으로 다시 판정한 값이 기록과 같은지를 보고 어긋나면 멈춘다. 멈추면 판정하지 않고 그 메시지를 보고한다. 명령 대신 `metadata_result`를 Python에서 직접 부르면 `check_single`을 먼저 불러 같은 확인을 거친다(PR #129, 사용자 결정 2026-10-21). 3절 표를 손으로 적용해 판정을 대신하지 않는다. 손으로 적용하면 형식·짝 확인이 빠진다.
+
 평가 모듈에 필요한 기능이 없으면 직접 구현하지 말고 그 사실을 보고한다.
 
 ## 3. 판정
@@ -43,6 +45,10 @@ single-doc (dev-full Recall@5, 회의 단위 bootstrap):
 | Recall@5 차이 95% 구간 하한 > 0, 점 추정 ≥ +1.0%p, Complete@5 차이 95% 구간 상한 ≥ 0 | 채택 |
 | Recall@5 차이 95% 구간 상한 < 0 | 기각 |
 | 그 밖 | 보류 |
+
+이 표는 `metadata_verdict`가 하는 판정의 요약이다. 판정 값은 2절 명령의 결과를 쓴다.
+
++1.0%p는 사람 판단 없이 채택하는 선이다(D-35, 메타데이터 가설의 multi-doc 단계도 같다). multi-doc 단계 보류 중 Recall@5 점 추정이 +1.0%p 미만이고 95% 구간 하한 > 0이면 판정은 보류로 두고 결론에 "예외 검토 대상(D-35)"으로 적는다. 예: multi-doc Recall@5 +0.8%p [+0.2, +1.4], Complete@5 구간 상한 ≥ 0이면 `metadata_verdict`는 보류이고 예외 검토 대상이다. 예외로 올릴지는 사용자가 D-33의 선례로 정하므로 판정·권고로 정하지 않는다.
 
 결론에는 어느 단계(single-doc, multi-doc)에서 판정이 정해졌는지 적는다. multi-doc에서 채택했으면 SPEC 단서(세트가 메타데이터 검색에 유리함, test로 다시 확인할 수 없음)를 함께 적는다.
 
