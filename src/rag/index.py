@@ -34,6 +34,8 @@ if os.environ.get("HF_HOME") and not Path(os.environ["HF_HOME"]).is_absolute():
 OmegaConf.register_new_resolver("rep", lambda n: f"-r{n}" if int(n) else "", replace=True)
 # 생성 근거 조건(S26). 기본 retrieved는 경로에 붙지 않아 이전 기록 경로가 그대로다
 OmegaConf.register_new_resolver("ctx", lambda c: "" if c == "retrieved" else f"-{c}", replace=True)
+# 발언자 표시(S29). 기본 off는 경로에 붙지 않아 이전 기록 경로가 그대로다
+OmegaConf.register_new_resolver("spk", lambda m: "" if m == "off" else f"-spk-{m}", replace=True)
 
 
 def load_cfg(overrides=()):

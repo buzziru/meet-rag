@@ -1,0 +1,167 @@
+"""근거 청크의 발언자 정보(S29, docs/slices/29-speakers.md).
+
+원천 데이터는 회의록 전문이 아니라 질의·답변 2행이라(docs/data.md §5) 본문 전체의 발언별 발언자는
+없다. 붙일 수 있는 것은 문서의 화자 목록(corpus의 questioners·answerers)과, 라벨의 질의·답변 발언이
+본문에서 차지하는 구간이다. 구간은 실행할 때 원천 라벨에서 만든다(6.9초). 라벨의 질의 텍스트
+(summary_q)는 읽지 않는다(사용자 결정 2026-10-28, 결정 사항 2).
+
+uv run python -m rag.speakers [--gen <생성 기록.jsonl>]: 채움 비율과 발언 일치 수, 생성 기록을 주면
+그 근거에 붙는 겹침 표지 수를 출력한다. 파일은 쓰지 않는다.
+"""
+
+import argparse
+import json
+from collections import Counter
+from collections.abc import Iterable
+
+from rag.index import ROOT, corpus_meta, load_cfg
+from rag.ingest import SPEAKER_KEYS, iter_labels, make_doc_id, speaker
+
+ROLES = {"question": "questioner", "answer": "answerer"}  # 라벨 발언 키 → 화자 키 접두사
+MODES = ("off", "head", "marks")
+TAGS = {"question": "질의", "answer": "답변"}
+
+
+def check_mode(mode) -> str:
+    """speakers.mode가 off·head·marks 중 하나인지 본다. YAML의 따옴표 없는 off는 False로 읽힌다."""
+    if mode not in MODES:
+        raise SystemExit(f"speakers.mode는 off·head·marks 중 하나다: {mode!r}")
+    return mode
+
+
+def person(p: dict, affiliation: bool = True) -> str:
+    keys = ("name", "affiliation", "position") if affiliation else ("name", "position")
+    return " ".join(p[k] for k in keys if p[k])
+
+
+def render(c: dict) -> str:
+    """근거 text에 speakers 표시를 붙인 문자열. speakers가 없으면 text 그대로다(S25와 같은 입력).
+
+    머리 줄 `질의자: 홍길동 위원 / 답변자: 김철수 국토교통부 장관`, 겹친 구간은
+    `〈질의 홍길동 위원〉…〈/질의〉`. 생성(build_messages)과 judge(format_contexts)가 같이 쓴다.
+    """
+    s = c.get("speakers")
+    if s is None:
+        return c["text"]
+    names = {f: ", ".join(map(person, s[f])) or "알 수 없음" for f in ("questioners", "answerers")}
+    head = f"질의자: {names['questioners']} / 답변자: {names['answerers']}"
+    text = c["text"]
+    events = []  # (위치, 같은 위치에서 닫는 표지 먼저, 표지)
+    for sp in s.get("spans", []):
+        tag = TAGS[sp["role"]]
+        events += [(sp["start"], 1, f"〈{tag} {person(sp, affiliation=False)}〉"),
+                   (sp["end"], 0, f"〈/{tag}〉")]
+    out, pos = [], 0
+    for at, _, tag in sorted(events, key=lambda e: (e[0], e[1])):
+        out += [text[pos:at], tag]
+        pos = at
+    return f"{head}\n{''.join(out)}{text[pos:]}"
+
+
+def doc_spans(records: Iterable[tuple[str, dict]], titles: tuple[str, ...],
+              repeat_min_chars: int) -> dict[str, list[dict]]:
+    """원천 라벨에서 문서별 발언 구간. 구간의 화자는 그 발언이 나온 QA의 화자다(ingest 정규화).
+
+    발언이 본문에 여러 번 나오면 모든 위치를 둔다(어느 위치인지 라벨에 없다). 다만 repeat_min_chars
+    보다 짧은 발언이 여러 번 나오면 구간을 두지 않는다. "예.", "그렇습니다." 같은 문자열은 다른
+    사람의 발언에도 나와 화자를 잘못 붙인다(PR #178 리뷰 2). 본문에 그대로 없는 발언은 구간이 없다.
+    같은 역할·화자·위치는 한 번만 둔다.
+    """
+    out = {}
+    for _, r in records:
+        spans = out.setdefault(make_doc_id(r["conference_number"], r["context"]), [])
+        for role, prefix in ROLES.items():
+            text = r[role]["comment"]
+            person = speaker(r, prefix, titles)
+            short_repeat = len(text) < repeat_min_chars and r["context"].count(text) > 1
+            i = r["context"].find(text) if text and not short_repeat else -1
+            while i >= 0:
+                span = {"role": role, "start": i, "end": i + len(text), **person}
+                if span not in spans:
+                    spans.append(span)
+                i = r["context"].find(text, i + 1)
+    for spans in out.values():
+        spans.sort(key=lambda s: (s["start"], s["end"], s["role"]))
+    return out
+
+
+def chunk_speakers(doc: dict, spans: list[dict], start: int, end: int, mode: str) -> dict:
+    """청크 [start, end)의 speakers 필드. head는 문서 화자 목록만, marks는 청크 안 발언 구간도 둔다.
+
+    구간 위치는 청크 text 안의 문자 위치이고, 청크 경계에 걸린 구간은 청크 안 부분만 남긴다.
+    """
+    out = {"questioners": doc["questioners"], "answerers": doc["answerers"]}
+    if mode == "marks":
+        out["spans"] = [{**s, "start": max(s["start"], start) - start,
+                         "end": min(s["end"], end) - start}
+                        for s in spans if s["start"] < end and s["end"] > start]
+    return out
+
+
+def fill_counts(docs: Iterable[dict]) -> Counter:
+    """화자 필드가 채워진 문서 수(역할·키별)와 화자가 둘 이상인 문서 수."""
+    c = Counter()
+    for d in docs:
+        c["docs"] += 1
+        for field in ("questioners", "answerers"):
+            people = d[field]
+            c[f"{field}.any"] += bool(people)
+            c[f"{field}.multi"] += len(people) > 1
+            for k in SPEAKER_KEYS:
+                c[f"{field}.{k}"] += any(p[k] for p in people)
+    return c
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="발언자 정보 채움 비율과 겹침 표지 수")
+    ap.add_argument("--gen", help="생성 기록(jsonl). 근거마다 겹침 표지가 붙는지 센다")
+    args = ap.parse_args()
+    cfg = load_cfg()
+    docs = corpus_meta(cfg)
+    n = len(docs)
+    for k, v in sorted(fill_counts(docs).items()):
+        print(f"{k}\t{v}\t{v / n:.4f}")
+
+    contexts, found = {}, Counter()
+
+    def counted():
+        """발언이 본문에 그대로 있는 QA 수를 세며 라벨을 넘긴다. --gen이면 본문을 남긴다."""
+        for split, r in iter_labels(ROOT / cfg.paths.raw_dir):
+            for role in ROLES:
+                found[f"{role}.qa"] += 1
+                found[f"{role}.found"] += r[role]["comment"] in r["context"]
+                found[f"{role}.repeat"] += r["context"].count(r[role]["comment"]) > 1
+            if args.gen:
+                contexts[make_doc_id(r["conference_number"], r["context"])] = r["context"]
+            yield split, r
+
+    spans = doc_spans(counted(), tuple(cfg.ingest.name_titles), cfg.speakers.repeat_min_chars)
+    for k, v in sorted(found.items()):
+        print(f"{k}\t{v}")
+    if not args.gen:
+        return
+
+    c = Counter()
+    with open(args.gen, encoding="utf-8") as f:
+        for g in map(json.loads, f):
+            c["queries"] += 1
+            for ctx in g["contexts"]:
+                start = contexts[ctx["doc_id"]].find(ctx["text"])
+                if start < 0:
+                    raise SystemExit(f"근거 text가 문서 본문에 없다: {g['qid']} {ctx['doc_id']}")
+                got = chunk_speakers({"questioners": [], "answerers": []}, spans[ctx["doc_id"]],
+                                     start, start + len(ctx["text"]), "marks")["spans"]
+                marked = set()
+                for s in got:
+                    marked.update(range(s["start"], s["end"]))
+                c["contexts"] += 1
+                c["contexts_marked"] += bool(got)
+                c["chars"] += len(ctx["text"])
+                c["chars_marked"] += len(marked)
+    print(f"질의 {c['queries']}개, 근거 {c['contexts']}개 중 표지 있음 {c['contexts_marked']}"
+          f"({c['contexts_marked'] / c['contexts']:.3f}), "
+          f"표지 문자 비율 {c['chars_marked'] / c['chars']:.3f}")
+
+
+if __name__ == "__main__":
+    main()

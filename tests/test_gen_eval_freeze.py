@@ -19,6 +19,8 @@ from rag.index import load_cfg
 
 FROZEN_PROMPT = "j_v8"
 FROZEN_PROMPT_SHA256 = "fc8b56034f35d1809db92f1ce5cdf250f09773c11f407379088a40da86bd4de8"
+# 발언자 표시 기록용 지시(S29). 기본값이 아니고 H20 EXP에서 judge/prompt=j_v9로 고른다
+FROZEN_J_V9_SHA256 = "e8a699e829f29ce2376059b0d724dc576122d3606daa88087f665f8cbc4e77eb"
 FROZEN_FORMAT_RETRY = "fr_v1"
 FROZEN_FORMAT_RETRY_SHA256 = "95edd01f8bba4b487f7c57044e07f59de161257b5e0af43694b6d7b2a838042c"
 FROZEN_FORMAT_RETRY_LIMIT = 1
@@ -43,6 +45,12 @@ def test_default_judge_prompt_is_frozen_j_v8():
     assert prompt.version == FROZEN_PROMPT
     # judge_recipe의 prompt_sha256과 같은 계산이다
     assert sha(OmegaConf.to_container(prompt, resolve=True)) == FROZEN_PROMPT_SHA256
+
+
+def test_j_v9_prompt_is_frozen():
+    prompt = load_cfg(["index.scope=full", "judge/prompt=j_v9"]).judge.prompt
+    assert prompt.version == "j_v9"
+    assert sha(OmegaConf.to_container(prompt, resolve=True)) == FROZEN_J_V9_SHA256
 
 
 def test_outcome_table_is_frozen():
@@ -101,7 +109,7 @@ REPLIES = {
 }
 
 
-def request_shas(tmp_path) -> dict[str, str]:
+def request_shas(tmp_path, contexts=CONTEXTS) -> dict[str, str]:
     """기본 설정의 Judge로 합성 기록 하나를 채점하며 단계별로 보낸 요청 본문의 sha256을 모은다.
     API 대신 단계마다 정한 응답을 돌려준다."""
     cfg = load_cfg(["index.scope=full"])
@@ -123,7 +131,7 @@ def request_shas(tmp_path) -> dict[str, str]:
     j.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     j.cache, j.lock, j.calls, j.hits = tmp_path, threading.Lock(), 0, 0
     gen = {"qid": "q1", "query": "내년 예산 계획은?",
-           "answer": "장관은 내년에 예산을 늘리겠다고 답했다[1].", "contexts": CONTEXTS,
+           "answer": "장관은 내년에 예산을 늘리겠다고 답했다[1].", "contexts": contexts,
            "usage": None, "provider": "p", "first_token_s": 1.0, "total_s": 2.0}
     ref = {"doc_id": "d1", "answer_comment": "예산을 늘리겠습니다."}
     out = judge_record.__wrapped__(j, gen, ref, cfg, {"가위원회", "나위원회"})
@@ -133,3 +141,14 @@ def request_shas(tmp_path) -> dict[str, str]:
 
 def test_judge_request_bodies_are_frozen(tmp_path):
     assert request_shas(tmp_path) == FROZEN_REQUEST_SHA256
+
+
+def test_speakers_change_only_context_steps(tmp_path):
+    """S29: 근거에 speakers가 있으면 근거를 받는 verdicts·items 요청만 바뀌고, 정답 청크 발췌를 받는
+    chunk_checks는 원문 text 그대로다. speakers가 없는 기록은 위 고정값과 같다."""
+    spk = {"questioners": [{"name": "홍길동", "position": "위원", "affiliation": ""}],
+           "answerers": [{"name": "김철수", "position": "장관", "affiliation": ""}]}
+    marked = [{**c, "speakers": spk} for c in CONTEXTS]
+    got = request_shas(tmp_path, marked)
+    changed = {k for k in FROZEN_REQUEST_SHA256 if got[k] != FROZEN_REQUEST_SHA256[k]}
+    assert changed == {"verdicts", "items"}

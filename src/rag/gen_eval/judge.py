@@ -41,6 +41,7 @@ from rag.gen_eval.checks import (
 )
 from rag.gen_eval.common import eval_qids, load_refs, read_jsonl, stable
 from rag.index import ROOT, git_state, load_cfg, refuse_existing, require_env, write_guarded
+from rag.speakers import render as render_context
 
 RELEVANCE = {"답함": 1.0, "일부": 0.5, "답하지 않음": 0.0}
 
@@ -72,8 +73,9 @@ def parse_json(text: str | None) -> dict | None:
 
 
 def format_contexts(contexts: list[dict]) -> str:
+    """근거 본문은 생성 모델이 받은 것과 같게 렌더링한다(speakers가 없으면 text 그대로, S29)."""
     return "\n\n".join(f"[{c['n']}] {c['date']} {c['committee_name']} {c['meeting_number']} "
-                       f"{c['session_number']}\n{c['text']}" for c in contexts)
+                       f"{c['session_number']}\n{render_context(c)}" for c in contexts)
 
 
 def check_prompt(cfg, gen_recipe: dict) -> None:
@@ -82,6 +84,16 @@ def check_prompt(cfg, gen_recipe: dict) -> None:
     if gen_recipe["prompt_sha256"] != sha(OmegaConf.to_container(cfg.prompt, resolve=True)):
         raise SystemExit(f"생성 기록의 프롬프트({gen_recipe['prompt_version']})가 지금 prompt "
                          "설정과 다르다. 생성에 쓴 프롬프트 파일로 채점한다")
+
+
+def check_speakers(cfg, gen_recipe: dict) -> None:
+    """발언자 표시(S29)가 붙은 생성 기록은 표지를 읽는 지시(speaker_marks: true, j_v9)로만 채점한다.
+    j_v8은 "근거에는 발언자 표기가 없다"고 해, 그대로 채점하면 compare가 기준(off·j_v8)과 비교해
+    판정까지 간다(PR #178 리뷰 1). 표시 없는 기록의 j_v9 채점은 재검증에 쓰여 막지 않는다."""
+    if gen_recipe.get("speakers") and not cfg.judge.prompt.get("speaker_marks"):
+        raise SystemExit(f"생성 기록에 발언자 표시({gen_recipe['speakers']})가 있는데 judge "
+                         f"지시 {cfg.judge.prompt.version}는 표지를 읽지 않는다. "
+                         "judge/prompt=j_v9로 채점한다")
 
 
 def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
@@ -481,6 +493,7 @@ def main() -> None:
     if len(recipes) != 1:
         raise SystemExit("생성 기록의 레시피가 여럿이다")
     check_prompt(cfg, gens[qids[0]]["recipe"])
+    check_speakers(cfg, gens[qids[0]]["recipe"])
     rec = judge_recipe(cfg, [gens[q]["recipe"] for q in qids])
     judge = Judge(cfg, session=f"meet-rag-judge-{sha(stable(rec))[:16]}")
 
