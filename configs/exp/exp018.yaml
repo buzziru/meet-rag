@@ -1,0 +1,7 @@
+# @package _global_
+# EXP-018 H24+H19 거부 형식: 기준 설정(EXP-017) 위에서 생성 프롬프트만 v3로 바꾼다
+# (docs/experiments/EXP-018.md). 검색·judge 설정은 그대로다
+defaults:
+  - exp017
+  - override /prompt: v3
+  - _self_
