@@ -55,7 +55,7 @@
 3. `speakers.mode`는 `configs/config.yaml`에 기본 `off`로 두고, `off`가 아니면 생성 레시피와 생성·judge 기록 경로(`paths.gen_runs`·`gen_judge`)에 표시한다. `off`면 레시피와 경로가 지금과 같다(S25 기록을 그대로 읽는다)
 4. "필드가 없는 기록의 judge 요청 본문 sha가 지금과 같음"은 생성 평가 모듈 리뷰 수정 SLICE(S28)가 만드는 G1-3 고정 테스트 위에 더한다. `build_messages`도 `speakers`가 없으면 지금과 같은 메시지를 내는지 테스트한다
 5. judge 입력 코드(`format_contexts`)를 바꾸는 이유와 결정 사항 1·2를 DECISIONS에 새 결정으로 적고, D-56 결정 3 줄 끝에 `보강: D-NN`을 붙인다(`docs/CLAUDE.md`). 번호는 S28이 병합된 뒤 비어 있는 다음 번호다
-6. 채움 비율·겹침 비율을 다시 셀 수 있게 `uv run python -m rag.speakers [--gen <생성 기록.jsonl>]`을 둔다. 코퍼스 화자 필드 채움 비율과, 생성 기록을 주면 그 근거 중 겹침 표지가 붙는 근거 수·표지 문자 비율을 출력하고 파일은 쓰지 않는다. dev 질의 발언의 일치 수(위 표)는 dev 질의만 센다
+6. 채움 비율·겹침 비율을 다시 셀 수 있게 `uv run python -m rag.speakers [--gen <생성 기록.jsonl>]`을 둔다. 코퍼스 화자 필드 채움 비율과, 생성 기록을 주면 그 근거 중 겹침 표지가 붙는 근거 수·표지 문자 비율을 출력하고 파일은 쓰지 않는다. 발언 일치 수는 원천 라벨 QA 전체로 센다(결정 사항 2 (a)로 라벨은 쓸 수 있다. 위 표의 dev 수치는 결정 전 메인이 dev만 센 값이다)
 
 ## 순서 (사용자 결정 2026-10-28)
 
@@ -72,7 +72,7 @@ S28이 `src/rag/gen_eval/judge.py`·`src/rag/generate.py`·`tests/test_gen_eval_
 | 2 | `tests/test_speakers.py` | 합성 문서로 구간 계산(여러 위치, 찾지 못한 발언, 청크 경계 자르기, 화자 여럿, 중복 제거)이 기대값과 같다 |
 | 2b | `tests/test_speakers.py`의 j_v9 대조 | j_v9의 `version`·머리 주석을 뺀 단계별 지시가 j_v8과 같고, 다른 곳은 `verdicts` 규칙 5와 `items` 규칙 3의 첫 문장뿐이다 |
 | 3 | `uv run python -m rag.speakers` | 위 "배경 수치" 표의 채움 비율·문서 수와 같다. 두 번 실행하면 같은 출력 |
-| 4 | `uv run python -m rag.speakers --gen <S25 gen-full 생성 기록>` | 330질의 근거의 표지 붙는 근거 수와 표지 문자 비율이 나온다(결과 절에 적음). `data/` 아래 파일이 바뀌지 않는다 |
+| 4 | `uv run python -m rag.speakers --gen <S25 생성 기록 …-dev-full.jsonl>` | 그 파일의 430질의(판정용 330과 블라인드 풀 100) 근거의 표지 붙는 근거 수와 표지 문자 비율이 나온다(결과 절에 적음). `data/` 아래 파일이 바뀌지 않는다 |
 | 5 | sha 고정 테스트(2단계) | `speakers`가 없는 기록의 judge 요청 본문 sha와 생성 메시지가 S28 고정값과 같다. `speakers`가 있으면 렌더링 문자열이 메인이 정한 것 2의 형식이다 |
 | 6 | 기본 설정 `rag.gen_eval.generate +exp=exp017`의 레시피·경로(호출 없이 함수로 확인) | S25 생성 기록의 레시피·경로와 같다. `speakers.mode=marks`면 경로·레시피가 다르다 |
 
@@ -85,3 +85,11 @@ S28이 `src/rag/gen_eval/judge.py`·`src/rag/generate.py`·`tests/test_gen_eval_
 - 검색 텍스트(임베딩)에 발언자를 넣는 것, 재임베딩(D-56 근거)
 - judge 지시·판정표·기본 judge 설정(D-49 동결), 보호 경로(`src/rag/eval/`, `src/rag/eval_multi/`, `configs/eval/`, `data/splits/`, `multidoc.eval`, G3 동결 설정)
 - 생성 프롬프트 변경, H20 EXP 실행·판정, `data/processed/` 등 기존 산출물 변경
+
+## 결과
+
+### 1단계 (S28 병합 전, 2026-10-28)
+
+- `uv run pytest -q` 329 passed, `uv run ruff check .` 통과
+- `rag.speakers`: 채움 비율이 "배경 수치" 표와 같다. 두 번 실행한 출력이 같다. 원천 라벨 QA 39,633개 중 질의 발언 39,623개, 답변 발언 39,467개가 본문에 그대로 있고, 두 번 이상 나오는 발언은 질의 1,595개, 답변 1,068개다
+- `rag.speakers --gen data/gen_eval/runs/hybrid-cond-filter-law-ms256-k20-ce-v2-dev-full.jsonl`(S25): 430질의 근거 2,150개 중 1,228개(57.1%)에 겹침 표지가 붙고, 표지 문자는 근거 문자의 33.1%다. 실행 약 25초
