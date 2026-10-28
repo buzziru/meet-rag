@@ -47,7 +47,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 실험 지시서: `docs/experiments/EXP-NNN.md` (config는 `configs/exp/expNNN.yaml`)
 - 실험 결과 요약: `docs/EXPERIMENTS.md`
 - 채택 설정·방향 결정: `docs/DECISIONS.md`
-- docs 기록 규약(결정 작성, 바뀐 앞 결정 표시, 당시 기록 보강, 단계 종료 정합 점검): `docs/CLAUDE.md`
+- docs 기록 규약(결정 작성, 바뀐 앞 결정 표시, 당시 기록 보강, 단계 종료 정합 점검): `docs/CLAUDE.md`. `docs/` 문서를 고치거나 DECISIONS에 적힌 대상(config 값, 코드 동작, 명령)을 바꾸기 전에 읽는다. 하위 폴더 CLAUDE.md는 Read·Write·Edit로 그 폴더 파일을 다룰 때만 불러와지고, 셸로 고치거나 docs를 열지 않는 작업에는 불러와지지 않을 수 있다
 - 현재 상태: `docs/STATUS.md`
 - 브랜치·커밋·PR, 노트북 규약: `.claude/rules/`
 
