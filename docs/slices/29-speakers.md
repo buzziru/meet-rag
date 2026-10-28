@@ -40,7 +40,7 @@
 
 ## j_v9 (결정 사항 1, 사용자 확인 2026-10-28)
 
-1. 새 파일 `configs/judge/prompt/j_v9.yaml`. j_v8의 `verdicts` 규칙 5와 `items` 규칙 3의 첫 문장 "근거에는 발언자 표기가 없다."만 아래로 바꾸고, 나머지는 j_v8과 글자까지 같다. 기본 judge 설정은 j_v8 그대로이고(D-49 동결), H20 EXP에서 `judge.prompt=j_v9`로 고른다
+1. 새 파일 `configs/judge/prompt/j_v9.yaml`. j_v8의 `verdicts` 규칙 5와 `items` 규칙 3의 첫 문장 "근거에는 발언자 표기가 없다."만 아래로 바꾸고, 나머지는 j_v8과 글자까지 같다. 기본 judge 설정은 j_v8 그대로이고(D-49 동결), H20 EXP에서 `judge/prompt=j_v9`로 고른다
    - "근거 머리의 질의자·답변자는 그 문서의 화자 목록이고, 근거 본문에는 그중 한 사람의 발언만 있을 수 있다. 본문에 〈질의 …〉…〈/질의〉·〈답변 …〉…〈/답변〉 표지가 있으면 그 구간은 표지에 적힌 사람의 발언이다. 표지가 없는 부분과 발언자 표기가 없는 근거는 내용으로 보고 아래 세 갈래로 판정한다."
 2. 재검증(D-49)은 H20 EXP 직전의 j_v9 재채점이 겸한다. 같은 생성 기록을 j_v8과 j_v9로 채점해 질의마다 비교하고, 차이가 D-50의 judge 변동 폭 안인지 본다. 이 SLICE에서는 유료 호출을 하지 않는다
 3. j_v9 해시는 2단계에서 S28의 동결 테스트(`tests/test_gen_eval_freeze.py`)에 더한다. DECISIONS에 j_v9를 만든 이유와 재검증 시점을 적고 D-49에 `보강`을 붙인다
@@ -54,8 +54,10 @@
 2. 렌더링 문자열(2단계에서 확정해 테스트로 고정): 메타 줄 다음에 `질의자: 홍길동 위원 / 답변자: 김철수 국토교통부 장관`, 겹친 구간은 `〈질의 홍길동 위원〉…〈/질의〉`, `〈답변 김철수 장관〉…〈/답변〉`. 생성 프롬프트(v2)의 `context` 서식은 고치지 않고 `text` 자리에 렌더링한 문자열을 넣는다. 표기를 설명하는 지시를 프롬프트에 더할지는 H20 EXP에서 정한다
 3. `speakers.mode`는 `configs/config.yaml`에 기본 `off`로 두고, `off`가 아니면 생성 레시피와 생성·judge 기록 경로(`paths.gen_runs`·`gen_judge`)에 표시한다. `off`면 레시피와 경로가 지금과 같다(S25 기록을 그대로 읽는다)
 4. "필드가 없는 기록의 judge 요청 본문 sha가 지금과 같음"은 생성 평가 모듈 리뷰 수정 SLICE(S28)가 만드는 G1-3 고정 테스트 위에 더한다. `build_messages`도 `speakers`가 없으면 지금과 같은 메시지를 내는지 테스트한다
-5. judge 입력 코드(`format_contexts`)를 바꾸는 이유와 결정 사항 1·2를 DECISIONS에 새 결정으로 적고, D-56 결정 3 줄 끝에 `보강: D-NN`을 붙인다(`docs/CLAUDE.md`). 번호는 S28이 병합된 뒤 비어 있는 다음 번호다
+5. judge 입력 코드(`format_contexts`)를 바꾸는 이유와 결정 사항 1·2를 DECISIONS에 새 결정으로 적고, D-56 결정 3 줄 끝에 `보강: D-NN`을 붙인다(`docs/CLAUDE.md`). 번호는 코디네이터가 D-60으로 정했다. 같은 결정이 바꾸는 D-41 결정 4, D-49, D-59 결정 5에도 표시를 붙인다
+   - `paths.gen_runs`·`gen_judge`의 표시는 `rag.index`에 resolver `spk`(`off`면 빈 문자열, 아니면 `-spk-<mode>`)를 두어 붙인다(`ctx`·`rep`와 같은 방식)
 6. 채움 비율·겹침 비율을 다시 셀 수 있게 `uv run python -m rag.speakers [--gen <생성 기록.jsonl>]`을 둔다. 코퍼스 화자 필드 채움 비율과, 생성 기록을 주면 그 근거 중 겹침 표지가 붙는 근거 수·표지 문자 비율을 출력하고 파일은 쓰지 않는다. 발언 일치 수는 원천 라벨 QA 전체로 센다(결정 사항 2 (a)로 라벨은 쓸 수 있다. 위 표의 dev 수치는 결정 전 메인이 dev만 센 값이다)
+7. (2단계에서 정함) judge의 `chunk_checks`가 받는 정답 청크 발췌(`judge.py`의 `excerpt`)는 원문 `text` 그대로 둔다. 이 단계는 핵심 진술이 발췌에 있는지만 보고 발언자를 판정하지 않는다(`chunk_checks` 규칙 2). 화자 목록이 빈 문서(2개)는 머리 줄에 `알 수 없음`을 쓴다. `speakers.mode`가 off·head·marks 밖이면(따옴표 없는 YAML `off`가 False로 읽힌 경우 포함) 시작할 때 멈춘다
 
 ## 순서 (사용자 결정 2026-10-28)
 
@@ -78,7 +80,7 @@ S28이 `src/rag/gen_eval/judge.py`·`src/rag/generate.py`·`tests/test_gen_eval_
 
 ## 수정 허용 파일
 
-`src/rag/speakers.py`(새 파일), `tests/test_speakers.py`(새 파일), `configs/judge/prompt/j_v9.yaml`(새 파일), 2단계에서 `src/rag/gen_eval/judge.py`(`format_contexts`), `src/rag/generate.py`(`build_messages`, `Pipeline.retrieve`, `recipe`), `src/rag/gen_eval/generate.py`(레시피 표시가 필요하면), `tests/test_gen_eval_freeze.py`·`tests/test_gen_eval.py`·`tests/test_generate.py`(고정·렌더링 테스트), `configs/config.yaml`(`speakers.mode`, `paths.gen_runs`·`gen_judge`의 표시), `CLAUDE.md`(명령 한 줄), `docs/DECISIONS.md`, `docs/PLAN.md`·`docs/PLAN-done.md`, 이 문서
+`src/rag/speakers.py`(새 파일), `tests/test_speakers.py`(새 파일), `configs/judge/prompt/j_v9.yaml`(새 파일), 2단계에서 `src/rag/gen_eval/judge.py`(`format_contexts`), `src/rag/generate.py`(`build_messages`, `Pipeline.retrieve`, `recipe`), `src/rag/gen_eval/generate.py`(레시피 표시가 필요하면), `tests/test_gen_eval_freeze.py`·`tests/test_gen_eval.py`·`tests/test_generate.py`(고정·렌더링 테스트), `configs/config.yaml`(`speakers.mode`, `paths.gen_runs`·`gen_judge`의 표시), `src/rag/index.py`(resolver `spk`, 2단계에 더함), `CLAUDE.md`(명령 한 줄), `docs/DECISIONS.md`, `docs/gen-eval-criteria.md`(H20을 가리키는 줄의 `이후 변경` 표시, 2단계에 더함), `docs/PLAN.md`·`docs/PLAN-done.md`, 이 문서
 
 ## 범위 밖
 
@@ -93,3 +95,11 @@ S28이 `src/rag/gen_eval/judge.py`·`src/rag/generate.py`·`tests/test_gen_eval_
 - `uv run pytest -q` 329 passed, `uv run ruff check .` 통과
 - `rag.speakers`: 채움 비율이 "배경 수치" 표와 같다. 두 번 실행한 출력이 같다. 원천 라벨 QA 39,633개 중 질의 발언 39,623개, 답변 발언 39,467개가 본문에 그대로 있고, 두 번 이상 나오는 발언은 질의 1,595개, 답변 1,068개다
 - `rag.speakers --gen data/gen_eval/runs/hybrid-cond-filter-law-ms256-k20-ce-v2-dev-full.jsonl`(S25): 430질의 근거 2,150개 중 1,228개(57.1%)에 겹침 표지가 붙고, 표지 문자는 근거 문자의 33.1%다. 실행 약 25초
+
+### 2단계 (S28 병합 e5face4 뒤, 2026-10-28)
+
+- 커밋: 병합 c7b4c26, 구현 9ef17ce. `uv run pytest -q` 347 passed, `uv run ruff check .` 통과
+- S28 요청 본문 sha 고정 테스트(`test_judge_request_bodies_are_frozen`)가 처음 구현에서 `verdicts`·`items` 두 단계 불일치로 실패했다. `judge.py`에 템플릿용 `render`가 따로 있어 가져온 `rag.speakers.render`를 가렸고, 근거 자리에 dict 문자열이 들어갔다. `render_context`로 가져와 고친 뒤 기존 기대값 그대로 통과한다(기대값은 고치지 않았다). main(e5face4) 체크아웃에서는 같은 테스트가 통과함을 확인했다
+- 더한 테스트: `speakers`가 있으면 근거를 받는 `verdicts`·`items` 요청만 바뀌고 `chunk_checks`는 그대로, j_v9 해시 고정, `build_messages`의 렌더링(필드 없으면 지금 문자열과 같음), 레시피의 `speakers` 키(off면 없음), 렌더링 표지 순서, `speakers.mode` 값 확인
+- 경로: 기본 설정 `paths.gen_runs`는 `…-dev-full.jsonl`(S25와 같음), `speakers.mode=marks`면 `…-dev-full-spk-marks.jsonl`
+- 유료 호출 없는 실제 검색 확인(`Pipeline.retrieve`만, dev 질의 1개, `speakers.mode=marks`): 근거 5개 모두 화자 목록이 붙고 3개에 표지 구간 2개씩, 구간이 모두 청크 범위 안이다. 프롬프트에 머리 줄 5개와 답변 표지 3개가 들어간다. `Pipeline` 시작은 46.7초(원천 라벨 읽기 약 7초 포함)
