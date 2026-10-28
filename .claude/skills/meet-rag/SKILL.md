@@ -11,7 +11,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 | --- | --- | --- |
 | `slice-verifier` | SLICE 완료 기준을 명령으로 실행해 판정 | SLICE 구현 후 |
 | `protocol-auditor` | diff를 평가 프로토콜·금지 조항에 대조 | 모든 PR 전 |
-| `exp-judge` | dev-full 결과를 SPEC 규칙으로 판정하고 기록 초안 작성 | EXP 실행 후 |
+| `exp-judge` | dev-full(검색)·gen-full(생성) 결과를 SPEC 규칙으로 판정하고 기록 초안 작성 | EXP 실행 후 |
 | `pr-briefer` | diff로 PR 본문의 리뷰 가이드(위험도, 판단할 곳, 구조) 작성 | `docs/`만 바꾼 PR이 아니면 PR 전 |
 
 **작업자 풀.** 항목 여러 개를 서브에이전트 여러 개에 나눠 맡길 때(G 항목의 일괄 판단 등)는 `references/worker-pool.md`를 읽고 따른다. 동시 수, 범위를 좁히는 프롬프트, 결과 대조, `scripts/worker_queue.py` 큐 기록, 중단 절차가 있다.
@@ -100,10 +100,12 @@ A2(구현)와 B3(실험 코드)에 적용한다. 실험 기록은 다시 만드�
 
 ## B. EXP 흐름
 
+**생성 EXP**(판정 기준이 SPEC "생성 단계 평가 > 판정"인 실험)는 B1\~B4에서 `references/gen-exp.md`를 읽고 따른다. 판정 세트(gen-full), 비용 승인, gen-small 작동 확인 뒤 gen-full 실행, judge 저장 응답, 판정 입력이 검색 EXP와 다르다. 기억으로 대신하지 않는다.
+
 1. **초안**: `docs/PLAN.md` 백로그에서 가설을 고르고, `docs/SPEC.md`, `docs/DECISIONS.md`, 기준 실험 문서를 읽은 뒤 `docs/experiments/EXP-NNN.md`와 `configs/exp/expNNN.yaml`을 쓴다. 판정 기준은 SPEC 판정 절을 그대로 옮긴다. SPEC이 EXP 문서에 우선한다. 사용자가 이 EXP에 SPEC과 다른 기준을 요청하면 그 기준과 이유를 EXP 문서에 적고, 판정 때 judge가 차이를 보고하면 어느 기준을 쓸지 사용자에게 묻는다(PR #48 코멘트). PLAN에 [메타데이터]로 표시된 가설이면 SPEC "메타데이터 가설의 판정" 절을 옮긴다. 같은 백로그 항목의 두 번째 이후 EXP이면 몇 번째 변형인지와 앞 변형들의 판정을 적는다(SPEC 가설 단위 중단, 첫 EXP는 세지 않는다). EXP 문서와 config를 먼저 커밋하고 B2 착수 지시를 받은 뒤 구현·dev-small로 넘어간다. 문서가 dev-small 뒤에 오면 가설·판정 기준을 결과를 보고 쓴 것처럼 읽히고 이력으로 반박할 수 없다(EXP-010 사용자 지적, ADR-0037). 같은 세션에서 다음 EXP로 넘어갈 때도 0단계부터 다시 한다
 2. **승인 지점**: 가설, 바꾸는 것, 판정 기준을 사용자에게 보이고 승인받는다. 재임베딩이 필요하면(Colab) 예상 시간·크레딧을, 유료 API가 필요하면 예상 비용을 함께 보고한다. 착수 지시(이 EXP를 시작하라는 명시적인 말)를 받기 전에는 구현·dev-small도 하지 않는다. 초안의 결정 사항에 답을 받은 것은 착수 지시가 아니다. 답을 초안에 반영해 다시 보이고 착수 여부를 묻는다. 다른 작업이 끼어들어 흐름이 끊긴 뒤 이어 갈 때도 착수 지시를 받았는지 진행 기록에서 확인하고, 기록이 없으면 다시 묻는다. EXP-012에서 결정 사항(BM25 함께 변경, Colab CLI 업데이트 선행)에 대한 답만 받고 구현과 로컬 확인을 시작했다(사용자 지적 2026-10-14)
 3. **실행**: 실험 코드가 새로 필요하면 config로 켜는 형태로 만들고 기준 설정의 동작을 바꾸지 않는다("구현 원칙"). 기존 모듈을 크게 바꿔야 하면 먼저 SLICE(A 흐름)로 분리한다. dev-small로 동작을 확인한 뒤 dev-full을 실행한다. 재임베딩이 필요하면 E를 따른다
-4. **판정**: `exp-judge`를 부른다. 프롬프트에 EXP 문서 경로, 기준·후보 순위 파일 경로(single-doc, multi-doc), 실행 명령, 커밋 해시를 넣는다. 메타데이터 가설이면 `rag.eval.compare --out`으로 쓴 single-doc 비교 결과 JSON 경로도 넣는다. judge가 그 JSON으로 `rag.eval_multi.compare --single`을 돌려 판정한다(S18)
+4. **판정**: `exp-judge`를 부른다. 프롬프트에 EXP 문서 경로, 기준·후보 순위 파일 경로(single-doc, multi-doc), 실행 명령, 커밋 해시를 넣는다. 메타데이터 가설이면 `rag.eval.compare --out`으로 쓴 single-doc 비교 결과 JSON 경로도 넣는다. judge가 그 JSON으로 `rag.eval_multi.compare --single`을 돌려 판정한다(S18). 생성 EXP이면 순위 파일 대신 `references/gen-exp.md` B4의 입력을 넣는다
 5. **감사**: `protocol-auditor`를 작업 종류 EXP로 부른다. 4와 서로 독립이므로 병렬로 부른다
 6. **기록**: judge 초안의 수치를 직접 확인한 뒤 아래를 하고, EXP 문서 결과·결론, `docs/EXPERIMENTS.md`, 채택이면 `docs/DECISIONS.md`, `docs/PLAN.md` 백로그 상태를 갱신한다. 가설이 끝났으면(채택·예외 채택·기각·닫음) 그 줄을 PLAN-done으로 옮긴다. 기각·보류도 병합한다
    - **지연·비용**: 판정 보고에 성능과 함께 지연과 운영 비용(과금 방식, 월 비용 추정, 추가 인프라, 상주 메모리·디스크)을 낸다. 지연은 질의당 시간을 앞에 두고, 로딩을 포함한 dev-full 전체 실행 시간이나 그 배수는 운영 판단 근거로 쓰지 않는다. 인덱스 로딩처럼 시작할 때 한 번 드는 시간은 콜드 스타트로 EXP 문서 결과 절에 따로 적고, 배포 SLICE에서 배포 페이지에 첫 구동 대기 시간으로 안내한다. 나눠 잴 수 없으면 그렇다고 적는다(ADR-0038·0039)

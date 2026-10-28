@@ -1,6 +1,6 @@
 ---
 name: protocol-guard
-description: meet-rag 브랜치 diff에서 평가 오염과 저장소 금지 조항 위반을 찾는 점검표. test 분할 접근, src/rag/eval·src/rag/eval_multi·configs/eval·data/splits·config.yaml의 multidoc.eval 키와 G3 동결 세트 설정(g3_exclude.yaml, paths.multidoc_frozen) 수정, 파라미터 하드코딩, data/·.env 스테이징, test 질의의 외부 전송(API·Colab), 승인 기록 없는 질의 대량 전송, EXP 범위 밖 변경을 판정하고, data/ 산출물(인덱스·점수 파일 등)을 덮어쓰거나 지문 대조 없이 읽는 코드를 보고한다. protocol-auditor 에이전트가 PR 전 감사에서 쓰고, 메인이 커밋 직전 빠른 확인에 쓴다. 일반 코드 리뷰에는 쓰지 않는다.
+description: meet-rag 브랜치 diff에서 평가 오염과 저장소 금지 조항 위반을 찾는 점검표. test 분할 접근, src/rag/eval·src/rag/eval_multi·configs/eval·data/splits·config.yaml의 multidoc.eval 키와 G3 동결 세트 설정(g3_exclude.yaml, paths.multidoc_frozen) 수정, 생성 평가 judge 동결 대상(j_v8 지시·판정표·기본 judge 설정) 수정, 파라미터 하드코딩, data/·.env 스테이징, test 질의의 외부 전송(API·Colab), 승인 기록 없는 질의 대량 전송, EXP 범위 밖 변경을 판정하고, data/ 산출물(인덱스·점수 파일 등)을 덮어쓰거나 지문 대조 없이 읽는 코드를 보고한다. protocol-auditor 에이전트가 PR 전 감사에서 쓰고, 메인이 커밋 직전 빠른 확인에 쓴다. 일반 코드 리뷰에는 쓰지 않는다.
 ---
 
 # protocol-guard: 평가 프로토콜 점검표
@@ -42,7 +42,7 @@ diff에서 찾을 코드 경로:
 
 ### P2. 설정 선택에 test·dev-small 사용
 
-필터 규칙, 프롬프트, 하이퍼파라미터 선택에 test 질의를 쓰면 위반이다. dev-small 점수로 채택을 판정하면 위반이다(SPEC: dev-small은 방향 확인용).
+필터 규칙, 프롬프트, 하이퍼파라미터 선택에 test 질의를 쓰면 위반이다. dev-small 점수로 채택을 판정하면 위반이다(SPEC: dev-small은 방향 확인용). 생성 EXP를 gen-small(작동 확인 20질의) 점수로 판정해도 위반이다(SPEC "생성 단계 평가 > 문제").
 
 ### P3. 보호 경로 수정
 
@@ -93,6 +93,14 @@ SLICE 문서의 "수정 허용 파일" 밖의 파일이 바뀌었으면 보고�
 - 지문이 없는 기존 산출물에 `adopt_basis=true`를 쓴 실행이 있으면, SLICE·EXP 문서나 진행 기록에 만든 설정을 실행 기록과 대조한 내용이 있는지 본다
 
 이 항목은 평가 오염이 아니라 기록 보존을 본다. 위반이 아닌 "보고"로 두고, 메인이 원래 목적의 결함인지 정한다.
+
+### P11. 생성 평가 judge 동결
+
+생성 설정끼리는 같은 judge로 채점해야 비교할 수 있고, 판정용 결과를 보고 judge를 고치면 평가가 실험 결과에 맞춰진다. 그래서 judge 지시·판정표(D-49)와 실행 설정(D-50)을 동결했다. CLAUDE.md 보호 경로에는 넣지 않고 동결 테스트(`tests/test_gen_eval_freeze.py`)로 막는다(D-49).
+
+- 위반: `configs/judge/prompt/j_v8.yaml`, `src/rag/gen_eval/checks.py`의 `OUTCOMES`·`item_outcome`, `tests/test_gen_eval_freeze.py`의 기대값을 고친 것. 바꿔야 하면 새 버전 파일을 만들어 검증을 다시 한다(D-49)
+- 위반: 기본 judge 설정(`deepseek_go_mixed`와 그 파일의 값, 지시 버전)을 바꾸거나 EXP config가 judge 설정을 override한 것이 사용자 승인과 `docs/DECISIONS.md` 항목 없이 diff에 있는 경우
+- 해당하지 않음: `src/rag/gen_eval/report.py` 집계 수정(기존 테스트 통과로 고칠 수 있다, D-49), 판정에 쓰지 않는 비교용 judge 설정 파일 추가
 
 ## 판정
 
