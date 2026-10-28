@@ -24,6 +24,8 @@
 
 ## 결정 사항 (구현 전 확인)
 
+사용자 결정(2026-10-28): 1은 j_v9를 만든다. 청크에는 질의자나 답변자 한 사람의 발언만 있을 수 있어, `speakers`를 받아도 생성 모델과 judge는 청크 내용으로 누구의 발언인지 판단해야 하므로 "표기가 없다" 문장을 고친다. 재채점은 S28의 S25 재채점과 묶지 않는다(S28 터미널 결정: S28은 j_v8+fr_v1로 S25를 재채점해 H24·H22 기준으로 쓰고, j_v9 재채점은 H20 EXP 직전에 그때의 기준 설정 결과로 한 번 한다). 2는 (a): 중요한 것은 질의 텍스트이고 개발 과정에 쓰지 않는다. 문서가 검색에 올라오는 것은 허용한다. 3은 추천안이고, 어느 방식이 나은지는 EXP에서 정한다. 아래 1의 (a)·(b)는 결정 전 선택지 기록이다.
+
 1. judge 지시 j_v8은 "근거에는 발언자 표기가 없다"(`configs/judge/prompt/j_v8.yaml:53`, `:161`)고 적혀 있는데, 이 기능을 켠 기록에서는 judge가 발언자 표기를 본다
    - (a) j_v8을 그대로 두고 judge 입력(`format_contexts`)에만 표기를 넣는다(추천). judge 레시피(지시 해시)가 같아 `rag.gen_eval.compare`가 S25 기준과 비교할 수 있고 기준 재채점이 없다(PLAN 범위 그대로). 감수: 지시의 그 문장이 사실과 어긋나고, 표기가 있는 입력에서 judge가 어떻게 판정하는지는 D-49 검증 범위 밖이다. 표기로 발언자가 분명해지면 규칙 5의 "질의자 발언이 분명함"·"답변자 발언이 분명함" 갈래로 판정이 옮겨 가는 것이 H20이 겨냥한 효과다
    - (b) 그 문장을 고친 j_v9를 만든다. compare는 지시 해시가 다르면 멈추므로 기준 S25를 j_v9로 다시 채점해야 하고(gen-full 약 1,700 호출), D-49 변경 절차(새 파일, 재검증, 사용자 결정)가 걸린다. PLAN의 "기준 재채점 없음"과 어긋난다
@@ -35,6 +37,13 @@
    - 예: `speakers.mode=head`면 근거 머리에 화자 한 줄만, `marks`면 그 줄과 본문 안 겹친 구간 앞뒤 표지가 붙는다
 
 알려 둘 것(결정을 바꾸지 않으면 감수): 평가 질의(`summary_q`)는 그 QA의 발언으로 만들어졌으므로(`docs/data.md` §7), 정답 문서 청크의 답변 표지는 그 질의의 정답 발언 구간과 거의 같다. 배포 때도 코퍼스 문서마다 라벨이 있어 표지는 같게 붙지만, 새 질의는 라벨 QA와 무관하므로 dev 평가의 개선 폭은 배포 때보다 클 수 있다(추론, 재지 않음). H20 EXP 문서에 단서로 적는다.
+
+## j_v9 (결정 사항 1, 사용자 확인 2026-10-28)
+
+1. 새 파일 `configs/judge/prompt/j_v9.yaml`. j_v8의 `verdicts` 규칙 5와 `items` 규칙 3의 첫 문장 "근거에는 발언자 표기가 없다."만 아래로 바꾸고, 나머지는 j_v8과 글자까지 같다. 기본 judge 설정은 j_v8 그대로이고(D-49 동결), H20 EXP에서 `judge.prompt=j_v9`로 고른다
+   - "근거 머리의 질의자·답변자는 그 문서의 화자 목록이고, 근거 본문에는 그중 한 사람의 발언만 있을 수 있다. 본문에 〈질의 …〉…〈/질의〉·〈답변 …〉…〈/답변〉 표지가 있으면 그 구간은 표지에 적힌 사람의 발언이다. 표지가 없는 부분과 발언자 표기가 없는 근거는 내용으로 보고 아래 세 갈래로 판정한다."
+2. 재검증(D-49)은 H20 EXP 직전의 j_v9 재채점이 겸한다. 같은 생성 기록을 j_v8과 j_v9로 채점해 질의마다 비교하고, 차이가 D-50의 judge 변동 폭 안인지 본다. 이 SLICE에서는 유료 호출을 하지 않는다
+3. j_v9 해시는 2단계에서 S28의 동결 테스트(`tests/test_gen_eval_freeze.py`)에 더한다. DECISIONS에 j_v9를 만든 이유와 재검증 시점을 적고 D-49에 `보강`을 붙인다
 
 ## 메인이 정한 것 (PR에서 확인)
 
@@ -52,7 +61,7 @@
 
 S28이 `src/rag/gen_eval/judge.py`·`src/rag/generate.py`·`tests/test_gen_eval_freeze.py`를 함께 고친다.
 
-1. 지금: 이 지시서, `src/rag/speakers.py`(원천 라벨에서 QA별 화자·발언, 문서 구간, 청크별 `speakers` 필드, 채움·겹침 집계 명령)와 `tests/test_speakers.py`
+1. 지금: 이 지시서, `configs/judge/prompt/j_v9.yaml`, `src/rag/speakers.py`(원천 라벨에서 QA별 화자·발언, 문서 구간, 청크별 `speakers` 필드, 채움·겹침 집계 명령)와 `tests/test_speakers.py`
 2. S28 병합 뒤(코디네이터 알림): `origin/main`을 병합하고 렌더링(`format_contexts`, `build_messages`), `Pipeline.retrieve`의 필드 생성, `speakers.mode` config·레시피·경로, sha 고정 테스트, DECISIONS를 더한다
 
 ## 완료 기준
@@ -61,6 +70,7 @@ S28이 `src/rag/gen_eval/judge.py`·`src/rag/generate.py`·`tests/test_gen_eval_
 | --- | --- | --- |
 | 1 | `uv run pytest -q`, `uv run ruff check .` | 통과 |
 | 2 | `tests/test_speakers.py` | 합성 문서로 구간 계산(여러 위치, 찾지 못한 발언, 청크 경계 자르기, 화자 여럿, 중복 제거)이 기대값과 같다 |
+| 2b | `tests/test_speakers.py`의 j_v9 대조 | j_v9의 `version`·머리 주석을 뺀 단계별 지시가 j_v8과 같고, 다른 곳은 `verdicts` 규칙 5와 `items` 규칙 3의 첫 문장뿐이다 |
 | 3 | `uv run python -m rag.speakers` | 위 "배경 수치" 표의 채움 비율·문서 수와 같다. 두 번 실행하면 같은 출력 |
 | 4 | `uv run python -m rag.speakers --gen <S25 gen-full 생성 기록>` | 330질의 근거의 표지 붙는 근거 수와 표지 문자 비율이 나온다(결과 절에 적음). `data/` 아래 파일이 바뀌지 않는다 |
 | 5 | sha 고정 테스트(2단계) | `speakers`가 없는 기록의 judge 요청 본문 sha와 생성 메시지가 S28 고정값과 같다. `speakers`가 있으면 렌더링 문자열이 메인이 정한 것 2의 형식이다 |
@@ -68,7 +78,7 @@ S28이 `src/rag/gen_eval/judge.py`·`src/rag/generate.py`·`tests/test_gen_eval_
 
 ## 수정 허용 파일
 
-`src/rag/speakers.py`(새 파일), `tests/test_speakers.py`(새 파일), 2단계에서 `src/rag/gen_eval/judge.py`(`format_contexts`), `src/rag/generate.py`(`build_messages`, `Pipeline.retrieve`, `recipe`), `src/rag/gen_eval/generate.py`(레시피 표시가 필요하면), `tests/test_gen_eval_freeze.py`·`tests/test_gen_eval.py`·`tests/test_generate.py`(고정·렌더링 테스트), `configs/config.yaml`(`speakers.mode`, `paths.gen_runs`·`gen_judge`의 표시), `CLAUDE.md`(명령 한 줄), `docs/DECISIONS.md`, `docs/PLAN.md`·`docs/PLAN-done.md`, 이 문서
+`src/rag/speakers.py`(새 파일), `tests/test_speakers.py`(새 파일), `configs/judge/prompt/j_v9.yaml`(새 파일), 2단계에서 `src/rag/gen_eval/judge.py`(`format_contexts`), `src/rag/generate.py`(`build_messages`, `Pipeline.retrieve`, `recipe`), `src/rag/gen_eval/generate.py`(레시피 표시가 필요하면), `tests/test_gen_eval_freeze.py`·`tests/test_gen_eval.py`·`tests/test_generate.py`(고정·렌더링 테스트), `configs/config.yaml`(`speakers.mode`, `paths.gen_runs`·`gen_judge`의 표시), `CLAUDE.md`(명령 한 줄), `docs/DECISIONS.md`, `docs/PLAN.md`·`docs/PLAN-done.md`, 이 문서
 
 ## 범위 밖
 
