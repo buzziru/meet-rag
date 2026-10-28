@@ -1,6 +1,6 @@
 # DECISIONS
 
-현재 기준 설정: 검색 EXP-017(D-36), 생성 EXP-018(프롬프트 v3, judge j_v8·`deepseek_go_mixed`·형식 재요청 `fr_v1`, OpenRouter CoreWeave fp4, D-61). 생성 기준 결과는 `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v3-dev-full-deepseek_go_mixed-j_v8.jsonl`이다(해시는 D-61). 기준을 바꾸는 결정은 이 줄도 함께 고친다
+현재 기준 설정(config 별칭 `configs/exp/current.yaml`): 검색 EXP-017(D-36), 생성 EXP-018(프롬프트 v3, judge j_v8·`deepseek_go_mixed`·형식 재요청 `fr_v1`, OpenRouter CoreWeave fp4, D-61). 생성 기준 결과는 `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v3-dev-full-deepseek_go_mixed-j_v8.jsonl`이다(해시는 D-61). 기준을 바꾸는 결정은 이 줄도 함께 고친다
 
 ## D-01 기본 생성 모델 Gemma 4 31B
 - 이유: Google AI Studio 무료 쿼터로 호출할 수 있다. 회의록 시스템에 적용할 때 보안상 내부 서빙이 필요하고, 31B는 내부 서빙이 가능한 규모다
@@ -114,7 +114,7 @@
 - 날짜: 2026-10-02
 
 ## D-11 S6 생성 베이스라인: Gemma 4 31B, 근거 5개, 프롬프트 v1
-- 결정: 모델 `models/gemma-4-31b-it`(Google AI Studio OpenAI 호환 엔드포인트의 `/models` 목록에서 확인). 상위 5개 문서마다 최고 점수 청크 하나를 근거로 넣는다(D-05). 프롬프트는 `configs/prompt/v1.yaml`(근거 안의 내용으로만 답하고 문장마다 `[n]` 인용, 답할 수 없으면 그렇다고 말함). 생성 파라미터 `temperature` 0, `top_p` 1, `max_tokens` 1024 이후 변경: 기본 경로는 OpenRouter `google/gemma-4-31b-it`(CoreWeave fp4, D-37), 기본 프롬프트는 v2(D-40), 생성 평가 베이스라인은 S25(D-51) 이후 변경(D-61): 기본 프롬프트는 v3, 생성 기준은 EXP-018
+- 결정: 모델 `models/gemma-4-31b-it`(Google AI Studio OpenAI 호환 엔드포인트의 `/models` 목록에서 확인). 상위 5개 문서마다 최고 점수 청크 하나를 근거로 넣는다(D-05). 프롬프트는 `configs/prompt/v1.yaml`(근거 안의 내용으로만 답하고 문장마다 `[n]` 인용, 답할 수 없으면 그렇다고 말함). 생성 파라미터 `temperature` 0, `top_p` 1, `max_tokens` 1024 이후 변경: 기본 경로는 OpenRouter `google/gemma-4-31b-it`(CoreWeave fp4, D-37), 기본 프롬프트는 v2(D-40), 생성 평가 베이스라인은 S25(D-51) 이후 변경(D-61): 생성 기준은 EXP-018(프롬프트 v3, 별칭 `configs/exp/current.yaml`)
 - 근거: 문서 수 5는 주지표 Recall@5에 맞춘 값이고 데이터를 보고 정하지 않았다. 확인 결과는 `notebooks/06_01_생성확인.ipynb`와 LangSmith. 무작위 dev 질의 3개 모두 근거 안에 정답 문서(1·1·2위)가 있었고 인용 번호를 붙여 답했다. 회의록과 무관한 질의에는 "찾지 못했습니다"로 답했다. 사용자가 노트북과 LangSmith에서 답변이 프롬프트와 근거를 따른다고 확인했다. 답변 품질 평가는 평가 기준을 정한 뒤로 미룬다
 - 사고 과정: Gemma 4 31B는 이 엔드포인트에서 사고 과정을 끌 수 없다(`reasoning_effort`, `thinking_budget` 모두 400). 응답 앞의 `<thought>`를 떼어 기록에 `thought`와 `answer`로 나눠 남긴다. 사고 과정이 호출당 약 460\~780토큰으로 출력의 대부분이고 TPM에 포함된다(호출당 전체 약 2,600\~3,600토큰)
 - 정정(D-37, 2026-10-19): 사고 과정은 끌 수 있다. 위 시험은 이 모델의 파라미터가 아닌 값으로 했다. Google은 `thinking_level`/`thinkingLevel` `minimal`, OpenRouter는 `reasoning.effort: "none"`(이 모델의 기본값이 꺼짐)이다
@@ -413,7 +413,7 @@
   2. 답변 관련성은 judge가 3단계(답함 1, 일부 0.5, 답하지 않음 0)로 매긴다. RAGAS 논문의 역질문·임베딩 유사도 방식은 연속값이라 G5 보정의 kappa에 맞지 않아 쓰지 않는다
   3. 메타데이터 일치는 회의 일자와 위원회 이름만 대조한다. 화자 필드는 라벨링된 QA의 화자만 담아(D-19 한계) 맞는 이름을 불일치로 셀 수 있다
   4. 거부 교차 집계의 "근거 청크에 답 있음"은 핵심 답변 포함도에서 뽑은 핵심 진술 중 정답 문서의 근거 청크에 든 비율이 0.5 이상인 경우다(judge). `answer.comment` 전문과의 문자열 겹침은 발언의 핵심이 아닌 부분과 발언·청크 길이에 흔들려 쓰지 않는다
-- 생성 기본 프롬프트(사용자 결정 2026-10-20, PR #106 코멘트): v2. v1에 "인사말, 맺음말, '다음과 같습니다' 같은 도입 문장은 쓰지 말고 첫 문장부터 답을 쓴다" 한 줄을 더했다. 평가에서도 이런 내용 없는 문장(`gen_eval.filler_phrases`)은 인용 검사의 문장 수에서 빼고 따로 센다 이후 변경(D-61): 기본 프롬프트를 v3로 바꿨다(EXP-018 예외 채택)
+- 생성 기본 프롬프트(사용자 결정 2026-10-20, PR #106 코멘트): v2. v1에 "인사말, 맺음말, '다음과 같습니다' 같은 도입 문장은 쓰지 말고 첫 문장부터 답을 쓴다" 한 줄을 더했다. 평가에서도 이런 내용 없는 문장(`gen_eval.filler_phrases`)은 인용 검사의 문장 수에서 빼고 따로 센다 이후 변경(D-61): 생성 기준 프롬프트는 v3다(EXP-018 예외 채택, 별칭 `configs/exp/current.yaml`). config 기본값 v2는 그대로 둔다
 - judge 설정(사용자 결정 2026-10-20, PR #106): 지시 `j_v5`, `judge=deepseek_go_mixed`(사고 과정은 기본으로 끄고 `verdicts`·`key_statements` 두 단계만 `reasoning_effort` low로 켬)를 기본값으로 한다. 20질의 검수 판정과의 일치가 충실성 19/19, 청크에 핵심 답 16/16으로 가장 높고 조건부 규칙(확인되지 않은 질의자 주장, 긍정 명제, 상대 주장 제외)이 적용된다. 출력 토큰은 전체 사고 과정 켬의 약 41%다. 같은 설정을 반복하면 포함도 일치가 10\~13/18, 관련성이 17\~19/20으로 흔들려 이 두 기준의 설정 비교는 G5 보정(표본 확대, 사람이 확인한 핵심 진술)에서 다룬다(`docs/slices/14-gen-eval.md` 결과 절) 이후 변경: 지시는 j_v8로 바뀌어 동결됐다(S22, D-49). `deepseek_go_mixed`는 `items`도 low로 켠다(S14c에서 켜고 D-49·D-50에서 고정)
 - judge 경로: opencode Go(`https://opencode.ai/inference/go/openai/v1`, `deepseek-v4.1-flash`), 워크스페이스 Global 지역 설정 필요. 지역 설정은 학습 미사용 협약을 바꾸지 않는다(사용자 확인 2026-10-19)
 - 날짜: 2026-10-19
@@ -663,7 +663,7 @@
 ## D-61 EXP-018(H24+H19 거부 형식)을 보류에서 예외 채택하고 프롬프트 v3를 생성 기준으로 한다
 - 결정(사용자 결정 2026-10-28)
   1. EXP-018의 SPEC 판정은 보류다(종합 지표 +0.001 [−0.017, +0.020], 과잉 거부율 +0.021 [+0.002, +0.041]로 과잉 거부 안전 조건 실패, 기준별 하락 조건 통과). D-56 결정 2의 보류 예외 경로로 예외 채택한다
-  2. 기본 생성 프롬프트를 v2에서 v3로 바꾼다(`configs/config.yaml` defaults `prompt: v3`). 생성 기준 결과는 `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v3-dev-full-deepseek_go_mixed-j_v8.jsonl`(SHA-256 `7de6876e2fa9968e…`), 생성 기록은 `data/gen_eval/runs/hybrid-cond-filter-law-ms256-k20-ce-v3-dev-full.jsonl`이다. 다음 생성 EXP(H22)는 이 결과와 비교한다
+  2. 생성 기준 config를 EXP-018(`configs/exp/exp018.yaml`, 프롬프트 v3)로 한다. 지금 기준은 별칭 `configs/exp/current.yaml`(→ exp018) 한 곳에만 두고, `configs/config.yaml` 기본값(`prompt: v2`)은 바꾸지 않는다(검색 기준과 같은 방식, PR #180 리뷰). 명령은 `+exp=current`를 쓰고, 새 EXP config는 기준 EXP를 직접 상속한다. 생성 기준 결과는 `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v3-dev-full-deepseek_go_mixed-j_v8.jsonl`(SHA-256 `7de6876e2fa9968e…`), 생성 기록은 `data/gen_eval/runs/hybrid-cond-filter-law-ms256-k20-ce-v3-dev-full.jsonl`이다. 다음 생성 EXP(H22)는 이 결과와 비교한다
 - 이유(사용자): 종합 지표 변화가 작을 것(상한 +0.001)으로 보고된 실험이다. 지정 거부 문구를 쓰지 않아 생기는 불필요한 점수 하락을 막는 안전장치였고, 의도대로 작동하는 것을 평가로 확인했다(지정 문구 없는 거부 23 → 4). 거부 문구가 지시에 들어가면 거부가 늘어나는 것은 일반적으로 알려진 LLM의 동작 방식·프롬프트 작성 요령과 일치하는 합리적 추론이다
 - 근거: `notebooks/39_01_EXP018_거부분석.ipynb`. 새로 거부한 44질의 중 18개는 기준의 지정 문구 없는 거부가 거부로 세지게 된 것이고, 26개는 기준에서 답하던 질의를 새로 거부했다(청크에 핵심 답이 있는 질의 11개, 대부분 부분 거부). 부분 거부 24질의는 모두 거부 문장 1개와 내용 문장(평균 2.1개)이 나뉘어 내용이 채점됐다(H19)
 - 감수하는 것: 과잉 거부 안전 조건을 넘었다. 전체 거부 9 → 28, 부분 거부 1 → 24, 과잉 거부 항목 9 → 20이고, 근거에 핵심 답이 있는데 거부한 질의가 5/195 → 16/195로 늘었다. 핵심 답변 포함도(보조)는 −0.019 [−0.045, +0.006]이다. 내용과 거부를 한 문장에 쓰는 답변이 일부 남는다(노트북 사례 047642-0015). 이후 거부를 늘릴 수 있는 지시(H22 등)는 v3 위에서 과잉 거부 조건으로 다시 본다

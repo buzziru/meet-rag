@@ -21,9 +21,9 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 인덱스: `uv run python -m rag.index index.scope=dev-small|full [embedding.device=cuda embedding.dtype=float16]` (full은 Colab L4 약 21분. 옵션: slices/04-index.md)
 - 검색: `uv run python -m rag.search [index.scope=full]` (질의 임베딩 캐시가 없을 때: slices/05-retrieve.md)
 - test 1회(S13): 실행을 마쳤고 다시 돌리지 않는다. 절차·명령·결과는 slices/13-test-run.md, D-39
-- 생성: `uv run python -m rag.generate +exp=exp017 ask.qid=<dev qid>` (검색은 `+exp`의 설정. 재정렬 점수 파일이 있는 dev 질의만, 경로·옵션: slices/06-generate.md, slices/14-gen-eval.md. 5xx는 서버 상태부터 확인)
-- 생성 평가(S14): `uv run python -m rag.gen_eval.generate +exp=exp017` → `rag.gen_eval.judge` → `rag.gen_eval.report` (같은 override, 기본은 판정용 세트 dev-full 330질의(D-50), 반복은 `gen_eval.gen_rep`·`judge.rep`, 비용·시간: slices/24-variance.md)
-- 블라인드 확인(S25): 1질의 검수 뒤 중단(D-51). 표본·집계 도구 `uv run python -m rag.gen_eval.blind +exp=exp017 prompt=v2 [--score]` (S25 기록이 v2라 `prompt=v2`, D-61. slices/25-blind-baseline.md)
+- 생성: `uv run python -m rag.generate +exp=current ask.qid=<dev qid>` (`current`는 지금 기준 EXP의 별칭 `configs/exp/current.yaml`. 검색은 `+exp`의 설정. 재정렬 점수 파일이 있는 dev 질의만, 경로·옵션: slices/06-generate.md, slices/14-gen-eval.md. 5xx는 서버 상태부터 확인)
+- 생성 평가(S14): `uv run python -m rag.gen_eval.generate +exp=current` → `rag.gen_eval.judge` → `rag.gen_eval.report` (같은 override, 기본은 판정용 세트 dev-full 330질의(D-50), 반복은 `gen_eval.gen_rep`·`judge.rep`, 비용·시간: slices/24-variance.md)
+- 블라인드 확인(S25): 1질의 검수 뒤 중단(D-51). 표본·집계 도구 `uv run python -m rag.gen_eval.blind +exp=exp017 [--score]` (S25 기록, slices/25-blind-baseline.md)
 - multi-doc 질의(S8·G3): 생성을 마치고 동결했다(D-15). 다시 만들 때의 절차는 slices/08-multidoc-queries.md, 하네스 ADR-0017\~0024, 작업자 정의·실행 순서는 ADR-0049 이전 git 이력
 
 한글 출력이 깨지면 `PYTHONUTF8=1`로 실행한다. 파일은 `encoding="utf-8"`로 연다.

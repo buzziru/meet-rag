@@ -1,0 +1,7 @@
+# @package _global_
+# 지금 기준 설정의 별칭. 명령(CLAUDE.md)은 +exp=current를 쓰고, 기준이 바뀌면 채택 PR에서 이 한 줄과
+# DECISIONS 머리 줄만 고친다. 새 EXP config는 이 파일이 아니라 기준 EXP를 직접 상속한다
+# (별칭을 상속하면 기준이 바뀔 때 지난 EXP 설정도 바뀐다, PR #180 리뷰)
+defaults:
+  - exp018  # 검색 EXP-017 + 생성 프롬프트 v3(D-61)
+  - _self_
