@@ -1,6 +1,6 @@
 # DECISIONS
 
-현재 기준 설정: 검색 EXP-017(D-36), 생성 EXP-018(프롬프트 v3, judge j_v8·`deepseek_go_mixed`·형식 재요청 `fr_v1`, OpenRouter CoreWeave fp4, D-61). 생성 기준 결과는 `…-ce-v3-dev-full-deepseek_go_mixed-j_v8.jsonl`이다(D-61). 기준을 바꾸는 결정은 이 줄도 함께 고친다
+현재 기준 설정: 검색 EXP-017(D-36), 생성 EXP-018(프롬프트 v3, judge j_v8·`deepseek_go_mixed`·형식 재요청 `fr_v1`, OpenRouter CoreWeave fp4, D-61). 생성 기준 결과는 `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v3-dev-full-deepseek_go_mixed-j_v8.jsonl`이다(해시는 D-61). 기준을 바꾸는 결정은 이 줄도 함께 고친다
 
 ## D-01 기본 생성 모델 Gemma 4 31B
 - 이유: Google AI Studio 무료 쿼터로 호출할 수 있다. 회의록 시스템에 적용할 때 보안상 내부 서빙이 필요하고, 31B는 내부 서빙이 가능한 규모다
