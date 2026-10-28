@@ -84,3 +84,28 @@ def test_prompts_hold_their_refusal_phrase():
     for p in sorted((ROOT / "configs" / "prompt").glob("*.yaml")):
         prompt = load_cfg([f"prompt={p.stem}"]).prompt
         assert prompt.refusal and prompt.refusal in prompt.system, p.name
+
+
+def test_current_alias_composes_as_its_baseline_exp():
+    """지금 기준의 별칭(configs/exp/current.yaml)이 가리키는 EXP가 있고, 같은 설정으로 조립되며,
+    DECISIONS 머리 줄과 같은 EXP를 적는지 본다. 기준은 이 두 곳에만 둔다(ADR-0076). 값은 config에서
+    읽어 기준이 바뀌어도 이 테스트는 고치지 않는다(PR #181 리뷰)."""
+    from omegaconf import OmegaConf
+
+    from rag.generate import recipe
+
+    alias = OmegaConf.load(ROOT / "configs" / "exp" / "current.yaml")
+    target = next(d for d in alias.defaults if d != "_self_")
+    assert (ROOT / "configs" / "exp" / f"{target}.yaml").exists()
+    header = (ROOT / "docs" / "DECISIONS.md").read_text(encoding="utf-8").splitlines()[2]
+    assert f"EXP-{target.removeprefix('exp')}" in header
+
+    cfg = load_cfg(["index.scope=full", "+exp=current"])
+    base = load_cfg(["index.scope=full", f"+exp={target}"])
+    # 쓰지 않는 보간(rewriter 등)은 풀지 않고 비교한다
+    assert OmegaConf.to_container(cfg) == OmegaConf.to_container(base)
+    rec = recipe(cfg, {"names": ["idx"], "n_chunks": 1}, stream=False)
+    assert rec["prompt_version"] == cfg.prompt.version
+    assert (ROOT / "configs" / "prompt" / f"{cfg.prompt.version}.yaml").exists()
+    assert f"-{cfg.prompt.version}-" in cfg.paths.gen_runs
+    assert f"-{cfg.prompt.version}-" in cfg.paths.gen_judge

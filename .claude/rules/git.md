@@ -47,6 +47,8 @@ main을 원격과 맞출 때마다 병합된 로컬 브랜치도 함께 지운�
 
 Claude가 브랜치를 원격에 올리고 `gh pr create`로 PR을 만든다. diff 확인과 병합은 사용자가 한다.
 
+작업 브랜치에 push하기 전에는 `gh pr list --head <브랜치> --state merged --json number`가 빈 목록인지 확인한다. 이미 병합된 PR의 브랜치에 push하면 사용자가 병합하며 지운 원격 브랜치가 다시 생기고, 그 커밋은 어느 PR에도 들어가지 않는다(이슈 #120 세션, 2026-10-27 STATUS 커밋 aea30e7 두 번). 병합됐으면 최신 `main`에서 새 브랜치를 만들어 옮긴다. `merged_branch_push_guard` 훅이 같은 대조로 병합된 PR 브랜치로의 push를 막는다(main으로의 push와 원격 브랜치 삭제는 보지 않고, gh가 실패하면 막지 않는다, ADR-0076)
+
 1. `uv run pytest -q`, `uv run ruff check .` 통과를 확인한다. PR 내용이 사용자 결정에 따라 바뀌는 작업이면 결정을 받아 반영한 뒤 올린다(사소한 결정은 PR 코멘트로 받는다). 결정 전에 올리면 PR을 다시 고치게 된다
 2. `protocol-auditor`로 브랜치 diff를 평가 프로토콜·금지 조항에 대조하고 위반을 고친다. meet-rag 흐름 밖에서 올리는 PR도 같다(작업 종류는 meet-rag 스킬의 감사 단계를 따른다). 사용자 요청에 따라 self-review를 한다. 작성 맥락과 분리하려고 `/code-review`나 subagent로 실행한다. self-review를 하면 3의 가이드는 그 지적을 반영한 뒤에 부른다(코드 수정이 나오기 쉬워, 먼저 부르면 반영 전 diff를 설명한다). self-review가 없으면 가이드는 검증·감사와 병렬로 부른다(meet-rag 스킬 A4, ADR-0056)
 3. `pr-briefer`를 불러 받은 리뷰 가이드(`## 리뷰 가이드`)를 본문 맨 위에 둔다. meet-rag 흐름 밖에서 올리는 PR도 같다. 바뀐 파일이 모두 `docs/` 아래면 부르지 않고, `docs/SPEC.md`·`docs/DECISIONS.md`가 바뀌었거나 test 점수를 기록했을 때만 본문 맨 위에 `위험도: 단방향(…)` 한 줄을 적는다. 괄호에는 걸린 규칙만 적고(SPEC R1, DECISIONS R2, test 점수 R6), 규칙마다 해당 변경을 짧게 붙인다. 예: DECISIONS만 바뀌면 `위험도: 단방향(R2: D-47 추가)`. 걸리지 않은 규칙까지 적으면 사용자가 없는 변경을 찾게 된다(이슈 #142, PR #141이 R2만 걸렸는데 R1·R2·R6을 적음). 이어서 대응 문서(SLICE·EXP), 변경, 검증 결과, self-review 지적과 반영 여부, 범위 밖 항목을 적는다
@@ -68,5 +70,5 @@ STATUS는 세션마다 덮어쓰는 스냅샷이고 코드가 아니므로 PR을
   2. `docs/STATUS.md`를 덮어쓴다
   3. `git add docs/STATUS.md` 후 `git diff --cached --name-only`가 이 파일 하나뿐인지 확인한다
   4. `docs: STATUS 갱신`으로 커밋하고 원격에 올린다
-- 작업 도중 세션이 끝나면 STATUS 커밋을 작업 브랜치에 태운다
+- 작업 도중 세션이 끝나면 STATUS 커밋을 작업 브랜치에 태운다. 그 브랜치의 PR이 이미 병합됐으면 위 첫 경로(main 맞추기 뒤 main에 직접 커밋)로 바꾼다
 - 다른 파일을 고칠 거리가 생기면 이 경로를 쓰지 않고 브랜치를 만든다

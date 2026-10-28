@@ -7,7 +7,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 한 줄에 명령 하나와 호출법만 적는다. 옵션·절차·한도는 SLICE 문서나 DECISIONS에 두고 경로만 단다. SLICE가 끝나면 그 조각의 호출법만 여기에 추가한다. 매 세션 읽히는 파일이라 특정 작업에서만 쓰는 세부가 쌓이면 다른 지시가 묻힌다. 빠른 확인은 dev-small로 한다.
 
 - 환경: `uv sync --extra cpu` (GPU 환경은 `--extra cu126`)
-- 비밀 값: Doppler(project `meet-rag`, config `dev`, 저장소에 `doppler setup`으로 연결). `rag.*` 실행과 노트북 커널은 `doppler run -- uv run python -m …`처럼 앞에 붙인다(API 키, `HF_HOME`). `.env`는 쓰지 않는다(지난 코드의 예외: ADR-0068). "환경 변수 …이(가) 없다"로 멈추면 사용자에게 알리고 `doppler run --`을 붙여 다시 실행한다
+- 비밀 값: Doppler(project `meet-rag`, config `dev`, 저장소에 `doppler setup`으로 연결). `rag.*` 실행과 노트북 커널은 `doppler run -- uv run python -m …`처럼 앞에 붙인다(API 키, `HF_HOME`). `.env`는 쓰지 않는다(지난 코드의 예외: ADR-0068). "환경 변수 …이(가) 없다"로 멈추면 사용자에게 알리고 `doppler run --`을 붙여 다시 실행한다. 셸에서 `doppler`를 찾지 못하면 winget 설치 경로(`%LOCALAPPDATA%\Microsoft\WinGet\Packages\Doppler.doppler_*\doppler.exe`)로 부른다
 - 테스트·린트: `uv run pytest -q`, `uv run ruff check .`
 - 데이터 적재: `uv run python -m rag.ingest` (→ `data/processed/`)
 - 평가 분할: `uv run python -m rag.splits` (→ `data/splits/`)
@@ -33,7 +33,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - `src/rag/eval/`, `src/rag/eval_multi/`와 `configs/config.yaml`의 `multidoc.eval`, G3 동결 세트를 정하는 `configs/multidoc/g3_exclude.yaml`과 `paths.multidoc_frozen`(D-15), `configs/eval/`, `data/splits/`를 수정하지 않는다. 바꿔야 하면 사용자 승인 후 DECISIONS.md에 기록한다
 - test 분할의 질의를 읽거나 test 점수를 계산하지 않는다. test는 검색 단계와 생성 단계 종료 시 사용자 지시로 단계마다 1회만 실행한다. 검색 단계 1회는 S13에서 마쳤고(D-39), 생성 단계 1회는 생성 단계를 마칠 때 사용자 지시로 한다(SPEC 개정 D-53)
 - `docs/SPEC.md`의 평가 프로토콜은 사용자 승인 없이 바꾸지 않는다
-- 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다
+- 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다. 채택마다 바뀌는 값(지금 기준 EXP, 프롬프트 버전, 기준 결과 경로)도 명령·테스트 기대값·하네스 절차 문서에 적지 않는다. 지금 기준은 별칭 `configs/exp/current.yaml`과 DECISIONS 머리 줄 두 곳에만 두고, 명령은 `+exp=current`, 테스트는 config에서 값을 읽고, 문서는 머리 줄을 가리킨다(PR #180 리뷰, ADR-0076)
 - HF에서 받는 모델·토크나이저(임베딩, 리랭커 등)는 `configs/`에 revision(커밋 해시)을 고정하고, 불러오는 코드는 revision을 `rag.index.pinned(...)`로만 넘긴다(커밋 해시가 아니면 받기 전에 멈춤). 고정하지 않으면 같은 설정이 다른 가중치를 받아 재현되지 않는다. `tests/test_revisions.py`가 점검한다. API로 부르는 생성·judge 모델은 고정할 수 없어 모델 이름과 제공자를 기록한다(D-46)
 - AI Hub 데이터(코퍼스·질의·라벨·분할)는 처리 목적으로 외부 API(Google AI Studio, OpenRouter, 생성 평가 judge용 opencode Go(D-38))와 Colab에 보낼 수 있다. 금지하는 것은 공개다: 저장소 커밋, 노트북·로그·문서처럼 저장소에 남는 곳에 질의 원문을 대량으로 남기기, 외부에서 내려받을 수 있게 두기(D-31). `test` 질의는 평가 프로토콜에 따라 단계(검색·생성)마다 종료 시 사용자 지시 1회 실행에서만 읽고 보낸다. 질의 전체처럼 많이 보내는 실행은 호출 수·소요 시간·비용을 보고하고 사용자 승인 후에 한다
 - 외부 GPU(Colab) 실행과 유료 API(OpenRouter) 호출은 예상 시간·비용을 보고하고 사용자 승인 후에만 한다. dev-small은 Jupyter 노트북(`notebooks/`)에서 자유롭게 실행하되, GPU가 필요한 dev-small 임베딩도 Colab 승인 대상이다

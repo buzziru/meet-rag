@@ -12,6 +12,18 @@
           },
           {
             "type": "command",
+            "if": "Bash(*git push*)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/merged_branch_push_guard.py\"",
+            "timeout": 40
+          },
+          {
+            "type": "command",
+            "if": "Bash(*git -C * push*)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/merged_branch_push_guard.py\"",
+            "timeout": 40
+          },
+          {
+            "type": "command",
             "if": "Bash(*rm *)",
             "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/data_delete_guard.py\"",
             "timeout": 30
@@ -98,6 +110,18 @@
             "if": "PowerShell(git commit *)",
             "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/commit_type_guard.py\"",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(*git push*)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/merged_branch_push_guard.py\"",
+            "timeout": 40
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(*git -C * push*)",
+            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/merged_branch_push_guard.py\"",
+            "timeout": 40
           },
           {
             "type": "command",

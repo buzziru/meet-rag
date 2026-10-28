@@ -8,7 +8,7 @@
 쓴 뒤 멈추므로 다시 실행하면 이어 쓴다. 이미 쓴 qid는 건너뛰고, 레시피가 다른 기록이 있으면
 멈춘다. 반복 번호(gen_eval.gen_rep)는 레시피가 아니라 경로와 기록 필드에 남긴다. 명세는
 docs/slices/14-gen-eval.md, docs/slices/24-variance.md. 인자는 Hydra override(기본은 판정용
-세트 dev-full 330질의, D-50. 예: +exp=exp017 gen_eval.gen_rep=1, S14 표본은
+세트 dev-full 330질의, D-50. 예: +exp=current gen_eval.gen_rep=1, S14 표본은
 gen_eval.queries=dev-small gen_eval.n=20).
 """
 
