@@ -47,7 +47,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 실험 지시서: `docs/experiments/EXP-NNN.md` (config는 `configs/exp/expNNN.yaml`)
 - 실험 결과 요약: `docs/EXPERIMENTS.md`
 - 채택 설정·방향 결정: `docs/DECISIONS.md`
-- docs 기록 규약(결정 작성, 바뀐 앞 결정 표시, 당시 기록 보강, 단계 종료 정합 점검): `docs/CLAUDE.md`. `docs/` 문서를 고치거나 DECISIONS에 적힌 대상(config 값, 코드 동작, 명령)을 바꾸기 전에 읽는다. 하위 폴더 CLAUDE.md는 Read·Write·Edit로 그 폴더 파일을 다룰 때만 불러와지고, 셸로 고치거나 docs를 열지 않는 작업에는 불러와지지 않을 수 있다
+- docs 기록 규약(문서 종류별 목적·필수 절·고치는 방식, 결정 작성과 바뀐 앞 결정 표시, 당시 기록 보강, 단계 종료 정합 점검): `docs/CLAUDE.md`. `docs/` 문서를 고치거나 DECISIONS에 적힌 대상(config 값, 코드 동작, 명령)을 바꾸기 전에 읽는다. 하위 폴더 CLAUDE.md는 Read·Write·Edit로 그 폴더 파일을 다룰 때만 불러와지고, 셸로 고치거나 docs를 열지 않는 작업에는 불러와지지 않을 수 있다
 - 현재 상태: `docs/STATUS.md`
 - 브랜치·커밋·PR, 노트북 규약: `.claude/rules/`
 
@@ -57,11 +57,11 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 
 1. 끝난 실행이 있으면 평가하고 EXP 문서의 결과·결론을 채운다
 2. 판정한 실험을 EXPERIMENTS.md에 한 줄 추가하고, 채택이면 DECISIONS.md를 갱신한다
-3. PLAN.md 백로그 상태를 갱신하고 우선순위를 다시 정한다. 끝난 항목(완료·채택·예외 채택·기각·닫음·대체)은 완료를 처리한 커밋에서 이미 `docs/PLAN-done.md`로 옮겼어야 한다(meet-rag 스킬). 남은 것이 없는지 확인하고, 바뀐 "다음 순서"의 이전 줄은 문장을 고치지 않고 PLAN-done으로 옮긴다
+3. PLAN.md 백로그 상태를 갱신하고 우선순위를 다시 정한다. 끝난 항목이 PLAN에 남지 않았는지 확인한다(옮기는 방식: `docs/CLAUDE.md` PLAN 절)
 
 핸드오프는 사용자가 요청할 때 한다.
 
-4. STATUS.md를 덮어쓴다 (한 화면 이내). "다음 행동" 항목 앞에 `meet-rag` 스킬의 흐름을 `[A]`·`[B]`·`[C]`·`[D]`·`[F]`로 적는다. 실행 중인 Colab 작업이 있으면 위치와 예상 종료 시각을 적는다
+4. STATUS.md를 덮어쓴다(형식: `docs/CLAUDE.md` STATUS 절)
 5. `.claude/rules/git.md`의 핸드오프 절차로 커밋한다
 
 ## 하네스: meet-rag
@@ -70,4 +70,4 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 
 **호출 조건:** SLICE 구현, EXP 실행·판정, G 항목(사람 검수 게이트)의 표본 추출·집계·결정 기록, Colab GPU 작업(전체 코퍼스 임베딩·인덱스 구축), PR 준비, 세션 마무리, STATUS "다음 행동" 진행을 요청받으면 `meet-rag` 스킬을 사용한다. 같은 세션에서 다음 조각·게이트·실험으로 넘어갈 때도 스킬의 0단계부터 다시 한다. 하네스 수정과 하네스 피드백 반영은 스킬의 F 흐름으로 하고, 첫 단계에서 `harness:evolve`를 불러온다. 단순 질문에는 직접 답해도 된다.
 
-**변경 기록:** 하네스(`.claude/`의 스킬·에이전트·규약)를 바꾸면 `docs/harness/adr/`에 ADR(상태·맥락·결정·결과·삭제 조건)을 하나 추가하고 목록(`docs/harness/adr/README.md`)을 갱신한다.
+**변경 기록:** 하네스(`.claude/`의 스킬·에이전트·규약)를 바꾸면 `docs/harness/adr/`에 ADR을 하나 추가하고 목록을 갱신한다(형식: `docs/harness/adr/README.md`).
