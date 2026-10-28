@@ -79,8 +79,10 @@ def recipe(cfg, index_meta: dict, stream: bool) -> dict:
             json.dumps(prompt, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest(),
         "model": g.model, "params": OmegaConf.to_container(g.params), "stream": stream,
         "extra_body": OmegaConf.to_container(g.extra_body) if g.get("extra_body") else None,
-        # 발언자 표시(S29). off면 키를 넣지 않아 S25 생성 기록의 레시피와 같다
-        **({} if (m := check_mode(cfg.speakers.mode)) == "off" else {"speakers": m}),
+        # 발언자 표시(S29). off면 키를 넣지 않아 S25 생성 기록의 레시피와 같다. 켜면 짧은 반복 발언
+        # 기준(repeat_min_chars)도 근거를 바꾸므로 같이 남긴다
+        **({} if check_mode(cfg.speakers.mode) == "off"
+           else {"speakers": OmegaConf.to_container(cfg.speakers)}),
     }
 
 
@@ -127,7 +129,7 @@ class Pipeline:
         if self.speakers != "off":
             self.doc_speakers = {d["doc_id"]: d for d in corpus_meta(cfg)}
             self.spans = doc_spans(iter_labels(ROOT / cfg.paths.raw_dir),
-                                   tuple(cfg.ingest.name_titles))
+                                   tuple(cfg.ingest.name_titles), cfg.speakers.repeat_min_chars)
         # 대기·재시도는 SDK 기본값(600초, 2회) 대신 generator 설정 값(D-57 결정 1, 리뷰 G3-1)
         self.client = wrap_openai(OpenAI(base_url=cfg.generator.base_url,
                                          api_key=require_env(cfg.generator.api_key_env),

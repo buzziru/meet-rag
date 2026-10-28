@@ -1,7 +1,8 @@
 import pytest
 import yaml
 
-from rag.index import ROOT
+from rag.gen_eval.judge import check_speakers
+from rag.index import ROOT, load_cfg
 from rag.ingest import make_doc_id
 from rag.speakers import check_mode, chunk_speakers, doc_spans, fill_counts, render
 
@@ -19,7 +20,7 @@ def label(context, q, a, qn="홍길동 위원", an="김철수", ap="장관", aa=
 def test_doc_spans_finds_every_position_with_qa_speaker():
     ctx = "가나다 질문입니다. 라마 답변입니다. 바사 답변입니다."
     recs = [label(ctx, "질문입니다.", "답변입니다.")]
-    spans = doc_spans(recs, TITLES)[make_doc_id("000001", ctx)]
+    spans = doc_spans(recs, TITLES, 0)[make_doc_id("000001", ctx)]
     assert [(s["role"], ctx[s["start"]:s["end"]]) for s in spans] == [
         ("question", "질문입니다."), ("answer", "답변입니다."), ("answer", "답변입니다.")]
     assert spans[0]["name"] == "홍길동"  # ingest와 같은 정규화(직함 토막 제거)
@@ -31,7 +32,7 @@ def test_doc_spans_skips_missing_comment_and_dedupes_same_span():
     ctx = "질문입니다. 답변입니다."
     recs = [label(ctx, "질문입니다.", "본문에 없는 답변"),
             label(ctx, "질문입니다.", "", qno="0002")]
-    spans = doc_spans(recs, TITLES)[make_doc_id("000001", ctx)]
+    spans = doc_spans(recs, TITLES, 0)[make_doc_id("000001", ctx)]
     assert [s["role"] for s in spans] == ["question"]
 
 
@@ -39,9 +40,33 @@ def test_doc_spans_keeps_each_speaker_in_multi_qa_doc():
     ctx = "첫 질문. 첫 답변. 둘째 질문. 둘째 답변."
     recs = [label(ctx, "첫 질문.", "첫 답변.", an="김철수"),
             label(ctx, "둘째 질문.", "둘째 답변.", an="이영희", qno="0002")]
-    spans = doc_spans(recs, TITLES)[make_doc_id("000001", ctx)]
+    spans = doc_spans(recs, TITLES, 0)[make_doc_id("000001", ctx)]
     assert [(ctx[s["start"]:s["end"]], s["name"]) for s in spans if s["role"] == "answer"] == [
         ("첫 답변.", "김철수"), ("둘째 답변.", "이영희")]
+
+
+def test_doc_spans_skips_short_repeated_comment_only():
+    """짧은 발언이 여러 번 나오면 표지를 두지 않는다. 한 번 나오거나 길면 둔다(PR #178 리뷰 2)."""
+    ctx = "예. 그렇게 보십니까? 예. 앞으로 계획을 세워 추진하겠습니다. 끝."
+    recs = [label(ctx, "그렇게 보십니까?", "예."),
+            label(ctx, "끝.", "앞으로 계획을 세워 추진하겠습니다.", qno="0002")]
+    got = [ctx[s["start"]:s["end"]] for s in doc_spans(recs, TITLES, 5)[make_doc_id("000001", ctx)]]
+    assert got == ["그렇게 보십니까?", "앞으로 계획을 세워 추진하겠습니다.", "끝."]
+    assert "예." in [ctx[s["start"]:s["end"]] for s in doc_spans(recs, TITLES, 0)[
+        make_doc_id("000001", ctx)]]
+
+
+def test_judge_stops_when_speakers_record_meets_prompt_without_marks():
+    """발언자 표시 기록은 speaker_marks 지시(j_v9)로만 채점하고, 표시 없는 기록은 어느 지시로도
+    채점한다(PR #178 리뷰 1)."""
+    v8 = load_cfg(["index.scope=full"])
+    v9 = load_cfg(["index.scope=full", "judge/prompt=j_v9"])
+    on = {"speakers": {"mode": "marks", "repeat_min_chars": 21}}
+    with pytest.raises(SystemExit):
+        check_speakers(v8, on)
+    check_speakers(v9, on)
+    check_speakers(v8, {})
+    check_speakers(v9, {})
 
 
 def test_chunk_speakers_clips_spans_to_chunk_and_head_has_no_spans():
@@ -95,6 +120,7 @@ def test_j_v9_differs_from_j_v8_only_in_speaker_sentence():
     v8, v9 = (yaml.safe_load((d / f"{v}.yaml").read_text(encoding="utf-8"))
               for v in ("j_v8", "j_v9"))
     assert (v8.pop("version"), v9.pop("version")) == ("j_v8", "j_v9")
+    assert v9.pop("speaker_marks") is True and "speaker_marks" not in v8
     old = "근거에는 발언자 표기가 없다."
     changed = {k for k in v8 if v8[k] != v9[k]}
     assert changed == {"verdicts", "items"}

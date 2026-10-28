@@ -86,6 +86,16 @@ def check_prompt(cfg, gen_recipe: dict) -> None:
                          "설정과 다르다. 생성에 쓴 프롬프트 파일로 채점한다")
 
 
+def check_speakers(cfg, gen_recipe: dict) -> None:
+    """발언자 표시(S29)가 붙은 생성 기록은 표지를 읽는 지시(speaker_marks: true, j_v9)로만 채점한다.
+    j_v8은 "근거에는 발언자 표기가 없다"고 해, 그대로 채점하면 compare가 기준(off·j_v8)과 비교해
+    판정까지 간다(PR #178 리뷰 1). 표시 없는 기록의 j_v9 채점은 재검증에 쓰여 막지 않는다."""
+    if gen_recipe.get("speakers") and not cfg.judge.prompt.get("speaker_marks"):
+        raise SystemExit(f"생성 기록에 발언자 표시({gen_recipe['speakers']})가 있는데 judge "
+                         f"지시 {cfg.judge.prompt.version}는 표지를 읽지 않는다. "
+                         "judge/prompt=j_v9로 채점한다")
+
+
 def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
     """judge 설정, 코드 판정 설정(gen_eval, 프롬프트의 거부 문구), judge 실행 커밋, 생성 기록의
     커밋 목록(S15).
@@ -483,6 +493,7 @@ def main() -> None:
     if len(recipes) != 1:
         raise SystemExit("생성 기록의 레시피가 여럿이다")
     check_prompt(cfg, gens[qids[0]]["recipe"])
+    check_speakers(cfg, gens[qids[0]]["recipe"])
     rec = judge_recipe(cfg, [gens[q]["recipe"] for q in qids])
     judge = Judge(cfg, session=f"meet-rag-judge-{sha(stable(rec))[:16]}")
 

@@ -67,7 +67,7 @@ def test_recipe_records_speakers_mode_only_when_on():
     meta = {"names": ["idx"], "n_chunks": 3}
     assert "speakers" not in recipe(load_cfg(["index.scope=full"]), meta, stream=False)
     on = recipe(load_cfg(["index.scope=full", "speakers.mode=marks"]), meta, stream=False)
-    assert on["speakers"] == "marks"
+    assert on["speakers"] == {"mode": "marks", "repeat_min_chars": 21}
 
 
 def test_prompt_version_file_loads():

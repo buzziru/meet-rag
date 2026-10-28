@@ -58,12 +58,14 @@ def render(c: dict) -> str:
     return f"{head}\n{''.join(out)}{text[pos:]}"
 
 
-def doc_spans(records: Iterable[tuple[str, dict]],
-              titles: tuple[str, ...]) -> dict[str, list[dict]]:
+def doc_spans(records: Iterable[tuple[str, dict]], titles: tuple[str, ...],
+              repeat_min_chars: int) -> dict[str, list[dict]]:
     """원천 라벨에서 문서별 발언 구간. 구간의 화자는 그 발언이 나온 QA의 화자다(ingest 정규화).
 
-    발언이 본문에 여러 번 나오면 모든 위치를 둔다(어느 위치인지 라벨에 없다). 본문에 그대로 없는
-    발언은 구간이 없다. 같은 역할·화자·위치는 한 번만 둔다.
+    발언이 본문에 여러 번 나오면 모든 위치를 둔다(어느 위치인지 라벨에 없다). 다만 repeat_min_chars
+    보다 짧은 발언이 여러 번 나오면 구간을 두지 않는다. "예.", "그렇습니다." 같은 문자열은 다른
+    사람의 발언에도 나와 화자를 잘못 붙인다(PR #178 리뷰 2). 본문에 그대로 없는 발언은 구간이 없다.
+    같은 역할·화자·위치는 한 번만 둔다.
     """
     out = {}
     for _, r in records:
@@ -71,7 +73,8 @@ def doc_spans(records: Iterable[tuple[str, dict]],
         for role, prefix in ROLES.items():
             text = r[role]["comment"]
             person = speaker(r, prefix, titles)
-            i = r["context"].find(text) if text else -1
+            short_repeat = len(text) < repeat_min_chars and r["context"].count(text) > 1
+            i = r["context"].find(text) if text and not short_repeat else -1
             while i >= 0:
                 span = {"role": role, "start": i, "end": i + len(text), **person}
                 if span not in spans:
@@ -132,7 +135,7 @@ def main() -> None:
                 contexts[make_doc_id(r["conference_number"], r["context"])] = r["context"]
             yield split, r
 
-    spans = doc_spans(counted(), tuple(cfg.ingest.name_titles))
+    spans = doc_spans(counted(), tuple(cfg.ingest.name_titles), cfg.speakers.repeat_min_chars)
     for k, v in sorted(found.items()):
         print(f"{k}\t{v}")
     if not args.gen:
