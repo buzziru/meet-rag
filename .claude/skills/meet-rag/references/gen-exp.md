@@ -5,7 +5,7 @@ B 흐름에서 EXP 문서 판정 기준이 SPEC "생성 단계 평가 > 판정"(
 ## B1 초안
 
 - 판정 기준에 SPEC "생성 단계 평가 > 판정" 절을 그대로 옮긴다. 기준값은 `configs/eval/gen_v1.yaml`이다(D-55). 판정 세트는 gen-full(판정용 330질의, D-50)이고 gen-small(S14 표본 20질의)은 작동 확인용이다(D-53 결정 8·9)
-- 기준 실험은 기준 설정의 gen-full judge 결과다. 어느 파일인지는 `docs/DECISIONS.md` 머리 줄 "현재 기준 설정"이 적는다(기준이 바뀔 때마다 이 문서를 고치지 않으려는 것이다, ADR-0075). 기준 결과 경로가 지금 기본 설정의 `paths.gen_judge`와 다르면(예: S25 fr_v1 재채점의 `-n330-fr_v1`) report에 `paths.gen_judge=`로 준다
+- 기준 실험은 기준 설정의 gen-full judge 결과다. EXP config는 지금 기준 EXP의 config(별칭 `configs/exp/current.yaml`이 상속하는 것)를 직접 상속한다. 어느 결과 파일인지는 `docs/DECISIONS.md` 머리 줄 "현재 기준 설정"이 적는다(기준이 바뀔 때마다 이 문서를 고치지 않으려는 것이다, ADR-0075). 기준 결과 경로가 지금 기본 설정의 `paths.gen_judge`와 다르면(예: S25 fr_v1 재채점의 `-n330-fr_v1`) report에 `paths.gen_judge=`로 준다
 - 근거를 바꾸는 실험이면 핵심 답변 포함도를 판정과 함께 보고한다고 적는다(D-53 결정 1). multi-doc 보조 관찰을 볼지와 건수는 여러 문서를 합쳐 답하는 것을 겨냥한 실험에서만 이때 정한다(D-53 결정 7)
 - judge 설정(지시 `j_v8`, 실행 설정 `deepseek_go_mixed`)은 동결이라 "바꾸는 것"에 넣지 않는다(D-49·D-50). 기준과 후보는 같은 judge로 채점해야 비교할 수 있고, 다르면 `rag.gen_eval.compare`가 멈춘다
 
