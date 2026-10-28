@@ -172,8 +172,8 @@ class StubJudge:
     def __init__(self, replies):
         self.replies = replies
 
-    def ask(self, step, **values):
-        return self.replies[step], {"prompt_tokens": 1, "completion_tokens": 1}
+    def ask(self, step, ok=None, **values):
+        return self.replies[step], [{"prompt_tokens": 1, "completion_tokens": 1}]
 
 
 def verdicts_reply(statements, verdicts, unclear=None):
@@ -255,9 +255,9 @@ class RecordingJudge(StubJudge):
         super().__init__(replies)
         self.seen = {}
 
-    def ask(self, step, **values):
+    def ask(self, step, ok=None, **values):
         self.seen[step] = values
-        return super().ask(step, **values)
+        return super().ask(step, ok, **values)
 
 
 def test_partial_refusal_scores_faithfulness_without_refused_sentence():
@@ -446,6 +446,7 @@ def test_judge_step_params_override_request_and_cache(tmp_path):
     j.step = {"verdicts": {"reasoning_effort": "low",
                            "extra_body": {"thinking": {"type": "enabled"}}}}
     j.cache, j.lock, j.calls, j.hits, j.rep = tmp_path, threading.Lock(), 0, 0, 0
+    j.retry = SimpleNamespace(limit=0, message="fix")
     j.ask("verdicts", x="a")
     j.ask("relevance", x="a")
     assert sent[0]["reasoning_effort"] == "low"
@@ -475,11 +476,73 @@ def test_judge_does_not_cache_empty_or_unfinished(tmp_path):
     j.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     j.params, j.extra, j.step = {}, None, {}
     j.cache, j.lock, j.calls, j.hits, j.rep = tmp_path, threading.Lock(), 0, 0, 0
+    j.retry = SimpleNamespace(limit=0, message="fix")
     assert j.ask("relevance", x="a")[0] is None  # 빈 응답: 저장 안 함
     assert j.ask("relevance", x="a")[0] is None  # 잘린 응답: 저장 안 함
     assert j.ask("relevance", x="a")[0] == {"ok": 1}
     assert j.ask("relevance", x="a")[0] == {"ok": 1}  # 네 번째는 저장 응답
     assert len(sent) == 3 and j.hits == 1 and len(list(tmp_path.iterdir())) == 1
+
+
+def scripted_judge(tmp_path, replies, limit=1):
+    """replies의 (내용, 끝난 이유)를 차례로 돌려주는 Judge와 보낸 요청 목록."""
+    import threading
+    from types import SimpleNamespace
+
+    from rag.gen_eval.judge import Judge
+
+    sent = []
+
+    def create(**kw):
+        content, finish = replies[len(sent)]
+        sent.append(kw)
+        choice = SimpleNamespace(message=SimpleNamespace(content=content), finish_reason=finish)
+        return SimpleNamespace(choices=[choice], usage=None)
+
+    j = object.__new__(Judge)
+    j.j = SimpleNamespace(model="m")
+    j.prompt = {"relevance": SimpleNamespace(system="sys", user="{answer}")}
+    j.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    j.params, j.extra, j.step = {}, None, {}
+    j.cache, j.lock, j.calls, j.hits, j.rep = tmp_path, threading.Lock(), 0, 0, 0
+    j.retry = SimpleNamespace(limit=limit, message="fix")
+    return j, sent
+
+
+def test_judge_format_retry_appends_previous_reply_and_correction(tmp_path):
+    from rag.gen_eval.judge import relevance
+
+    j, sent = scripted_judge(tmp_path, [('{"label": ["답함"]}', "stop"),
+                                        ('{"label": "답함"}', "stop")])
+    out = relevance(j, "q", "a")
+    assert out["score"] == 1.0
+    first = [{"role": "system", "content": "sys"}, {"role": "user", "content": "a"}]
+    # 재요청은 직전 응답과 교정 지시를 붙인다(D-58)
+    assert sent[1]["messages"] == first + [
+        {"role": "assistant", "content": '{"label": ["답함"]}'}, {"role": "user", "content": "fix"}]
+    assert [u.get("format_retry") for u in out["usage"]] == [None, 1]
+    # 다시 실행하면 첫 요청·재요청 모두 저장 응답을 읽는다
+    again = relevance(j, "q", "a")
+    assert again["score"] == 1.0 and len(sent) == 2 and j.hits == 2
+
+
+def test_judge_format_retry_stops_at_limit_and_skips_empty_reply(tmp_path):
+    from rag.gen_eval.judge import relevance
+
+    j, sent = scripted_judge(tmp_path, [("", "length"), ("형식 아님", "stop")])
+    out = relevance(j, "q", "a")
+    assert out["error"] == "label 형식 오류" and len(out["usage"]) == 2 and len(sent) == 2
+    # 직전 응답이 비면 교정 지시만 붙인다
+    assert sent[1]["messages"][-1] == {"role": "user", "content": "fix"}
+    assert len(sent[1]["messages"]) == 3
+
+
+def test_judge_format_retry_not_for_valid_or_no_statements(tmp_path):
+    from rag.gen_eval.judge import faithfulness
+
+    j, sent = scripted_judge(tmp_path, [('{"statements": []}', "stop")])
+    j.prompt = {"statements": j.prompt["relevance"]}
+    assert faithfulness(j, "q", "a", [])["error"] == "진술 없음" and len(sent) == 1
 
 
 def test_judge_recipe_records_code_checks_and_ignores_gen_commit():
@@ -612,17 +675,18 @@ def test_judge_rep_changes_cache_key_and_records_call(tmp_path):
     j.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     j.params, j.extra, j.step = {}, None, {}
     j.cache, j.lock, j.calls, j.hits, j.rep = tmp_path, threading.Lock(), 0, 0, 0
-    _, u = j.ask("relevance", x="a")
+    j.retry = SimpleNamespace(limit=0, message="fix")
+    _, (u,) = j.ask("relevance", x="a")
     body = {"model": "m", "messages": [{"role": "system", "content": "sys"},
                                        {"role": "user", "content": "a"}], "extra": None}
     # 반복 0의 캐시 키는 반복 도입 전과 같다(D-49)
     assert (tmp_path / f"{sha(body)}.json").exists()
     assert u["step"] == "relevance" and u["cached"] is False and u["finish_reason"] == "stop"
     assert u["latency_s"] >= 0 and u["prompt_tokens"] == 3
-    _, again = j.ask("relevance", x="a")
+    _, (again,) = j.ask("relevance", x="a")
     assert again["cached"] is True and again["latency_s"] == u["latency_s"]
     j.rep = 1
-    _, rep1 = j.ask("relevance", x="a")
+    _, (rep1,) = j.ask("relevance", x="a")
     assert rep1["cached"] is False and len(list(tmp_path.iterdir())) == 2
 
 
@@ -890,7 +954,7 @@ def _judged(qid, faith=None, rel=None, inc=None, over=0, judged=2, recipe=None, 
 
 
 def test_gen_compare_per_query_pairs_missing_values():
-    from rag.gen_eval.compare import per_query
+    from rag.gen_eval.report import per_query
     df = per_query([_judged("a", 1.0, 0.5, 0.2, over=1, judged=2),
                     _judged("b", None, None, refusal="full", judged=0)])
     assert df.loc["a", "composite"] == 0.75 and df.loc["a", "over_refusal"] == 0.5
@@ -944,3 +1008,81 @@ def test_gen_compare_check_inputs_stops(tmp_path):
     assert check_inputs(runs, {"base": rows, "cand": prompt}, ["a", "b"]) == {
         "refusal": {"base": "r", "cand": "r2"},
         "filler_phrases": {"base": None, "cand": ["새 문구"]}}
+
+
+def _compare_main(tmp_path, monkeypatch, capsys, base, cand):
+    """합성 judge 기록으로 compare main을 돌려 결과 JSON을 돌려준다(리뷰 G2-7)."""
+    import pandas as pd
+
+    from rag.gen_eval import compare
+    qids = [r["qid"] for r in base]
+    unit = load_cfg(["index.scope=full"]).eval.bootstrap.unit
+    gold = pd.DataFrame({unit: [f"m{i % 2}" for i in range(len(qids))]}, index=qids)
+    monkeypatch.setattr(compare, "eval_qids", lambda cfg: qids)
+    monkeypatch.setattr(compare, "load_gold", lambda cfg, layer: gold)
+    paths = []
+    for name, rows in [("b", base), ("c", cand)]:
+        path = tmp_path / f"{name}.jsonl"
+        path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+                        encoding="utf-8")
+        paths.append(str(path))
+    monkeypatch.setattr(sys, "argv", ["compare", "--base", paths[0], "--cand", paths[1]])
+    compare.main()
+    return json.loads(capsys.readouterr().out)
+
+
+def test_gen_compare_main_pairs_and_reports_exclusions(tmp_path, monkeypatch, capsys):
+    base = [_judged(q, 0.5, 0.5, 0.5) for q in "abcd"]
+    base[2]["faithfulness"] = {"score": None, "error": "verdicts 형식 오류"}
+    cand = [_judged(q, 1.0, 0.5, 0.5) for q in "abcd"]
+    cand[3]["inclusion"] = {"score": None, "excluded": "reference_unusable"}
+    out = _compare_main(tmp_path, monkeypatch, capsys, base, cand)
+    m = out["metrics"]
+    # 형식 오류 질의는 두 실행에서 함께 빠진다(짝지은 제외)
+    assert m["faithfulness"]["n"] == 3 and m["faithfulness"]["diff"] == 0.5
+    assert m["composite"]["n"] == 3 and m["relevance"]["n"] == 4 and m["inclusion"]["n"] == 3
+    assert out["exclusions"]["base"]["faithfulness"] == {"excluded": {}, "format_errors": 1}
+    assert out["exclusions"]["cand"]["inclusion"]["excluded"] == {"reference_unusable": 1}
+
+
+def test_gen_compare_main_stops_without_paired_queries(tmp_path, monkeypatch, capsys):
+    base = [_judged(q, 0.5, 0.5, 0.5) for q in "abcd"]
+    cand = [_judged(q, 1.0, 0.5, 0.5) for q in "abcd"]
+    for r in base + cand:  # gen_eval.item_eval=false로 채점한 결과
+        r["item_eval"] = None
+    with pytest.raises(SystemExit, match="over_refusal: 두 실행 모두 값이 있는 질의가 없다"):
+        _compare_main(tmp_path, monkeypatch, capsys, base, cand)
+
+
+def test_report_check_qids_stops_on_other_sample(monkeypatch):
+    from types import SimpleNamespace
+
+    from rag.gen_eval import report
+    monkeypatch.setattr(report, "eval_qids", lambda cfg: ["a", "b", "c"])
+    cfg = SimpleNamespace(gen_eval=SimpleNamespace(contexts="retrieved", queries="dev-full"),
+                          paths=SimpleNamespace(gen_judge="j.jsonl"))
+    report.check_qids(cfg, [{"qid": q} for q in "abc"])
+    # 다른 표본의 파일(예: S24 100질의)은 앞 표본과 겹쳐도 멈춘다(리뷰 G2-3)
+    with pytest.raises(SystemExit, match="질의 2개가 표본"):
+        report.check_qids(cfg, [{"qid": q} for q in "ab"])
+    # 오라클 진단은 근거가 같아 생성하지 않은 질의가 빠져도 된다(S26)
+    cfg.gen_eval.contexts = "oracle"
+    report.check_qids(cfg, [{"qid": q} for q in "ab"])
+    with pytest.raises(SystemExit):
+        report.check_qids(cfg, [{"qid": q} for q in "abx"])
+
+
+def test_report_item_handling_error_is_not_pre_s22():
+    from rag.gen_eval.report import item_summary, require_s22
+    ok = {"items": [{"state": "있음", "handling": "답함", "outcome": "맞음",
+                     "speaker_unclear": False}],
+          "counts": {"judged": 1, "correct": 1, "over_refusal": 0}}
+    # item_handling 형식 오류 기록은 처리 없는 항목을 남긴다(리뷰 G2-2)
+    bad = {"error": "item_handling 형식 오류",
+           "items": [{"state": "있음", "speaker_unclear": False}]}
+    rows = [{"item_eval": ok}, {"item_eval": bad}]
+    require_s22(rows)
+    s = item_summary(rows)
+    assert s["errors"] == 1 and s["queries"] == 2 and s["accuracy"] == (1, 1)
+    with pytest.raises(SystemExit, match="S22 이전"):
+        require_s22([{"item_eval": {"items": ok["items"]}}])

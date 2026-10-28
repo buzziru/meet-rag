@@ -23,3 +23,7 @@ extra_body:
 price_per_mtok:
   input: 0.10
   output: 0.34
+# 호출 하나의 대기 상한(초)과 SDK 재시도 수. judge와 같은 값이다(D-57 결정 1, 리뷰 G3-1). 생성 레시피에는
+# 넣지 않는다(D-57 결정 3)
+timeout: 120
+max_retries: 1

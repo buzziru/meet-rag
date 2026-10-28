@@ -98,7 +98,7 @@ SLICE 문서의 "수정 허용 파일" 밖의 파일이 바뀌었으면 보고�
 
 생성 설정끼리는 같은 judge로 채점해야 비교할 수 있고, 판정용 결과를 보고 judge를 고치면 평가가 실험 결과에 맞춰진다. 그래서 judge 지시·판정표(D-49)와 실행 설정(D-50)을 동결했다. CLAUDE.md 보호 경로에는 넣지 않고 동결 테스트(`tests/test_gen_eval_freeze.py`)로 막는다(D-49).
 
-- 위반: `configs/judge/prompt/j_v8.yaml`, `src/rag/gen_eval/checks.py`의 `OUTCOMES`·`item_outcome`, `tests/test_gen_eval_freeze.py`의 기대값을 고친 것. 바꿔야 하면 새 버전 파일을 만들어 검증을 다시 한다(D-49)
+- 위반: `configs/judge/prompt/j_v8.yaml`, 형식 재요청 교정 지시·상한 `configs/judge/format_retry/fr_v1.yaml`(D-58 결정 6), `src/rag/gen_eval/checks.py`의 `OUTCOMES`·`item_outcome`, `tests/test_gen_eval_freeze.py`의 기대값(judge 요청 본문 sha256 포함, D-59)을 고친 것. 바꿔야 하면 새 버전 파일을 만들어 검증을 다시 한다(D-49). judge 실행 설정(model·params·extra_body·step_params)도 평가자를 정하는 값이라 같다. 사용자 결정과 `docs/DECISIONS.md` 항목으로 평가자를 바꾼 PR(D-49·D-50 절차, 다음 항목)이 그 변경에 맞춰 요청 본문 sha256 기대값을 고친 것은 해당하지 않는다. 그때는 compare가 멈추므로 기준을 같은 judge로 다시 채점한다. 실험이 바꾸는 값으로 용인하는 것은 생성 쪽 값(`refusal`, `filler_phrases`, `check_patterns`)뿐이다(PR #167·#176 리뷰)
 - 위반: 기본 judge 설정(`deepseek_go_mixed`와 그 파일의 값, 지시 버전)을 바꾸거나 EXP config가 judge 설정을 override한 것이 사용자 승인과 `docs/DECISIONS.md` 항목 없이 diff에 있는 경우
 - 해당하지 않음: `src/rag/gen_eval/report.py` 집계 수정(기존 테스트 통과로 고칠 수 있다, D-49), 판정에 쓰지 않는 비교용 judge 설정 파일 추가
 

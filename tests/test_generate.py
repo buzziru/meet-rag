@@ -88,3 +88,41 @@ def test_recipe_records_query_embedding_basis():
                  {"names": ["idx"], "n_chunks": 3}, stream=False)
     assert rec["embedding_revision"] == "55ec6e9358a56d56af759bc8372e970caf8c305f"
     assert rec["query_prompt"] == "query: "
+
+
+def test_pipeline_client_uses_generator_timeout_and_retries(monkeypatch):
+    from types import SimpleNamespace
+
+    import rag.generate as g
+    made = {}
+    monkeypatch.setattr(g, "Retriever", lambda cfg: SimpleNamespace(
+        dense_ids=[], dirs=[], use_cond=False, use_rerank=False))
+    monkeypatch.setattr(g, "chunks_by_doc", lambda ids: {})
+    monkeypatch.setattr(g, "ChunkStore", lambda dirs: SimpleNamespace(names=[], bounds=[0]))
+    monkeypatch.setattr(g, "corpus_meta", lambda cfg: [])
+    monkeypatch.setattr(g, "require_env", lambda name: "key")
+    monkeypatch.setattr(g, "OpenAI", lambda **kw: made.update(kw) or "client")
+    monkeypatch.setattr(g, "wrap_openai", lambda c: c)
+    g.Pipeline(load_cfg(["index.scope=full"]))
+    # SDK 기본값(600초, 2회) 대신 generator 설정 값(D-57 결정 1)
+    assert made["timeout"] == 120 and made["max_retries"] == 1
+
+
+def test_generate_records_finish_reason():
+    from types import SimpleNamespace
+
+    from rag.generate import Pipeline
+
+    def chunk(content=None, finish=None, usage=None):
+        choices = [] if usage else [SimpleNamespace(delta=SimpleNamespace(content=content),
+                                                    finish_reason=finish)]
+        return SimpleNamespace(choices=choices, usage=usage, provider="p")
+
+    usage = SimpleNamespace(model_dump=lambda: {"completion_tokens": 2})
+    stream = [chunk("답변"), chunk("이다", "length"), chunk(usage=usage)]
+    pipe = object.__new__(Pipeline)
+    pipe.cfg = load_cfg(["index.scope=full"])
+    pipe.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kw: iter(stream))))
+    out = Pipeline.generate.__wrapped__(pipe, [], True, False)
+    assert out["finish_reason"] == "length" and out["answer"] == "답변이다"
