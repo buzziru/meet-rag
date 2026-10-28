@@ -92,7 +92,7 @@ slice-verifier는 1\~3, 5를 맡는다(API 호출 없음). 4는 메인이 실행
 
 - 커밋: 구현 6a4ed20, 결정 기록 4c23a75(D-59), 하네스 6689ac4(ADR-0072). `uv run pytest -q` 335 passed, `uv run ruff check .` 통과
 - 재채점 전 시험 실행(API 대신 호출을 기록만 함): 330질의의 첫 요청 2,464회가 모두 저장 응답과 키가 맞았고, 새로 나갈 호출은 재요청 2회(051401-0012 `verdicts`, 047672-0008 `key_checks`)였다. 첫 요청 본문·캐시 키가 바뀌지 않았다는 확인이다
-- 기준 S25 재채점(완료 기준 4): `doppler run -- uv run python -m rag.gen_eval.judge +exp=exp017 paths.gen_judge=data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v2-dev-full-deepseek_go_mixed-j_v8-n330-fr_v1.jsonl`. API 호출 2회(HTTP 200 2), 저장 응답 2,464회. 결과 SHA-256 `709b2619…042c`
+- 기준 S25 재채점(완료 기준 4): `doppler run -- uv run python -m rag.gen_eval.judge +exp=exp017 paths.gen_judge=data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v2-dev-full-deepseek_go_mixed-j_v8-n330-fr_v1.jsonl`. API 호출 2회(HTTP 200 2), 저장 응답 2,464회. 결과 SHA-256 `709b2619…f519`
   - 충실성 0.802(315질의), 답변 관련성 0.871(321), 종합 지표 0.841(315), 핵심 답변 포함도 0.514(259), 과잉 거부율 0.024(307). 재채점 전 0.803(314), 0.871(321), 0.843(314), 0.512(258), 0.024(307)
   - 형식 오류 3건 → 1건. 047672-0008은 재요청 응답이 진술 문구를 입력과 같게 고쳐 채점됐다. 051401-0012는 재요청 응답이 직전 응답과 글자까지 같아 남았다. 047816-0001은 S25 때 잘린 첫 요청을 뒤 실행이 다시 물어 저장한 응답으로 채점됐다(재요청 아님)
   - 재요청 2건 중 1건이 다른 응답을 받아 방식은 그대로 둔다(D-59 감수하는 것). 매번 같으면 다시 논의한다
