@@ -41,6 +41,7 @@ from rag.gen_eval.checks import (
 )
 from rag.gen_eval.common import eval_qids, load_refs, read_jsonl, stable
 from rag.index import ROOT, git_state, load_cfg, refuse_existing, require_env, write_guarded
+from rag.speakers import render as render_context
 
 RELEVANCE = {"답함": 1.0, "일부": 0.5, "답하지 않음": 0.0}
 
@@ -72,8 +73,9 @@ def parse_json(text: str | None) -> dict | None:
 
 
 def format_contexts(contexts: list[dict]) -> str:
+    """근거 본문은 생성 모델이 받은 것과 같게 렌더링한다(speakers가 없으면 text 그대로, S29)."""
     return "\n\n".join(f"[{c['n']}] {c['date']} {c['committee_name']} {c['meeting_number']} "
-                       f"{c['session_number']}\n{c['text']}" for c in contexts)
+                       f"{c['session_number']}\n{render_context(c)}" for c in contexts)
 
 
 def check_prompt(cfg, gen_recipe: dict) -> None:

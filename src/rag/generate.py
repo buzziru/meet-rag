@@ -30,6 +30,7 @@ from rag.index import (
     load_model,
     require_env,
 )
+from rag.ingest import iter_labels
 from rag.llm import answer_start, split_thought
 from rag.retrieve import (
     ChunkStore,
@@ -39,13 +40,15 @@ from rag.retrieve import (
     read_query_emb,
     read_rerank_scores,
 )
+from rag.speakers import check_mode, chunk_speakers, doc_spans, render
 
 CONTEXT_META = ["date", "committee_name", "meeting_number", "session_number", "original"]
 
 
 def build_messages(prompt, contexts: list[dict], query: str) -> list[dict]:
-    """근거에 번호와 회의 정보를 붙여 메시지를 만든다. URL은 넣지 않는다."""
-    blocks = [prompt.context.format(n=c["n"], text=c["text"],
+    """근거에 번호와 회의 정보를 붙여 메시지를 만든다. URL은 넣지 않는다. 발언자 표시(speakers)가
+    있으면 text 자리에 렌더링한 문자열을 넣는다(S29, judge의 format_contexts와 같은 함수)."""
+    blocks = [prompt.context.format(n=c["n"], text=render(c),
                                     **{k: c[k] for k in CONTEXT_META if k != "original"})
               for c in contexts]
     user = prompt.user.format(contexts="\n\n".join(blocks), query=query)
@@ -76,6 +79,8 @@ def recipe(cfg, index_meta: dict, stream: bool) -> dict:
             json.dumps(prompt, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest(),
         "model": g.model, "params": OmegaConf.to_container(g.params), "stream": stream,
         "extra_body": OmegaConf.to_container(g.extra_body) if g.get("extra_body") else None,
+        # 발언자 표시(S29). off면 키를 넣지 않아 S25 생성 기록의 레시피와 같다
+        **({} if (m := check_mode(cfg.speakers.mode)) == "off" else {"speakers": m}),
     }
 
 
@@ -117,6 +122,12 @@ class Pipeline:
         # 근거에 붙일 회의 정보. 시작할 때 한 번 읽는다(질의마다 코퍼스를 읽지 않는다, PR #71).
         # 조건 색인·추출기가 읽은 코퍼스를 같이 쓴다(S17)
         self.doc_meta = {d["doc_id"]: {k: d[k] for k in CONTEXT_META} for d in corpus_meta(cfg)}
+        # 발언자 표시(S29): 문서 화자 목록과 원천 라벨의 발언 구간. 구간은 시작할 때 만든다(약 7초)
+        self.speakers = check_mode(cfg.speakers.mode)
+        if self.speakers != "off":
+            self.doc_speakers = {d["doc_id"]: d for d in corpus_meta(cfg)}
+            self.spans = doc_spans(iter_labels(ROOT / cfg.paths.raw_dir),
+                                   tuple(cfg.ingest.name_titles))
         # 대기·재시도는 SDK 기본값(600초, 2회) 대신 generator 설정 값(D-57 결정 1, 리뷰 G3-1)
         self.client = wrap_openai(OpenAI(base_url=cfg.generator.base_url,
                                          api_key=require_env(cfg.generator.api_key_env),
@@ -181,6 +192,10 @@ class Pipeline:
                         "chunk_id": r["chunk_id"], "score": st.get("rrf_score", dense),
                         "dense_score": dense, "stages": st, "text": r["text"],
                         **self.doc_meta[r["doc_id"]]})
+            if self.speakers != "off":
+                out[-1]["speakers"] = chunk_speakers(
+                    self.doc_speakers[r["doc_id"]], self.spans.get(r["doc_id"], []),
+                    r["start"], r["end"], self.speakers)
         return out
 
     @traceable(name="build_messages", process_inputs=lambda i: {"query": i["query"]})

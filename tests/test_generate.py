@@ -46,6 +46,30 @@ def test_messages_number_contexts_without_urls():
     assert "http" not in user
 
 
+def test_messages_render_speakers_only_when_field_present():
+    """S29: speakers가 없으면 메시지가 S25와 같은 문자열이고, 있으면 text 자리에 렌더링한다."""
+    cfg = load_cfg(["index.scope=full"])
+    plain = context(1, "질문입니다. 답변입니다.")
+    want = ("[근거]\n[1] 2020년1월1일 위원회 제1회 제2차\n질문입니다. 답변입니다.\n\n"
+            "[질문]\n질문?")
+    assert build_messages(cfg.prompt, [plain], "질문?")[1]["content"] == want
+    spk = {"questioners": [{"name": "홍길동", "position": "위원", "affiliation": ""}],
+           "answerers": [{"name": "김철수", "position": "장관", "affiliation": "국토교통부"}],
+           "spans": [{"role": "answer", "start": 7, "end": 13, "name": "김철수",
+                      "position": "장관", "affiliation": "국토교통부"}]}
+    user = build_messages(cfg.prompt, [{**plain, "speakers": spk}], "질문?")[1]["content"]
+    assert ("[1] 2020년1월1일 위원회 제1회 제2차\n"
+            "질의자: 홍길동 위원 / 답변자: 김철수 국토교통부 장관\n"
+            "질문입니다. 〈답변 김철수 장관〉답변입니다.〈/답변〉") in user
+
+
+def test_recipe_records_speakers_mode_only_when_on():
+    meta = {"names": ["idx"], "n_chunks": 3}
+    assert "speakers" not in recipe(load_cfg(["index.scope=full"]), meta, stream=False)
+    on = recipe(load_cfg(["index.scope=full", "speakers.mode=marks"]), meta, stream=False)
+    assert on["speakers"] == "marks"
+
+
 def test_prompt_version_file_loads():
     assert load_cfg(["prompt=v1"]).prompt.version == "v1"
 

@@ -1,8 +1,9 @@
+import pytest
 import yaml
 
 from rag.index import ROOT
 from rag.ingest import make_doc_id
-from rag.speakers import chunk_speakers, doc_spans, fill_counts
+from rag.speakers import check_mode, chunk_speakers, doc_spans, fill_counts, render
 
 TITLES = ("위원", "장관")
 
@@ -53,6 +54,29 @@ def test_chunk_speakers_clips_spans_to_chunk_and_head_has_no_spans():
     assert [(s["role"], s["start"], s["end"]) for s in got["spans"]] == [
         ("question", 0, 5), ("answer", 5, 15)]
     assert "spans" not in chunk_speakers(doc, spans, 5, 20, "head")
+
+
+def test_render_without_field_is_text_and_marks_nest_at_boundaries():
+    assert render({"text": "본문"}) == "본문"
+    q = {"name": "홍길동", "position": "위원", "affiliation": ""}
+    a = {"name": "김철수", "position": "장관", "affiliation": "국토교통부"}
+    head = {"questioners": [q], "answerers": [a]}
+    assert render({"text": "본문", "speakers": head}) == (
+        "질의자: 홍길동 위원 / 답변자: 김철수 국토교통부 장관\n본문")
+    # 닿아 있는 두 구간은 닫는 표지가 먼저, 청크 끝까지 가는 구간도 닫는다
+    spans = [{"role": "question", "start": 0, "end": 2, **q},
+             {"role": "answer", "start": 2, "end": 4, **a}]
+    assert render({"text": "가나다라마", "speakers": {**head, "spans": spans}}).split("\n")[1] == (
+        "〈질의 홍길동 위원〉가나〈/질의〉〈답변 김철수 장관〉다라〈/답변〉마")
+    empty = {"questioners": [], "answerers": []}
+    got = render({"text": "x", "speakers": empty})
+    assert got.startswith("질의자: 알 수 없음 / 답변자: 알 수 없음")
+
+
+def test_check_mode_rejects_unquoted_yaml_off():
+    assert check_mode("marks") == "marks"
+    with pytest.raises(SystemExit):
+        check_mode(False)  # YAML의 따옴표 없는 off
 
 
 def test_fill_counts():

@@ -18,6 +18,44 @@ from rag.index import ROOT, corpus_meta, load_cfg
 from rag.ingest import SPEAKER_KEYS, iter_labels, make_doc_id, speaker
 
 ROLES = {"question": "questioner", "answer": "answerer"}  # 라벨 발언 키 → 화자 키 접두사
+MODES = ("off", "head", "marks")
+TAGS = {"question": "질의", "answer": "답변"}
+
+
+def check_mode(mode) -> str:
+    """speakers.mode가 off·head·marks 중 하나인지 본다. YAML의 따옴표 없는 off는 False로 읽힌다."""
+    if mode not in MODES:
+        raise SystemExit(f"speakers.mode는 off·head·marks 중 하나다: {mode!r}")
+    return mode
+
+
+def person(p: dict, affiliation: bool = True) -> str:
+    keys = ("name", "affiliation", "position") if affiliation else ("name", "position")
+    return " ".join(p[k] for k in keys if p[k])
+
+
+def render(c: dict) -> str:
+    """근거 text에 speakers 표시를 붙인 문자열. speakers가 없으면 text 그대로다(S25와 같은 입력).
+
+    머리 줄 `질의자: 홍길동 위원 / 답변자: 김철수 국토교통부 장관`, 겹친 구간은
+    `〈질의 홍길동 위원〉…〈/질의〉`. 생성(build_messages)과 judge(format_contexts)가 같이 쓴다.
+    """
+    s = c.get("speakers")
+    if s is None:
+        return c["text"]
+    names = {f: ", ".join(map(person, s[f])) or "알 수 없음" for f in ("questioners", "answerers")}
+    head = f"질의자: {names['questioners']} / 답변자: {names['answerers']}"
+    text = c["text"]
+    events = []  # (위치, 같은 위치에서 닫는 표지 먼저, 표지)
+    for sp in s.get("spans", []):
+        tag = TAGS[sp["role"]]
+        events += [(sp["start"], 1, f"〈{tag} {person(sp, affiliation=False)}〉"),
+                   (sp["end"], 0, f"〈/{tag}〉")]
+    out, pos = [], 0
+    for at, _, tag in sorted(events, key=lambda e: (e[0], e[1])):
+        out += [text[pos:at], tag]
+        pos = at
+    return f"{head}\n{''.join(out)}{text[pos:]}"
 
 
 def doc_spans(records: Iterable[tuple[str, dict]],
