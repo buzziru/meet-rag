@@ -80,7 +80,7 @@ S28이 `src/rag/gen_eval/judge.py`·`src/rag/generate.py`·`tests/test_gen_eval_
 
 ## 수정 허용 파일
 
-`src/rag/speakers.py`(새 파일), `tests/test_speakers.py`(새 파일), `configs/judge/prompt/j_v9.yaml`(새 파일), 2단계에서 `src/rag/gen_eval/judge.py`(`format_contexts`), `src/rag/generate.py`(`build_messages`, `Pipeline.retrieve`, `recipe`), `src/rag/gen_eval/generate.py`(레시피 표시가 필요하면), `tests/test_gen_eval_freeze.py`·`tests/test_gen_eval.py`·`tests/test_generate.py`(고정·렌더링 테스트), `configs/config.yaml`(`speakers.mode`, `paths.gen_runs`·`gen_judge`의 표시), `src/rag/index.py`(resolver `spk`, 2단계에 더함), `CLAUDE.md`(명령 한 줄), `docs/DECISIONS.md`, `docs/gen-eval-criteria.md`(H20을 가리키는 줄의 `이후 변경` 표시, 2단계에 더함), `docs/PLAN.md`·`docs/PLAN-done.md`, 이 문서
+`src/rag/speakers.py`(새 파일), `tests/test_speakers.py`(새 파일), `configs/judge/prompt/j_v9.yaml`(새 파일), 2단계에서 `src/rag/gen_eval/judge.py`(`format_contexts`, PR #178 리뷰 1로 `check_speakers`를 더함), `src/rag/generate.py`(`build_messages`, `Pipeline.retrieve`, `recipe`), `src/rag/gen_eval/generate.py`(레시피 표시가 필요하면), `tests/test_gen_eval_freeze.py`·`tests/test_gen_eval.py`·`tests/test_generate.py`(고정·렌더링 테스트), `configs/config.yaml`(`speakers.mode`, PR #178 리뷰 2로 `speakers.repeat_min_chars`를 더함, `paths.gen_runs`·`gen_judge`의 표시), `src/rag/index.py`(resolver `spk`, 2단계에 더함), `CLAUDE.md`(명령 한 줄), `docs/DECISIONS.md`, `docs/gen-eval-criteria.md`(H20을 가리키는 줄의 `이후 변경` 표시, 2단계에 더함), `docs/PLAN.md`·`docs/PLAN-done.md`, 이 문서
 
 ## 범위 밖
 
