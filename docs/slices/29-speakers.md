@@ -103,3 +103,6 @@ S28이 `src/rag/gen_eval/judge.py`·`src/rag/generate.py`·`tests/test_gen_eval_
 - 더한 테스트: `speakers`가 있으면 근거를 받는 `verdicts`·`items` 요청만 바뀌고 `chunk_checks`는 그대로, j_v9 해시 고정, `build_messages`의 렌더링(필드 없으면 지금 문자열과 같음), 레시피의 `speakers` 키(off면 없음), 렌더링 표지 순서, `speakers.mode` 값 확인
 - 경로: 기본 설정 `paths.gen_runs`는 `…-dev-full.jsonl`(S25와 같음), `speakers.mode=marks`면 `…-dev-full-spk-marks.jsonl`
 - 유료 호출 없는 실제 검색 확인(`Pipeline.retrieve`만, dev 질의 1개, `speakers.mode=marks`): 근거 5개 모두 화자 목록이 붙고 3개에 표지 구간 2개씩, 구간이 모두 청크 범위 안이다. 프롬프트에 머리 줄 5개와 답변 표지 3개가 들어간다. `Pipeline` 시작은 46.7초(원천 라벨 읽기 약 7초 포함)
+- slice-verifier: 완료 기준 1\~6 통과. 기본 레시피는 S25 기록의 레시피와 `git_commit`·`git_dirty` 밖의 키·값이 같고, `marks`면 `speakers` 키 하나만 다르다. `--gen` 실행 전후 생성 기록의 SHA-256이 같다
+- protocol-auditor: 위반 없음. 관찰을 반영해 `docs/gen-eval-criteria.md`의 "청크에는 발언자 표기가 없다"(20행)에 `이후 변경`을 붙이고, PLAN-done 줄에 완료 표시를 더했다. `docs/SPEC.md:165`의 같은 서술은 기본(off)에서 사실이고 SPEC은 사용자 승인 대상이라 고치지 않았다
+- 메인 확인: 전체 인덱스 세 개의 청크 표본 1,822개에서 `text`가 문서 `context[start:end]`와 모두 같다. 질의·답변 구간이 일부만 겹쳐 표지가 엇갈리는 경우는 0건이다. 두 번 이상 나오는 라벨 발언 2,663개(질의 1,595, 답변 1,068)는 표지 위치를 3,647개 더 붙이고, 길이 중앙값은 114자, 20자 이하는 809개다
