@@ -47,7 +47,7 @@ main을 원격과 맞출 때마다 병합된 로컬 브랜치도 함께 지운�
 
 Claude가 브랜치를 원격에 올리고 `gh pr create`로 PR을 만든다. diff 확인과 병합은 사용자가 한다.
 
-작업 브랜치에 push하기 전에는 `gh pr list --head <브랜치> --state merged --json number`가 빈 목록인지 확인한다. 이미 병합된 PR의 브랜치에 push하면 사용자가 병합하며 지운 원격 브랜치가 다시 생기고, 그 커밋은 어느 PR에도 들어가지 않는다(이슈 #120 세션, 2026-10-27 STATUS 커밋 aea30e7 두 번). 병합됐으면 최신 `main`에서 새 브랜치를 만들어 옮긴다(ADR-0076)
+작업 브랜치에 push하기 전에는 `gh pr list --head <브랜치> --state merged --json number`가 빈 목록인지 확인한다. 이미 병합된 PR의 브랜치에 push하면 사용자가 병합하며 지운 원격 브랜치가 다시 생기고, 그 커밋은 어느 PR에도 들어가지 않는다(이슈 #120 세션, 2026-10-27 STATUS 커밋 aea30e7 두 번). 병합됐으면 최신 `main`에서 새 브랜치를 만들어 옮긴다. `merged_branch_push_guard` 훅이 같은 대조로 병합된 PR 브랜치로의 push를 막는다(main으로의 push와 원격 브랜치 삭제는 보지 않고, gh가 실패하면 막지 않는다, ADR-0076)
 
 1. `uv run pytest -q`, `uv run ruff check .` 통과를 확인한다. PR 내용이 사용자 결정에 따라 바뀌는 작업이면 결정을 받아 반영한 뒤 올린다(사소한 결정은 PR 코멘트로 받는다). 결정 전에 올리면 PR을 다시 고치게 된다
 2. `protocol-auditor`로 브랜치 diff를 평가 프로토콜·금지 조항에 대조하고 위반을 고친다. meet-rag 흐름 밖에서 올리는 PR도 같다(작업 종류는 meet-rag 스킬의 감사 단계를 따른다). 사용자 요청에 따라 self-review를 한다. 작성 맥락과 분리하려고 `/code-review`나 subagent로 실행한다. self-review를 하면 3의 가이드는 그 지적을 반영한 뒤에 부른다(코드 수정이 나오기 쉬워, 먼저 부르면 반영 전 diff를 설명한다). self-review가 없으면 가이드는 검증·감사와 병렬로 부른다(meet-rag 스킬 A4, ADR-0056)
