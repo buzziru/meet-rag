@@ -7,7 +7,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 한 줄에 명령 하나와 호출법만 적는다. 옵션·절차·한도는 SLICE 문서나 DECISIONS에 두고 경로만 단다. SLICE가 끝나면 그 조각의 호출법만 여기에 추가한다. 매 세션 읽히는 파일이라 특정 작업에서만 쓰는 세부가 쌓이면 다른 지시가 묻힌다. 빠른 확인은 dev-small로 한다.
 
 - 환경: `uv sync --extra cpu` (GPU 환경은 `--extra cu126`)
-- 비밀 값: Doppler(project `meet-rag`, config `dev`, 저장소에 `doppler setup`으로 연결). `rag.*` 실행과 노트북 커널은 `doppler run -- uv run python -m …`처럼 앞에 붙인다(API 키, `HF_HOME`). `.env`는 쓰지 않는다(지난 코드의 예외: ADR-0068). "환경 변수 …이(가) 없다"로 멈추면 사용자에게 알리고 `doppler run --`을 붙여 다시 실행한다
+- 비밀 값: Doppler(project `meet-rag`, config `dev`, 저장소에 `doppler setup`으로 연결). `rag.*` 실행과 노트북 커널은 `doppler run -- uv run python -m …`처럼 앞에 붙인다(API 키, `HF_HOME`). `.env`는 쓰지 않는다(지난 코드의 예외: ADR-0068). "환경 변수 …이(가) 없다"로 멈추면 사용자에게 알리고 `doppler run --`을 붙여 다시 실행한다. 셸에서 `doppler`를 찾지 못하면 winget 설치 경로(`%LOCALAPPDATA%\Microsoft\WinGet\Packages\Doppler.doppler_*\doppler.exe`)로 부른다
 - 테스트·린트: `uv run pytest -q`, `uv run ruff check .`
 - 데이터 적재: `uv run python -m rag.ingest` (→ `data/processed/`)
 - 평가 분할: `uv run python -m rag.splits` (→ `data/splits/`)
