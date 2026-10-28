@@ -649,13 +649,16 @@ def test_print_cases_stops_when_case_file_changed(tmp_path, monkeypatch):
 
 
 def test_rep_paths_keep_rep_zero_unchanged():
+    # 반복 번호 0이면 접미사가 없고 1 이상이면 붙는 경로 규칙을 본다. 프롬프트 버전은 config에서
+    # 읽어, 기준 프롬프트가 바뀌어도(D-61) 테스트를 고치지 않는다(PR #180 리뷰)
     small = ["index.scope=full", "+exp=exp017", "gen_eval.queries=dev-small"]
-    base = load_cfg(small).paths
-    assert base.gen_runs.endswith("-v2-dev-small.jsonl")
-    assert base.gen_judge.endswith("-v2-dev-small-deepseek_go_mixed-j_v8.jsonl")
+    cfg = load_cfg(small)
+    v = cfg.prompt.version
+    assert cfg.paths.gen_runs.endswith(f"-{v}-dev-small.jsonl")
+    assert cfg.paths.gen_judge.endswith(f"-{v}-dev-small-deepseek_go_mixed-j_v8.jsonl")
     rep = load_cfg([*small, "gen_eval.gen_rep=1", "judge.rep=2"]).paths
-    assert rep.gen_runs.endswith("-v2-dev-small-r1.jsonl")
-    assert rep.gen_judge.endswith("-v2-dev-small-r1-deepseek_go_mixed-j_v8-r2.jsonl")
+    assert rep.gen_runs.endswith(f"-{v}-dev-small-r1.jsonl")
+    assert rep.gen_judge.endswith(f"-{v}-dev-small-r1-deepseek_go_mixed-j_v8-r2.jsonl")
 
 
 def test_judge_rep_changes_cache_key_and_records_call(tmp_path):
