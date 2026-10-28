@@ -16,6 +16,7 @@ S14 표본은 gen_eval.queries=dev-small gen_eval.n=20).
 
 import hashlib
 import json
+import os
 import sys
 import threading
 import time
@@ -56,7 +57,8 @@ def render(template: str, **values: str) -> str:
 
 
 def parse_json(text: str | None) -> dict | None:
-    """응답의 JSON 객체. 코드 울타리(```json)는 벗긴다. 형식이 틀리면 None(다시 묻지 않는다)."""
+    """응답의 JSON 객체. 코드 울타리(```json)는 벗긴다. 형식이 틀리면 None이고, Judge.ask가
+    형식 재요청을 한다(D-58)."""
     if not text:
         return None
     s = text.strip()
@@ -91,11 +93,15 @@ def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
     그 패턴을 남긴다. 검색 쪽에서 바꾸면 이전 judge 결과와 레시피가 달라진다(S16)."""
     j, g = cfg.judge, cfg.gen_eval
     prompt = OmegaConf.to_container(j.prompt, resolve=True)
+    retry = OmegaConf.to_container(j.format_retry)
     rec = {"name": j.name, "model": j.model, "base_url": j.base_url,
             "params": OmegaConf.to_container(j.params),
             "extra_body": OmegaConf.to_container(j.extra_body) if j.extra_body else None,
             "step_params": OmegaConf.to_container(j.step_params) if j.get("step_params") else None,
             "prompt_version": prompt["version"], "prompt_sha256": sha(prompt),
+            # 형식 재요청 절차(D-58 결정 2). 절차가 다른 결과는 compare가 비교하지 않는다
+            "format_retry_version": retry["version"], "format_retry_sha256": sha(retry),
+            "format_retry_limit": retry["limit"],
             "refusal": cfg.prompt.refusal, "filler_phrases": list(g.filler_phrases),
             "check_patterns": {"date": DATE.pattern, "doc_date": DOC_DATE.pattern},
             "chunk_key_min": g.chunk_key_min, "item_eval": g.item_eval,
@@ -153,19 +159,39 @@ class Judge:
         self.cache = ROOT / cfg.paths.gen_judge_cache
         self.cache.mkdir(parents=True, exist_ok=True)
         self.rep = j.rep
+        self.retry = j.format_retry
         self.lock = threading.Lock()
         self.calls = self.hits = 0
 
-    def ask(self, step: str, **values: str) -> tuple[dict | None, dict]:
-        """(파싱한 JSON 또는 None, usage). step은 지시 파일의 항목 이름.
+    def ask(self, step: str, ok=None, **values: str) -> tuple[dict | None, list[dict]]:
+        """(파싱한 JSON 또는 None, 호출마다의 usage 목록). step은 지시 파일의 항목 이름.
+
+        응답이 JSON이 아니거나 ok(파싱한 JSON)가 거짓이면(기준 문서 P6의 형식 오류) 첫 요청 뒤에
+        직전 응답과 교정 지시(judge.format_retry.message)를 붙여 format_retry.limit회까지 다시 묻고,
+        마지막 응답을 돌려준다(D-58). 형식 오류 판단은 부른 쪽이 같은 ok로 다시 한다. 첫 요청의
+        본문·캐시 키는 재요청 도입 전과 같고, 재요청은 본문이 달라 키가 따로 생긴다."""
+        p = self.prompt[step]
+        first = [{"role": "system", "content": p.system},
+                 {"role": "user", "content": render(p.user, **values)}]
+        messages, usages = first, []
+        for attempt in range(self.retry.limit + 1):
+            content, usage = self.call(step, messages)
+            usages.append({**usage, "format_retry": attempt} if attempt else usage)
+            out = parse_json(content)
+            if out is not None and (ok is None or ok(out)):
+                break
+            # 직전 응답이 비었으면(잘림 등) 교정 지시만 붙인다
+            messages = first + ([{"role": "assistant", "content": content}] if content else []) + [
+                {"role": "user", "content": self.retry.message}]
+        return out, usages
+
+    def call(self, step: str, messages: list[dict]) -> tuple[str | None, dict]:
+        """(응답 내용, usage). 같은 요청 본문은 저장된 응답을 쓴다.
 
         usage에는 토큰과 함께 단계 이름, 지연(latency_s), 저장 응답 사용 여부(cached), 끝난 이유
         (finish_reason)를 남긴다(S24). 저장 응답의 지연·끝난 이유는 저장할 때의 값이고, S24 전에
         저장한 응답에는 없다. 반복 번호(judge.rep)가 0보다 크면 요청 본문 해시(캐시 키)에 넣어 같은
         요청을 다시 묻는다. 0이면 키가 반복 도입 전과 같다(D-49)."""
-        p = self.prompt[step]
-        messages = [{"role": "system", "content": p.system},
-                    {"role": "user", "content": render(p.user, **values)}]
         over = dict(self.step.get(step) or {})
         extra = over.pop("extra_body", self.extra)
         params = {**self.params, **over}
@@ -188,12 +214,15 @@ class Judge:
                      "finish_reason": r.choices[0].finish_reason}
             # 빈 응답과 끝나지 않은 응답(잘림 등)은 저장하지 않아 다시 실행하면 다시 묻는다(D-42)
             if saved["content"] and saved["finish_reason"] == "stop":
-                path.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
+                # 임시 파일에 쓰고 옮겨, 강제 종료로 잘린 캐시 파일이 남지 않게 한다(리뷰 G1-5)
+                tmp = path.with_name(f"{path.name}.{threading.get_ident()}.tmp")
+                tmp.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
+                os.replace(tmp, path)
             with self.lock:
                 self.calls += 1
         usage = {**(saved["usage"] or {}), "step": step, "cached": cached,
                  "latency_s": saved.get("latency_s"), "finish_reason": saved.get("finish_reason")}
-        return parse_json(saved["content"]), usage
+        return saved["content"], usage
 
 
 def same_statements(rows, statements: list[str]) -> bool:
@@ -203,55 +232,73 @@ def same_statements(rows, statements: list[str]) -> bool:
             and [r.get("statement") for r in rows] == statements)
 
 
+def valid_verdicts(statements: list[str]):
+    """verdicts 응답이 입력 진술을 같은 순서로 담고 값이 정해진 값 안인지. speaker_unclear는
+    진술을 뒷받침한 근거 내용의 발언자를 구분할 수 없다는 표시다(기준 문서 F7)."""
+    def ok(out: dict) -> bool:
+        vs = out.get("verdicts")
+        return same_statements(vs, statements) and all(
+            v.get("verdict") in (0, 1) and isinstance(v.get("speaker_unclear"), bool) for v in vs)
+    return ok
+
+
 def faithfulness(judge: Judge, question: str, answer: str, contexts: list[dict]) -> dict:
     """RAGAS 충실성: 뒷받침된 진술 수 / 전체 진술 수."""
-    st, u1 = judge.ask("statements", question=question, answer=answer)
+    st, u1 = judge.ask("statements", lambda o: isinstance(o.get("statements"), list),
+                       question=question, answer=answer)
     statements = st.get("statements") if st else None
     if not isinstance(statements, list):
-        return {"score": None, "error": "statements 형식 오류", "usage": [u1]}
-    if not statements:
-        return {"score": None, "error": "진술 없음", "usage": [u1]}
-    vd, u2 = judge.ask("verdicts", contexts=format_contexts(contexts),
+        return {"score": None, "error": "statements 형식 오류", "usage": u1}
+    if not statements:  # 형식 오류가 아니라 다시 묻지 않는다(이슈 #156)
+        return {"score": None, "error": "진술 없음", "usage": u1}
+    vd, u2 = judge.ask("verdicts", valid_verdicts(statements), contexts=format_contexts(contexts),
                        statements=json.dumps(statements, ensure_ascii=False))
     verdicts = vd.get("verdicts") if vd else None
     if not same_statements(verdicts, statements):
         return {"score": None, "error": "verdicts 형식 오류", "statements": statements,
-                "usage": [u1, u2]}
-    # speaker_unclear: 진술을 뒷받침한 근거 내용의 발언자를 구분할 수 없음(기준 문서 F7)
-    ok = [v.get("verdict") in (0, 1) and isinstance(v.get("speaker_unclear"), bool)
-          for v in verdicts]
-    if not all(ok):
-        return {"score": None, "error": "verdict 값 오류", "usage": [u1, u2]}
+                "usage": u1 + u2}
+    if not valid_verdicts(statements)(vd):
+        return {"score": None, "error": "verdict 값 오류", "usage": u1 + u2}
     return {"score": sum(v["verdict"] for v in verdicts) / len(verdicts), "verdicts": verdicts,
-            "usage": [u1, u2]}
+            "usage": u1 + u2}
+
+
+def valid_label(out: dict) -> bool:
+    label = out.get("label")
+    return isinstance(label, str) and label in RELEVANCE  # list·dict 값은 형식 오류(리뷰 G1-1)
 
 
 def relevance(judge: Judge, question: str, answer: str) -> dict:
-    out, u = judge.ask("relevance", question=question, answer=answer)
-    label = out.get("label") if out else None
-    if label not in RELEVANCE:
-        return {"score": None, "error": "label 형식 오류", "usage": [u]}
-    return {"score": RELEVANCE[label], "label": label, "reason": out.get("reason"), "usage": [u]}
+    out, u = judge.ask("relevance", valid_label, question=question, answer=answer)
+    if not (out and valid_label(out)):
+        return {"score": None, "error": "label 형식 오류", "usage": u}
+    return {"score": RELEVANCE[out["label"]], "label": out["label"], "reason": out.get("reason"),
+            "usage": u}
 
 
 def key_statements(judge: Judge, question: str, reference: str) -> dict:
     """answer.comment에서 질의에 답하는 핵심 진술. 답변과 무관해 질의마다 한 번 부르고, 핵심 답변
     포함도와 근거 청크 판정이 같은 진술을 쓴다. 빈 목록이면 참조 사용 불가다."""
-    out, u = judge.ask("key_statements", question=question, reference=reference)
+    out, u = judge.ask("key_statements", lambda o: isinstance(o.get("key_statements"), list),
+                       question=question, reference=reference)
     keys = out.get("key_statements") if out else None
     if not isinstance(keys, list):
-        return {"keys": None, "error": "key_statements 형식 오류", "usage": [u]}
-    return {"keys": keys, "usage": [u]}
+        return {"keys": None, "error": "key_statements 형식 오류", "usage": u}
+    return {"keys": keys, "usage": u}
 
 
 def key_presence(judge: Judge, step: str, keys: list[str], **text: str) -> dict:
     """핵심 진술마다 대상 글(답변 또는 근거 청크)에 들어 있는지 판정하고 들어 있는 비율을 낸다."""
-    out, u = judge.ask(step, key_statements=json.dumps(keys, ensure_ascii=False), **text)
-    checks = out.get("checks") if out else None
-    if not same_statements(checks, keys) or not all(c.get("present") in (0, 1) for c in checks):
-        return {"score": None, "error": f"{step} 형식 오류", "usage": [u]}
+    def ok(o: dict) -> bool:
+        cs = o.get("checks")
+        return same_statements(cs, keys) and all(c.get("present") in (0, 1) for c in cs)
+
+    out, u = judge.ask(step, ok, key_statements=json.dumps(keys, ensure_ascii=False), **text)
+    if not (out and ok(out)):
+        return {"score": None, "error": f"{step} 형식 오류", "usage": u}
+    checks = out["checks"]
     return {"score": sum(c["present"] for c in checks) / len(checks), "checks": checks,
-            "usage": [u]}
+            "usage": u}
 
 
 def inclusion(judge: Judge, answer: str, ks: dict | None) -> dict:
@@ -270,26 +317,33 @@ def item_eval(judge: Judge, question: str, answer: str, contexts: list[dict]) ->
     """질의 항목 단위 거부 평가(S14c, D-41 결정 2~4). 항목과 정보 상태는 답변 없이 근거로 정하고,
     처리는 근거 없이 답변으로 정한다. 맞는 처리인지는 코드가 정한다(checks.item_outcome).
     값이 정해진 값 밖이거나 처리의 항목 번호가 항목 단계와 다르면 형식 오류로 판단 불가다."""
-    it, u1 = judge.ask("items", question=question, contexts=format_contexts(contexts))
-    items = it.get("items") if it else None
-    if (not isinstance(items, list) or not items
-            or not all(isinstance(i, dict) and isinstance(i.get("item"), str)
-                       and i.get("state") in STATES and isinstance(i.get("speaker_unclear"), bool)
-                       for i in items)):
-        return {"error": "items 형식 오류", "usage": [u1]}
+    def ok_items(o: dict) -> bool:
+        items = o.get("items")
+        return isinstance(items, list) and bool(items) and all(
+            isinstance(i, dict) and isinstance(i.get("item"), str) and i.get("state") in STATES
+            and isinstance(i.get("speaker_unclear"), bool) for i in items)
+
+    it, u1 = judge.ask("items", ok_items, question=question, contexts=format_contexts(contexts))
+    if not (it and ok_items(it)):
+        return {"error": "items 형식 오류", "usage": u1}
+    items = it["items"]
     listed = [{"n": k, "item": i["item"]} for k, i in enumerate(items, 1)]
-    hd, u2 = judge.ask("item_handling", question=question, answer=answer,
+
+    def ok_handling(o: dict) -> bool:
+        hs = o.get("handling")
+        return (isinstance(hs, list)
+                and [h.get("n") if isinstance(h, dict) else None for h in hs]
+                == [x["n"] for x in listed]
+                and all(h.get("handling") in HANDLINGS for h in hs))
+
+    hd, u2 = judge.ask("item_handling", ok_handling, question=question, answer=answer,
                        items=json.dumps(listed, ensure_ascii=False))
-    handling = hd.get("handling") if hd else None
-    if (not isinstance(handling, list)
-            or [h.get("n") if isinstance(h, dict) else None for h in handling]
-            != [x["n"] for x in listed]
-            or not all(h.get("handling") in HANDLINGS for h in handling)):
-        return {"error": "item_handling 형식 오류", "items": items, "usage": [u1, u2]}
+    if not (hd and ok_handling(hd)):
+        return {"error": "item_handling 형식 오류", "items": items, "usage": u1 + u2}
     rows = [{**i, "handling": h["handling"], "handling_reason": h.get("reason"),
              "outcome": item_outcome(i["state"], h["handling"])}
-            for i, h in zip(items, handling, strict=True)]
-    return {"items": rows, "counts": item_counts(rows), "usage": [u1, u2]}
+            for i, h in zip(items, hd["handling"], strict=True)]
+    return {"items": rows, "counts": item_counts(rows), "usage": u1 + u2}
 
 
 @traceable(name="judge_record", process_inputs=lambda i: {"qid": i["gen"]["qid"]})
@@ -311,7 +365,8 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
            "answer_in_chunk": None, "usage": gen["usage"], "provider": gen["provider"],
            "first_token_s": gen["first_token_s"], "total_s": gen["total_s"],
            # S24 전 생성 기록에는 없다
-           "retrieve_s": gen.get("retrieve_s"), "concurrency": gen.get("concurrency")}
+           "retrieve_s": gen.get("retrieve_s"), "concurrency": gen.get("concurrency"),
+           "gen_finish_reason": gen.get("finish_reason")}  # S28 전 생성 기록에는 없다
     full = kind == "full"  # 전체 거부는 거부 집계로만 본다(초안 "거부 답변의 처리")
 
     def key_chain():

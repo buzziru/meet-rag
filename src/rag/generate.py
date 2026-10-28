@@ -117,8 +117,11 @@ class Pipeline:
         # 근거에 붙일 회의 정보. 시작할 때 한 번 읽는다(질의마다 코퍼스를 읽지 않는다, PR #71).
         # 조건 색인·추출기가 읽은 코퍼스를 같이 쓴다(S17)
         self.doc_meta = {d["doc_id"]: {k: d[k] for k in CONTEXT_META} for d in corpus_meta(cfg)}
+        # 대기·재시도는 SDK 기본값(600초, 2회) 대신 generator 설정 값(D-57 결정 1, 리뷰 G3-1)
         self.client = wrap_openai(OpenAI(base_url=cfg.generator.base_url,
-                                         api_key=require_env(cfg.generator.api_key_env)))
+                                         api_key=require_env(cfg.generator.api_key_env),
+                                         timeout=cfg.generator.timeout,
+                                         max_retries=cfg.generator.max_retries))
         self._model = None
         # 재정렬 점수는 EXP-017이 Colab에서 만든 파일을 읽는다. 실시간 재정렬은 배포 SLICE(S14)
         use_rerank = self.retriever.use_rerank
@@ -187,7 +190,8 @@ class Pipeline:
     @traceable(name="generate", process_inputs=lambda i: {"stream": i["stream"]})
     def generate(self, messages: list[dict], stream: bool, echo: bool = True) -> dict:
         """답변 생성. 스트리밍이면 답변 첫 토큰까지의 시간(first_token_s)을 잰다(D-30·D-37).
-        provider는 응답이 알려 준 실제 제공자다(OpenRouter, 제공자 고정 확인용)."""
+        provider는 응답이 알려 준 실제 제공자다(OpenRouter, 제공자 고정 확인용). finish_reason이
+        stop이 아니면 답변이 잘렸을 수 있다(리뷰 G3-3)."""
         g = self.cfg.generator
         params = OmegaConf.to_container(g.params)
         extra = OmegaConf.to_container(g.extra_body) if g.get("extra_body") else None
@@ -197,12 +201,15 @@ class Pipeline:
                                                     extra_body=extra, **params)
             text, usage = r.choices[0].message.content, r.usage.model_dump()
             provider = getattr(r, "provider", None)
+            finish = r.choices[0].finish_reason
         else:
-            text, usage, provider, printed = "", None, None, 0
+            text, usage, provider, printed, finish = "", None, None, 0, None
             for chunk in self.client.chat.completions.create(
                     model=g.model, messages=messages, stream=True, extra_body=extra,
                     stream_options={"include_usage": True}, **params):
                 provider = provider or getattr(chunk, "provider", None)
+                if chunk.choices and chunk.choices[0].finish_reason:
+                    finish = chunk.choices[0].finish_reason
                 if chunk.choices and chunk.choices[0].delta.content:
                     text += chunk.choices[0].delta.content
                     start = answer_start(text)
@@ -220,7 +227,8 @@ class Pipeline:
                 print()
         thought, answer = split_thought(text)
         return {"answer": answer, "thought": thought, "usage": usage, "provider": provider,
-                "first_token_s": first, "total_s": time.perf_counter() - t0}
+                "finish_reason": finish, "first_token_s": first,
+                "total_s": time.perf_counter() - t0}
 
     def run(self, query: str, q_emb: np.ndarray, qid: str | None = None,
             stream: bool | None = None, echo: bool = True) -> dict:

@@ -2,6 +2,7 @@
 # Console 종량제 경로(/inference/openai/v1)는 잔액에서 차감해 쓰지 않는다
 defaults:
   - prompt: j_v5
+  - format_retry: fr_v1  # 형식 재요청(D-58)
   - _self_
 
 name: deepseek_go  # judge 결과 파일 이름(paths.gen_judge)

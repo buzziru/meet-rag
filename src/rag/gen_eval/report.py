@@ -2,12 +2,12 @@
 
 기준별 평균과 계산한 질의 수, 뺀 질의 수(전체 거부 포함 이유별), 충실성 판정의 발언자 구분 불가
 진술 수(S22), 전체·부분 거부(S14b), 지정 거부 문구를 쓰지 않은 거부(이슈 #156), 거부 교차 집계,
-인용·메타데이터 오류, 토큰·비용, 첫 토큰 시간을 낸다. 항목 평가 결과가 있으면 정보 상태 × 처리 표,
-거부 정확도, 틀린 처리 유형을 낸다(S14c). gen_eval.item_cases를 주면 판정 확인 사례의 judge 결과를
-정답과 대조한다. 종합 지표와 기준 비교·판정은
-만들지 않는다(초안 결정 사항 2·3 이후).
-인자는 Hydra override(기본은 판정용 세트 dev-full 330질의, D-50. S14 표본은
-gen_eval.queries=dev-small gen_eval.n=20).
+인용·메타데이터 오류, 토큰·비용, 첫 토큰 시간, 끝나지 않은 생성 수를 낸다. 항목 평가 결과가 있으면
+정보 상태 × 처리 표, 거부 정확도, 틀린 처리 유형, 과잉 거부율(질의 평균, D-53)을 낸다(S14c).
+judge 단계 표에는 형식 재요청 수(D-58)를 함께 낸다. 종합 지표와 두 실행의 판정은
+rag.gen_eval.compare가 낸다(S27). gen_eval.item_cases를 주면 판정 확인 사례의 judge 결과를 정답과
+대조한다. 인자는 Hydra override(기본은 판정용 세트 dev-full 330질의, D-50. S14 표본은
+gen_eval.queries=dev-small gen_eval.n=20). 읽은 결과의 질의가 표본과 다르면 멈춘다(리뷰 G2-3).
 """
 
 import sys
@@ -15,9 +15,10 @@ from collections import Counter
 from hashlib import sha256
 
 import numpy as np
+import pandas as pd
 
 from rag.gen_eval.checks import HANDLINGS, STATES, item_outcome, unlisted_refusal
-from rag.gen_eval.common import read_jsonl, stable
+from rag.gen_eval.common import eval_qids, read_jsonl, stable
 from rag.gen_eval.judge import sha
 from rag.index import ROOT, load_cfg
 
@@ -49,6 +50,36 @@ def criterion(rows: list[dict], key: str) -> tuple[list[float], Counter, int]:
         else:
             errors += 1
     return scores, excluded, errors
+
+
+def per_query(rows: list[dict]) -> pd.DataFrame:
+    """질의 단위 값. 계산하지 않은 기준(전체 거부, 제외 조건, 형식 오류)은 NaN이다.
+    종합 지표는 충실성·관련성 평균이고 둘 중 하나라도 없으면 NaN이다(D-53). 과잉 거부율은 질의마다
+    over_refusal / judged이고, report와 compare가 같이 쓴다(리뷰 G2-6)."""
+    out = {}
+    for r in rows:
+        counts = (r.get("item_eval") or {}).get("counts") or {}
+        out[r["qid"]] = {
+            key: (r.get(key) or {}).get("score", np.nan)
+            for key in ("faithfulness", "relevance", "inclusion")
+        } | {"over_refusal": counts["over_refusal"] / counts["judged"]
+             if counts.get("judged") else np.nan}
+    df = pd.DataFrame.from_dict(out, orient="index").astype(float)
+    df["composite"] = df[["faithfulness", "relevance"]].mean(axis=1, skipna=False)
+    return df
+
+
+def check_qids(cfg, rows: list[dict]) -> None:
+    """judge 결과의 질의가 gen_eval 표본과 맞는지 본다. 검색 근거면 같아야 하고, 오라클·정답 제외
+    진단(S26)은 근거가 검색 기준과 같아 생성하지 않은 질의가 빠지므로 부분집합이면 된다.
+    경로에 질의 수가 없어, 다른 표본의 파일을 읽어도 집계가 나온다(리뷰 G2-3)."""
+    want, got = set(eval_qids(cfg)), {r["qid"] for r in rows}
+    subset = cfg.gen_eval.contexts != "retrieved"
+    if not (got <= want if subset else got == want):
+        raise SystemExit(
+            f"{cfg.paths.gen_judge}의 질의 {len(got)}개가 표본({cfg.gen_eval.queries}, "
+            f"{len(want)}질의)과 다르다(겹침 {len(got & want)}). 표본 설정(gen_eval.n 등)이나 "
+            "paths.gen_judge=<결과 경로>를 맞춰 실행한다")
 
 
 def unlisted_table(cfg, rows: list[dict]) -> list[tuple[str, int]] | str:
@@ -107,10 +138,11 @@ NOT_WRONG = ("맞음", "상황 전달", "상황 미전달")
 
 def require_s22(rows: list[dict]) -> None:
     """S22 이전 judge 기록(항목 평가의 counts, 충실성 판정의 speaker_unclear가 없음)이면 멈춘다.
-    읽으면 거부 정확도가 0/0으로 나오거나 원인을 알 수 없는 KeyError가 난다."""
+    읽으면 거부 정확도가 0/0으로 나오거나 원인을 알 수 없는 KeyError가 난다. item_handling 형식
+    오류 기록은 items가 있고 counts가 없지만 error가 있어 S22 이전 기록이 아니다(리뷰 G2-2)."""
     for r in rows:
         e, f = r.get("item_eval") or {}, r.get("faithfulness") or {}
-        if ("items" in e and "counts" not in e) or any(
+        if ("items" in e and "counts" not in e and "error" not in e) or any(
                 "speaker_unclear" not in v for v in f.get("verdicts", [])):
             raise SystemExit("S22 이전 judge 기록이다(counts·speaker_unclear 없음). "
                              "그 기록을 만든 커밋의 report로 읽는다")
@@ -120,20 +152,22 @@ def item_summary(rows: list[dict]) -> dict:
     """질의 항목 단위 거부 평가의 집계(S14c). 거부 정확도는 모호·회피 항목을 뺀 항목 중 맞는
     처리의 비율로, 질의 단위 값(counts, 기준 문서 I13)을 합쳐 계산한다. 모호·회피는 상황
     전달·미전달로 따로 세고(D-41 결정 3, S14c 결정 사항 4) 전체 항목 중 비율을 낸다(I10).
-    판단 불가는 judge 형식 오류로 항목이 없는 질의다."""
+    판단 불가는 judge 형식 오류인 질의다. item_handling 형식 오류는 처리가 없는 항목을 남기므로
+    표에서 뺀다(리뷰 G2-2)."""
     evals = [r["item_eval"] for r in rows if r.get("item_eval")]
-    items = [i for e in evals for i in e.get("items") or []]
+    judged_evals = [e for e in evals if "error" not in e]
+    items = [i for e in judged_evals for i in e["items"]]
     outcomes = Counter(i["outcome"] for i in items)
-    counts = [e["counts"] for e in evals if "counts" in e]
+    counts = [e["counts"] for e in judged_evals]
     judged = sum(c["judged"] for c in counts)
     return {"table": Counter((i["state"], i["handling"]) for i in items),
             "outcomes": outcomes, "accuracy": (sum(c["correct"] for c in counts), judged),
             "situation": (outcomes["상황 전달"], len(items) - judged),
             "ambiguous": (len(items) - judged, len(items)),
             "speaker_unclear": sum(i["speaker_unclear"] for i in items),
-            "queries": len(evals), "errors": sum(1 for e in evals if "error" in e),
-            "wrong_queries": sum(1 for e in evals if any(
-                i["outcome"] not in NOT_WRONG for i in e.get("items") or []))}
+            "queries": len(evals), "errors": len(evals) - len(judged_evals),
+            "wrong_queries": sum(1 for e in judged_evals if any(
+                i["outcome"] not in NOT_WRONG for i in e["items"]))}
 
 
 def case_agreement(cases: list[dict], results: list[dict]) -> tuple[Counter, list[str]]:
@@ -208,6 +242,7 @@ def main() -> None:
         print_cases(cfg)
         return
     rows = read_jsonl(ROOT / cfg.paths.gen_judge)
+    check_qids(cfg, rows)
     require_s22(rows)
     n = len(rows)
     answered = [r for r in rows if r["refusal"] != "full"]
@@ -250,6 +285,9 @@ def main() -> None:
         print(f"| {ratio:.2f} | {k} | {rate(ref, k)} |")
     if any(r.get("item_eval") for r in rows):
         print_items(rows)
+        over = per_query(rows)["over_refusal"].dropna()
+        print(f"\n과잉 거부율(질의 평균, D-53 안전 조건의 정의) {mean(list(over))} "
+              f"({len(over)}질의, 판정 대상 항목이 없는 질의 제외)")
 
     cites = [r["citations"] for r in answered]
     n_sent = sum(c["n_sentences"] for c in cites)
@@ -281,6 +319,9 @@ def main() -> None:
     print(f"| 답변 첫 토큰 시간 중앙값·p95·최대 | {spread(first)} · {max(first):.2f}초 |"
           if first else "| 답변 첫 토큰 시간 | - |")
     print(f"| 생성 전체 시간 중앙값·p95 | {spread(total)} |")
+    # S28 전 생성 기록에는 끝난 이유가 없다(리뷰 G3-3)
+    finish = Counter(r.get("gen_finish_reason") or "기록 없음" for r in rows)
+    print(f"| 생성 끝난 이유 | {', '.join(f'{k} {v}' for k, v in finish.items())} |")
     print(f"| 검색 시간 중앙값·p95 | {spread(retrieve)} |")
     print(f"| 생성 동시 수 | {dict(Counter(r.get('concurrency') for r in rows))} |")
     print(f"| 제공자 | {', '.join(f'{k} {v}' for k, v in providers.items())} |")
@@ -297,15 +338,17 @@ def print_judge_calls(usages: list[dict]) -> None:
     if not any(u and "step" in u for u in usages):
         return
     print("\n| judge 단계 | 호출 | 새로 부름 | 지연 중앙값·p95 | 새 호출 입력·출력 토큰 "
-          "| 끝나지 않음 |\n| --- | ---: | ---: | ---: | ---: | ---: |")
+          "| 끝나지 않음 | 형식 재요청 |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
     for step in dict.fromkeys(u["step"] for u in usages if u and "step" in u):
         us = [u for u in usages if u and u.get("step") == step]
         new = [u for u in us if not u["cached"]]
         lat = [u["latency_s"] for u in new if u.get("latency_s") is not None]
         unfinished = sum(1 for u in new if u.get("finish_reason") != "stop")
+        # 재요청 뒤 남은 형식 오류는 기준 표의 judge 형식 오류 칸이다(D-58)
+        retried = sum(1 for u in us if u.get("format_retry"))
         print(f"| {step} | {len(us)} | {len(new)} | {spread(lat)} | "
               f"{usage_sum(new, 'prompt_tokens'):,} · {usage_sum(new, 'completion_tokens'):,} | "
-              f"{unfinished} |")
+              f"{unfinished} | {retried} |")
 
 
 if __name__ == "__main__":
