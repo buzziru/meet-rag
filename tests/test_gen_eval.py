@@ -649,7 +649,8 @@ def test_print_cases_stops_when_case_file_changed(tmp_path, monkeypatch):
 
 
 def test_rep_paths_keep_rep_zero_unchanged():
-    small = ["index.scope=full", "+exp=exp017", "gen_eval.queries=dev-small"]
+    # S24 반복 기록(프롬프트 v2)의 경로 규칙을 고정한다. 기본 프롬프트가 바뀌어도(D-61) v2로 본다
+    small = ["index.scope=full", "+exp=exp017", "prompt=v2", "gen_eval.queries=dev-small"]
     base = load_cfg(small).paths
     assert base.gen_runs.endswith("-v2-dev-small.jsonl")
     assert base.gen_judge.endswith("-v2-dev-small-deepseek_go_mixed-j_v8.jsonl")
