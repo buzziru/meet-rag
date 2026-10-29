@@ -589,6 +589,39 @@ def test_judge_stops_before_calls_when_output_exists(tmp_path, monkeypatch):
         judge_main()  # n을 늘려 다시 채점할 때 overwrite를 빼먹으면 호출 전에 멈춘다
 
 
+@pytest.mark.parametrize(("args", "recipe_args", "mixed", "match"), [
+    ([], [], True, "레시피가 여럿"),
+    (["prompt=v1"], [], False, "프롬프트"),  # 생성은 기본 프롬프트, 채점은 v1
+    ([], ["speakers.mode=marks"], False, "발언자 표시"),  # 표시 기록을 j_v8로 채점
+    ([], [], False, "Judge까지 감"),
+])
+def test_judge_main_checks_records_before_judge(tmp_path, monkeypatch, args, recipe_args,
+                                                mixed, match):
+    """main이 Judge를 만들기 전에 생성 기록을 대조한다(테스트 리뷰 T2-4). 마지막은 검사를 모두
+    통과하는 경우로, Judge 생성까지 가는지 본다."""
+    from rag.gen_eval import judge
+    from rag.generate import recipe
+    corpus = tmp_path / "corpus.jsonl"
+    corpus.write_text(json.dumps({"committee_name": "가위원회"}, ensure_ascii=False) + "\n",
+                      encoding="utf-8")
+    base = ["index.scope=full", "+exp=exp017", f"paths.corpus='{corpus.as_posix()}'",
+            f"paths.gen_judge='{(tmp_path / 'judge.jsonl').as_posix()}'"]
+    rec = recipe(load_cfg([*base, *recipe_args]), {"names": ["idx"], "n_chunks": 3},
+                 stream=False)
+    gens = [{"qid": q, "recipe": {**rec, "model": "m2"} if mixed and q == "q2" else rec}
+            for q in ("q1", "q2")]
+    monkeypatch.setattr(judge, "read_jsonl", lambda p: gens)
+    monkeypatch.setattr(judge, "eval_qids", lambda cfg: ["q1", "q2"])
+    monkeypatch.setattr(judge, "load_refs", lambda cfg, qids: {})
+
+    def reached(*a, **kw):
+        raise SystemExit("Judge까지 감")
+    monkeypatch.setattr(judge, "Judge", reached)
+    monkeypatch.setattr(sys, "argv", ["rag.gen_eval.judge", *base[1:], *args])
+    with pytest.raises(SystemExit, match=match):
+        judge_main()
+
+
 def test_j_v8_changes_only_four_steps():
     from omegaconf import OmegaConf
     v7, v8 = (OmegaConf.load(f"configs/judge/prompt/{v}.yaml") for v in ("j_v7", "j_v8"))
