@@ -675,5 +675,5 @@
 - 결정(사용자 결정 2026-10-29, `docs/slices/30-test-fixes.md` 결정 사항 1 (a)): G3 동결 세트(`paths.multidoc_frozen`)를 읽는 네 곳(`rag.eval_multi.score`·`compare`, `rag.search`의 multi-doc 질의 목록, `rag.conditions.read_queries`)이 `rag.eval_multi.metrics.frozen_path`로 파일의 sha256을 D-15 값과 대조해 다르면 멈춘다. 값은 `configs/config.yaml`의 `multidoc.frozen_sha256`(새 키, `multidoc.eval` 밖)에 둔다. `rag.multidoc.freeze`는 `write_guarded`로 써서 같은 내용이면 그대로 두고 다르면 멈춘다. 보호 경로 `src/rag/eval_multi/` 수정을 사용자가 승인했다
 - 이유: 동결 sha를 결과에 기록만 하고 대조하지 않았고 `freeze`가 보호 없이 덮어썼다. `queries.jsonl`을 다시 만든 뒤 `freeze`를 다시 돌리면 600건 세트가 조용히 바뀌고, multi-doc 채점·비교·메타데이터 가설 판정이 D-16 기준선과 다른 세트로 계속된다(테스트 리뷰 T3-4)
 - 바뀌는 것: D-15(보강, 동결을 코드가 확인한다). 판정 규칙과 세트 내용은 그대로다
-- 감수하는 것: 동결 세트를 정당하게 바꾸려면(새 결정으로 다시 동결) `multidoc.frozen_sha256`도 같은 PR에서 고쳐야 한다
+- 감수하는 것: 동결 세트를 정당하게 바꾸려면(새 결정으로 다시 동결) 기존 동결 파일을 다른 이름으로 옮긴 뒤 `freeze`를 돌리고(`freeze`에는 덮어쓰기 옵션이 없다), `multidoc.frozen_sha256`도 같은 PR에서 고쳐야 한다. 노트북이 동결 파일을 직접 읽는 경로(`load_gold(ROOT / cfg.paths.multidoc_frozen)`)는 대조하지 않는다
 - 날짜: 2026-10-29
