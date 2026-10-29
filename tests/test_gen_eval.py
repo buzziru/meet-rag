@@ -1037,7 +1037,7 @@ def test_gen_compare_check_inputs_stops(tmp_path):
     mixed = [rows[0], _judged("b", 1, 1, recipe={"name": "j", "model": "m2", "refusal": "r"})]
     with pytest.raises(SystemExit, match="2가지 섞여"):
         check_inputs(runs, {"base": rows, "cand": mixed}, ["a", "b"])
-    other =[_judged(q, 1, 1, recipe={"name": "j", "model": "m2", "refusal": "r"}) for q in "ab"]
+    other = [_judged(q, 1, 1, recipe={"name": "j", "model": "m2", "refusal": "r"}) for q in "ab"]
     with pytest.raises(SystemExit, match="judge 설정이 다르다: model"):
         check_inputs(runs, {"base": rows, "cand": other}, ["a", "b"])
     rule = [_judged(q, 1, 1, recipe={"name": "j", "model": "m", "refusal": "r",
