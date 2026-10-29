@@ -9,11 +9,26 @@ from pathlib import Path
 
 import pandas as pd
 
+from rag.index import ROOT
+
 METRICS = ("recall", "complete", "hit")
 
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def frozen_path(cfg) -> Path:
+    """G3 동결 세트 경로. 내용이 D-15에 동결한 sha256과 다르면 멈춘다(S30).
+
+    queries.jsonl을 다시 만든 뒤 rag.multidoc.freeze를 다시 돌리면 세트가 조용히 바뀌어,
+    채점·비교가 D-16 기준선과 다른 세트로 계속된다(테스트 리뷰 T3-4).
+    """
+    path = ROOT / cfg.paths.multidoc_frozen
+    if sha256(path) != cfg.multidoc.frozen_sha256:
+        raise SystemExit(f"{cfg.paths.multidoc_frozen}의 sha256이 G3 동결 값(D-15, "
+                         "multidoc.frozen_sha256)과 다르다. 동결 세트는 다시 만들지 않는다")
+    return path
 
 
 def load_gold(path: Path) -> pd.DataFrame:

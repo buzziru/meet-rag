@@ -185,6 +185,32 @@ def _run_main(module, args, monkeypatch):
     module.main()
 
 
+def _check_compare_result(result, cfg):
+    """기준 a(q1 1위, q2 3위)와 후보 b(q1 2위, q2 없음). 주지표 Recall@5는 q2에서만 1 → 0."""
+    bs = cfg.eval.bootstrap
+    assert result["primary"] == cfg.eval.primary
+    assert result["diff"] == pytest.approx(-0.5)  # 후보 - 기준
+    assert result["verdict"] == verdict(result["diff"], *result["ci"], bs.min_gain)
+
+
+def test_compare_resamples_by_meeting(tmp_path, monkeypatch):
+    # 두 질의가 한 회의면 회의 단위 재표본에서 차이는 늘 -0.5다. 질의 단위면 -1·0도 나온다
+    from rag.eval import compare
+    cfg = _gold_files(tmp_path)
+    (tmp_path / "splits.csv").write_text(
+        "qid,conference_number,split\nq1,c1,dev\nq2,c1,dev\n", encoding="utf-8")
+    monkeypatch.setattr(compare, "load_cfg", lambda: cfg)
+    gold = load_gold(cfg, "dev-full")
+    for name, pos in [("a", {"q1": 1, "q2": 3}), ("b", {"q1": 2})]:
+        make_run(gold, pos).to_csv(tmp_path / f"{name}.csv", index=False)
+    out = tmp_path / "compare.json"
+    _run_main(compare, ["--base", str(tmp_path / "a.csv"), "--cand", str(tmp_path / "b.csv"),
+                        "--out", str(out)], monkeypatch)
+    result = json.loads(out.read_text(encoding="utf-8"))
+    _check_compare_result(result, cfg)
+    assert result["ci"] == pytest.approx([-0.5, -0.5])
+
+
 def test_score_and_compare_out_are_guarded(tmp_path, monkeypatch, capsys):
     from rag.eval import compare, score
     cfg = _gold_files(tmp_path)
@@ -205,6 +231,8 @@ def test_score_and_compare_out_are_guarded(tmp_path, monkeypatch, capsys):
         _run_main(module, [*first, "--out", str(out)], monkeypatch)
         before = out.read_text(encoding="utf-8")
         assert json.loads(before)["gold_sha256"] == gold_sha256(cfg, "dev-full")
+        if module is compare:
+            _check_compare_result(json.loads(before), cfg)
         _run_main(module, [*first, "--out", str(out)], monkeypatch)  # 같은 내용
         assert "그대로 둠" in capsys.readouterr().out
         with pytest.raises(SystemExit, match="--overwrite"):

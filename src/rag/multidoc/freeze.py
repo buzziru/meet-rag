@@ -8,12 +8,10 @@ queries.jsonl은 검사 기록 전체에서 다시 만들어지므로 고치지 
 
 import hashlib
 import json
-from pathlib import Path
 
-from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
-ROOT = Path(__file__).resolve().parents[3]
+from rag.index import ROOT, load_cfg, write_guarded
 
 
 def excluded(exclude: dict) -> set[str]:
@@ -21,9 +19,7 @@ def excluded(exclude: dict) -> set[str]:
 
 
 def main() -> None:
-    with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
-        cfg = compose(config_name="config")
-    paths = cfg.paths
+    paths = load_cfg().paths
     drop = excluded(OmegaConf.to_container(OmegaConf.load(ROOT / paths.multidoc_exclude)))
     lines = (ROOT / paths.multidoc_queries).read_text(encoding="utf-8").splitlines(keepends=True)
     qids = [json.loads(line)["qid"] for line in lines]
@@ -31,8 +27,9 @@ def main() -> None:
     # 원래 줄을 그대로 옮겨 남은 질의의 내용이 queries.jsonl과 같게 한다
     kept = [line for line, qid in zip(lines, qids, strict=True) if qid not in drop]
     out = ROOT / paths.multidoc_frozen
-    out.write_text("".join(kept), encoding="utf-8", newline="\n")
-    print(f"{len(lines)} - {len(drop)} = {len(kept)} -> {paths.multidoc_frozen}")
+    # 동결 뒤에는 덮어쓰지 않는다. 같은 내용이면 그대로 둔다(S30, 테스트 리뷰 T3-4)
+    status = write_guarded(out, "".join(kept), False, "G3 동결 세트는 다시 만들지 않는다(D-15)")
+    print(f"{len(lines)} - {len(drop)} = {len(kept)} -> {paths.multidoc_frozen} ({status})")
     print(hashlib.sha256(out.read_bytes()).hexdigest())
 
 

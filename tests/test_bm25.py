@@ -3,9 +3,8 @@ import json
 import bm25s
 import numpy as np
 import pytest
-from kiwipiepy import Kiwi
 
-from rag.bm25 import BM25Retriever, build, doc_meta, forms
+from rag.bm25 import BM25Retriever, build, doc_meta, forms, shared_kiwi
 from rag.index import load_cfg
 from rag.retrieve import rank_docs, rrf
 
@@ -69,9 +68,9 @@ def test_meta_prefix_makes_metadata_searchable(tmp_path):
     with (tmp_path / "chunks.jsonl").open("w", encoding="utf-8") as f:
         f.writelines(json.dumps(c, ensure_ascii=False) + "\n" for c in chunks)
     b = load_cfg(["+exp=exp002"]).retriever.bm25
-    build(tmp_path / "chunks.jsonl", tmp_path / "idx", b, Kiwi(), meta)
+    build(tmp_path / "chunks.jsonl", tmp_path / "idx", b, shared_kiwi(), meta)
     model = bm25s.BM25.load(tmp_path / "idx", load_vocab=True)
-    q = model.get_tokens_ids(next(forms(Kiwi(), ["국방위원회 예산"], set(b.tags))))
+    q = model.get_tokens_ids(next(forms(shared_kiwi(), ["국방위원회 예산"], set(b.tags))))
     scores = model.get_scores_from_ids(q)
     assert scores[0] > scores[1]
 

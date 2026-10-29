@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 from test_search import _tmp_cfg, _write_text_index
 
@@ -60,6 +61,49 @@ def test_exp_config_final_order_matches_explain(tmp_path, exp):
     docs = ret.final(fused, matched, rerank)  # rag.search의 finish와 같은 호출
     assert len(docs) == cfg.retriever.top_k
     assert ret.explain(row, tokens, conds, rerank=rerank)[0] == docs
+
+
+def _search_world(tmp_path, monkeypatch, overrides):
+    """합성 인덱스 위에서 rag.search.search를 돌릴 수 있게 질의 하나의 입력을 바꿔 끼운다.
+    순위·후보 쌍 파일은 search의 ROOT를 tmp_path로 바꿔 그 아래 config 경로에 쓴다."""
+    from rag import search
+    cfg = _world(tmp_path, [*overrides, "retriever.bm25.name=test"])
+    rerank = {d: float(i) for i, (d, *_) in enumerate(DOCS)}
+    monkeypatch.setattr(search, "ROOT", tmp_path)
+    monkeypatch.setattr(search, "query_list", lambda cfg: (["q1"], tmp_path / "q.jsonl"))
+    monkeypatch.setattr(search, "read_texts", lambda path, qids: ["국정감사 질의"])
+    monkeypatch.setattr(search, "query_embeddings",
+                        lambda cfg, qids, path: np.array([[0.6, 0.4]], dtype=np.float32))
+    monkeypatch.setattr(search, "build_extractor",
+                        lambda cfg: type("Ex", (), {"extract": lambda self, t: CONDS})())
+    monkeypatch.setattr(search, "read_rerank_scores", lambda cfg: {"q1": rerank})
+    return cfg, rerank
+
+
+@pytest.mark.parametrize("exp", ["exp014", "exp017"])  # 재정렬 없음·있음(검색 기준)
+def test_search_writes_explain_order(tmp_path, monkeypatch, exp):
+    """rag.search.search가 쓴 순위 파일이 생성 경로(explain)와 같은 순서다(테스트 리뷰 T1-4)."""
+    from rag.search import search
+    cfg, rerank = _search_world(tmp_path, monkeypatch, [f"+exp={exp}"])
+    search(cfg)
+    run = pd.read_csv(next((tmp_path / cfg.paths.runs_dir).glob("*.csv")))
+    ret = Retriever(cfg)
+    row, tokens = _query(ret)
+    want = ret.explain(row, tokens, CONDS if ret.use_cond else None,
+                       rerank=rerank if ret.use_rerank else None)[0]
+    assert run["doc_id"].tolist() == want
+
+
+def test_search_rerank_pairs_are_fused_head(tmp_path, monkeypatch):
+    from rag.search import search
+    cfg, _ = _search_world(tmp_path, monkeypatch, ["+exp=exp017", "search.mode=rerank-pairs"])
+    search(cfg)
+    pairs = (tmp_path / cfg.paths.rerank_pairs).read_text(encoding="utf-8").splitlines()
+    ret = Retriever(cfg)
+    row, tokens = _query(ret)
+    fused, _, _ = ret.candidates(row, tokens, CONDS)
+    assert [json.loads(p)["doc_id"] for p in pairs] == fused[: cfg.retriever.rerank.depth]
+    assert not (tmp_path / cfg.paths.runs_dir).exists()  # 쌍만 쓰고 순위 파일은 쓰지 않는다
 
 
 def test_rrf_condition_list_and_best_filter(tmp_path):

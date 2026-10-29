@@ -8,11 +8,11 @@
 """
 
 import json
-import threading
 from types import SimpleNamespace
 
 from omegaconf import OmegaConf
 
+from rag.gen_eval import judge
 from rag.gen_eval.checks import HANDLINGS, OUTCOMES, STATES, item_outcome
 from rag.gen_eval.judge import RELEVANCE, Judge, judge_record, sha
 from rag.index import load_cfg
@@ -109,10 +109,11 @@ REPLIES = {
 }
 
 
-def request_shas(tmp_path, contexts=CONTEXTS) -> dict[str, str]:
+def request_shas(tmp_path, monkeypatch, contexts=CONTEXTS) -> dict[str, str]:
     """기본 설정의 Judge로 합성 기록 하나를 채점하며 단계별로 보낸 요청 본문의 sha256을 모은다.
-    API 대신 단계마다 정한 응답을 돌려준다."""
-    cfg = load_cfg(["index.scope=full"])
+    API 대신 단계마다 정한 응답을 돌려준다. Judge는 생성자로 만들어, 생성자가 정하는 요청 값
+    (params·extra_body·step_params 등)이 바뀌어도 실패하게 한다(S30, 테스트 리뷰 T2-1)."""
+    cfg = load_cfg(["index.scope=full", f"paths.gen_judge_cache='{tmp_path.as_posix()}'"])
     systems = {cfg.judge.prompt[s].system: s for s in REPLIES}
     sent = {}
 
@@ -123,13 +124,11 @@ def request_shas(tmp_path, contexts=CONTEXTS) -> dict[str, str]:
         return SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason="stop")],
                                usage=None)
 
-    j = object.__new__(Judge)
-    j.j, j.prompt, j.rep, j.retry = cfg.judge, cfg.judge.prompt, 0, cfg.judge.format_retry
-    j.params = OmegaConf.to_container(cfg.judge.params)
-    j.extra = OmegaConf.to_container(cfg.judge.extra_body) if cfg.judge.extra_body else None
-    j.step = OmegaConf.to_container(cfg.judge.step_params)
-    j.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
-    j.cache, j.lock, j.calls, j.hits = tmp_path, threading.Lock(), 0, 0
+    monkeypatch.setattr(judge, "require_env", lambda name: "key")
+    monkeypatch.setattr(judge, "OpenAI", lambda **kw: SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
+    monkeypatch.setattr(judge, "wrap_openai", lambda client: client)
+    j = Judge(cfg, "session")
     gen = {"qid": "q1", "query": "내년 예산 계획은?",
            "answer": "장관은 내년에 예산을 늘리겠다고 답했다[1].", "contexts": contexts,
            "usage": None, "provider": "p", "first_token_s": 1.0, "total_s": 2.0}
@@ -139,16 +138,16 @@ def request_shas(tmp_path, contexts=CONTEXTS) -> dict[str, str]:
     return sent
 
 
-def test_judge_request_bodies_are_frozen(tmp_path):
-    assert request_shas(tmp_path) == FROZEN_REQUEST_SHA256
+def test_judge_request_bodies_are_frozen(tmp_path, monkeypatch):
+    assert request_shas(tmp_path, monkeypatch) == FROZEN_REQUEST_SHA256
 
 
-def test_speakers_change_only_context_steps(tmp_path):
+def test_speakers_change_only_context_steps(tmp_path, monkeypatch):
     """S29: 근거에 speakers가 있으면 근거를 받는 verdicts·items 요청만 바뀌고, 정답 청크 발췌를 받는
     chunk_checks는 원문 text 그대로다. speakers가 없는 기록은 위 고정값과 같다."""
     spk = {"questioners": [{"name": "홍길동", "position": "위원", "affiliation": ""}],
            "answerers": [{"name": "김철수", "position": "장관", "affiliation": ""}]}
     marked = [{**c, "speakers": spk} for c in CONTEXTS]
-    got = request_shas(tmp_path, marked)
+    got = request_shas(tmp_path, monkeypatch, marked)
     changed = {k for k in FROZEN_REQUEST_SHA256 if got[k] != FROZEN_REQUEST_SHA256[k]}
     assert changed == {"verdicts", "items"}

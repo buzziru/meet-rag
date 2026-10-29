@@ -11,6 +11,7 @@ import sys
 from collections import Counter
 from functools import cache
 
+from rag.eval_multi.metrics import frozen_path
 from rag.index import ROOT, corpus_meta, load_cfg
 from rag.meta_dict import build as build_meta_dict
 
@@ -169,8 +170,9 @@ class ConditionIndex:
 
 def read_queries(cfg) -> list[dict]:
     """세트의 qid·query만 읽는다. summary_q는 dev 질의 파일이다(test는 읽지 않는다)."""
-    path = cfg.paths.multidoc_frozen if cfg.search.queries == "multidoc" else cfg.paths.queries_dev
-    with (ROOT / path).open(encoding="utf-8") as f:
+    path = (frozen_path(cfg) if cfg.search.queries == "multidoc"
+            else ROOT / cfg.paths.queries_dev)
+    with path.open(encoding="utf-8") as f:
         return [{"qid": q["qid"], "query": q["query"]} for q in map(json.loads, f)]
 
 

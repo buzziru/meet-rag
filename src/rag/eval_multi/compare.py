@@ -13,8 +13,15 @@ import pandas as pd
 
 from rag.eval.bootstrap import metadata_verdict, paired_bootstrap, verdict
 from rag.eval.score import OVERWRITE_HINT
-from rag.eval_multi.metrics import load_gold, per_query, ranked_docs, read_run, sha256
-from rag.index import ROOT, load_cfg, write_guarded
+from rag.eval_multi.metrics import (
+    frozen_path,
+    load_gold,
+    per_query,
+    ranked_docs,
+    read_run,
+    sha256,
+)
+from rag.index import load_cfg, write_guarded
 
 
 def diff_table(base: pd.DataFrame, cand: pd.DataFrame, gold: pd.DataFrame, breakdowns,
@@ -87,7 +94,7 @@ def main() -> None:
 
     cfg = load_cfg()
     ev, bs = cfg.multidoc.eval, cfg.eval.bootstrap
-    frozen = ROOT / cfg.paths.multidoc_frozen
+    frozen = frozen_path(cfg)
     gold = load_gold(frozen)
     runs = {"base": args.base, "cand": args.cand}
     scores = {

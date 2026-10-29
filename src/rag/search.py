@@ -16,6 +16,7 @@ import pandas as pd
 
 from rag.conditions import build_extractor
 from rag.eval.metrics import load_gold
+from rag.eval_multi.metrics import frozen_path
 from rag.index import ROOT, encoder, load_cfg, load_model, write_guarded
 from rag.retrieve import (
     ChunkStore,
@@ -83,7 +84,7 @@ def query_files(cfg) -> dict:
 def query_list(cfg) -> tuple[list[str], Path]:
     """질의 qid 목록(채점 순서)과 원문 파일. summary_q는 평가 층, multidoc은 동결 세트 순서다."""
     if cfg.search.queries == "multidoc":
-        path = ROOT / cfg.paths.multidoc_frozen
+        path = frozen_path(cfg)
         with path.open(encoding="utf-8") as f:
             return [json.loads(line)["qid"] for line in f], path
     if cfg.search.queries == "test":
