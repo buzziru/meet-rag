@@ -85,6 +85,6 @@
 
 ### 지시서와 다르게 한 것
 
-- T1-3: config 캐시를 fixture로 두지 않고 `tests/conftest.py`에서 `rag.index.load_cfg`·`git_state`를 세션 캐시로 바꿔 끼웠다. 테스트의 `load_cfg` 호출이 약 100곳이라 fixture로 바꾸면 모든 호출을 고쳐야 한다. conftest는 테스트 모듈보다 먼저 불러와져 `from rag.index import load_cfg`도 캐시된 함수를 받고, 매번 복사본을 돌려준다
+- T1-3: config 캐시를 fixture로 두지 않고 `tests/conftest.py`에서 `rag.index.load_cfg`·`git_state`를 세션 캐시로 바꿔 끼웠다. 테스트의 `load_cfg` 호출이 약 100곳이라 fixture로 바꾸면 모든 호출을 고쳐야 한다. conftest는 테스트 모듈보다 먼저 불러와져 `from rag.index import load_cfg`도 캐시된 함수를 받고, 매번 복사본을 돌려준다. `git_state`도 지시서처럼 git 값을 단언하지 않는 테스트에만 바꿔 끼우지 않고 모든 테스트에서 세션 첫 값을 쓴다. git 값을 단언하는 테스트는 키가 있는지만 본다(`tests/test_generate.py:81`)
 - T1-4: `search()` 테스트는 `+exp=exp014`(재정렬 없음)와 `+exp=exp017`(재정렬, 검색 기준)로만 돌린다. EXP 18개 전부면 약 9초가 더 든다. 질의 목록·질의 임베딩·조건 추출기·재정렬 점수는 바꿔 끼우고, 순위·후보 쌍 파일은 `search`의 ROOT를 tmp로 바꿔 쓴다
 - T2-4: judge `main` 테스트는 처음 구현 당시 설정 `+exp=exp017`을 입력으로 쓴다(기본 config에는 생성 기록 경로가 없다)
