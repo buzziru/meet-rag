@@ -998,7 +998,13 @@ def test_gen_compare_check_inputs_stops(tmp_path):
         check_inputs({"base": base, "cand": base}, {"base": rows, "cand": rows}, ["a", "b"])
     with pytest.raises(SystemExit, match="gen-full"):
         check_inputs(runs, {"base": rows, "cand": rows[:1]}, ["a", "b"])
-    other = [_judged(q, 1, 1, recipe={"name": "j", "model": "m2", "refusal": "r"}) for q in "ab"]
+    with pytest.raises(SystemExit, match="gen-full"):  # qid 중복: 집합은 같아도 멈춘다
+        check_inputs(runs, {"base": rows, "cand": [*rows, rows[0]]}, ["a", "b"])
+    # 한 파일 안에서 judge 설정이 섞이면 첫 줄 레시피만 보고 통과시키지 않는다(테스트 리뷰 T2-3)
+    mixed = [rows[0], _judged("b", 1, 1, recipe={"name": "j", "model": "m2", "refusal": "r"})]
+    with pytest.raises(SystemExit, match="2가지 섞여"):
+        check_inputs(runs, {"base": rows, "cand": mixed}, ["a", "b"])
+    other =[_judged(q, 1, 1, recipe={"name": "j", "model": "m2", "refusal": "r"}) for q in "ab"]
     with pytest.raises(SystemExit, match="judge 설정이 다르다: model"):
         check_inputs(runs, {"base": rows, "cand": other}, ["a", "b"])
     rule = [_judged(q, 1, 1, recipe={"name": "j", "model": "m", "refusal": "r",
