@@ -86,4 +86,12 @@
 
 ## 결과
 
-(리뷰 뒤 채운다)
+### 측정 (2026-10-29, 로컬 CPU, 커밋 a6fce38)
+
+- 전체 `uv run pytest -q`: 352 passed, 109.7\~118.8초(두 번). 그중 테스트 실행(setup·call·teardown 합)은 73.9초이고 setup 0.2초다. 나머지 약 36초는 수집(테스트 모듈 import)이다. `--collect-only`만 44.6초 걸렸다
+- 파일별 테스트 실행 합(초): `test_bm25` 14.7, `test_gen_eval` 11.7, `test_exp_configs` 10.2, `test_revisions` 9.7, `test_search` 6.2, `test_generate` 5.6, `test_rerank` 5.0, `test_index` 3.6, 나머지 18파일은 각 1.3 이하
+- 느린 테스트(call, 초): `test_bm25::test_meta_prefix_makes_metadata_searchable` 9.5, `test_bm25::test_bm25_finds_lexical_match` 5.6, `test_index::test_index_stops_when_settings_differ_from_basis` 4.0, `test_gen_eval::test_http_counts_record_sdk_retries` 3.8, `test_index::test_adopt_checks_chunk_and_embedding_rows` 2.2, `test_gen_eval::test_run_all_does_not_wait_for_slow_earlier_item` 2.0. 그 밖에 0.5\~1.4초가 약 35개이고 `test_exp_configs`·`test_revisions`의 EXP별 parametrize가 많다
+- 파일 하나만 수집할 때(새 프로세스, 초): `test_rerank` 17.2, `test_search` 7.6, `test_gen_eval_blind` 7.3, `test_speakers` 7.2, `test_exp_configs`·`test_g2`·`test_rewrite`·`test_fusion` 5.7\~5.9, `test_gen_eval`·`test_gen_eval_freeze`·`test_generate` 4.9\~5.3, 나머지 2.5\~3.9. pytest import만은 0.6초다. 파일마다 가장 무거운 import가 무엇인지는 측정하지 않았다(영역 리뷰에서 본다)
+- 시간 경계: 10초를 넘는 원인 후보는 수집(약 36초), `test_bm25` 두 테스트(15초), `test_exp_configs`·`test_revisions`의 config 조립(합 20초)이다. 경계를 바꿀 근거는 없어 10초를 그대로 쓴다
+
+(지적 표는 영역 리뷰 뒤 채운다)
