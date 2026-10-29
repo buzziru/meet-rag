@@ -148,6 +148,11 @@
 | T3-8 | 3b | `tests/test_eval_multi.py:62-75` | `pytest.raises(ValueError)`에 `match`가 없어 다른 ValueError로도 통과한다 | 경우마다 `match`. 1파일 | 낮음 | 에이전트 |
 | T3-9 | 5b | `tests/test_multidoc_check.py:129-147` | 입력과 기대 reason만 다른 테스트 네 개 | parametrize | 낮음 | 에이전트 |
 
+### 고칠 항목 (사용자 결정 2026-10-29)
+
+- 고친다: 높음 T1-4, T2-1, T2-3, T3-1, T3-2, T3-4와 중간 T1-1, T1-2, T1-3(T2-6 포함), T2-4. 테스트 수정 SLICE 하나로 묶는다. 보호 경로·동결 테스트에 걸리는 T2-1, T3-1, T3-2, T3-4는 SLICE 지시서의 결정 사항에서 범위를 확인받고 DECISIONS에 기록한다
+- 고치지 않고 기록으로 둔다: 중간 T3-3(검색 판정 config는 지금처럼 PR 감사 P3로 지킴)과 낮음 전부. T3-6·T2-10의 끝난 단계 도구 코드와 T2-12의 문구 단언 테스트는 그대로 둔다
+
 ### 범위 밖 관찰 (확인하지 않음)
 
 - `src/rag/eval_multi/metrics.py`의 `sha256`·`read_run`·`metric_table`·`to_markdown`이 `eval/metrics.py`를 복제한다(보호 코드 중복, 테스트 겹침 아님)
