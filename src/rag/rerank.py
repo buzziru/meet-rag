@@ -88,7 +88,7 @@ def latency(cfg) -> None:
         model.predict([(p["query"], p["text"]) for p in group], batch_size=rr.batch_size)
         times.append(time.perf_counter() - start)
     t = np.array(times[1:])
-    result ={"device": rr.device, "threads": torch.get_num_threads(), "dtype": rr.dtype,
+    result = {"device": rr.device, "threads": torch.get_num_threads(), "dtype": rr.dtype,
               "n_queries": len(t), "pairs_per_query": len(picked[1]),
               "mean": float(t.mean()), "p50": float(np.percentile(t, 50)),
               "p95": float(np.percentile(t, 95)), "max": float(t.max())}
