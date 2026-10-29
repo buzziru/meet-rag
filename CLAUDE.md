@@ -30,7 +30,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 
 ## 금지
 
-- `src/rag/eval/`, `src/rag/eval_multi/`와 `configs/config.yaml`의 `multidoc.eval`, G3 동결 세트를 정하는 `configs/multidoc/g3_exclude.yaml`과 `paths.multidoc_frozen`(D-15), `configs/eval/`, `data/splits/`를 수정하지 않는다. 바꿔야 하면 사용자 승인 후 DECISIONS.md에 기록한다
+- `src/rag/eval/`, `src/rag/eval_multi/`와 `configs/config.yaml`의 `multidoc.eval`, G3 동결 세트를 정하는 `configs/multidoc/g3_exclude.yaml`, `paths.multidoc_frozen`(D-15), 동결 sha `multidoc.frozen_sha256`(D-62), `configs/eval/`, `data/splits/`를 수정하지 않는다. 바꿔야 하면 사용자 승인 후 DECISIONS.md에 기록한다
 - test 분할의 질의를 읽거나 test 점수를 계산하지 않는다. test는 검색 단계와 생성 단계 종료 시 사용자 지시로 단계마다 1회만 실행한다. 검색 단계 1회는 S13에서 마쳤고(D-39), 생성 단계 1회는 생성 단계를 마칠 때 사용자 지시로 한다(SPEC 개정 D-53)
 - `docs/SPEC.md`의 평가 프로토콜은 사용자 승인 없이 바꾸지 않는다
 - 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다. 채택마다 바뀌는 값(지금 기준 EXP, 프롬프트 버전, 기준 결과 경로)도 명령·테스트 기대값·하네스 절차 문서에 적지 않는다. 지금 기준은 별칭 `configs/exp/current.yaml`과 DECISIONS 머리 줄 두 곳에만 두고, 명령은 `+exp=current`, 테스트는 config에서 값을 읽고, 문서는 머리 줄을 가리킨다(PR #180 리뷰, ADR-0076)
