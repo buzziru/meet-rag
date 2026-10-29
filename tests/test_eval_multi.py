@@ -3,9 +3,17 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from omegaconf import OmegaConf
 
 from rag.eval_multi.compare import check_single, diff_table, metadata_result
-from rag.eval_multi.metrics import load_gold, metric_table, per_query, ranked_docs
+from rag.eval_multi.metrics import (
+    frozen_path,
+    load_gold,
+    metric_table,
+    per_query,
+    ranked_docs,
+    sha256,
+)
 
 KS = [5, 10]
 BS = {"n_resamples": 500, "seed": 0, "alpha": 0.05}
@@ -184,14 +192,82 @@ def test_load_gold_reads_frozen_fields(tmp_path):
     assert len(gold) == 1
 
 
-def test_score_and_compare_out_are_guarded(tmp_path, monkeypatch, capsys):
-    from rag.eval_multi import compare, score
+def _frozen_cfg(tmp_path):
+    """질의 둘(q{i}, 정답 d{i}, pool p{i})의 합성 동결 세트와 그 sha256을 넣은 config."""
     from rag.index import load_cfg
     frozen = tmp_path / "frozen.jsonl"
     frozen.write_text("".join(json.dumps(
         {"qid": f"q{i}", "pool_id": f"p{i}", "type": "conf", "query": "질의",
          "gold_doc_ids": [f"d{i}"], "answer": "…"}) + "\n" for i in range(2)), encoding="utf-8")
-    cfg = load_cfg([f"paths.multidoc_frozen='{frozen.as_posix()}'"])
+    return load_cfg([f"paths.multidoc_frozen='{frozen.as_posix()}'",
+                     f"multidoc.frozen_sha256={sha256(frozen)}"])
+
+
+def test_frozen_set_stops_when_sha_differs(tmp_path):
+    from rag.conditions import read_queries
+    cfg = _frozen_cfg(tmp_path)
+    multi = OmegaConf.merge(cfg, {"search": {"queries": "multidoc"}})
+    assert frozen_path(cfg).name == "frozen.jsonl"
+    assert [q["qid"] for q in read_queries(multi)] == ["q0", "q1"]
+    with Path(cfg.paths.multidoc_frozen).open("a", encoding="utf-8") as f:
+        f.write("\n")  # 한 글자만 달라져도 멈춘다
+    for read in (lambda: frozen_path(cfg), lambda: read_queries(multi)):
+        with pytest.raises(SystemExit, match="G3 동결 값"):
+            read()
+
+
+def test_freeze_does_not_overwrite_frozen_set(tmp_path, monkeypatch, capsys):
+    from rag.index import load_cfg
+    from rag.multidoc import freeze
+    (tmp_path / "queries.jsonl").write_text("".join(
+        json.dumps({"qid": q}) + "\n" for q in ["q0", "q1", "q2"]), encoding="utf-8")
+    exclude = tmp_path / "exclude.yaml"
+    exclude.write_text("sample: [q1]\n", encoding="utf-8")
+    cfg = load_cfg([f"paths.{k}='{(tmp_path / v).as_posix()}'" for k, v in
+                    [("multidoc_queries", "queries.jsonl"), ("multidoc_exclude", "exclude.yaml"),
+                     ("multidoc_frozen", "frozen.jsonl")]])
+    monkeypatch.setattr(freeze, "load_cfg", lambda: cfg)
+    freeze.main()
+    lines = (tmp_path / "frozen.jsonl").read_text(encoding="utf-8").splitlines()
+    assert [json.loads(x)["qid"] for x in lines] == ["q0", "q2"]
+    freeze.main()  # 같은 내용
+    assert "그대로 둠" in capsys.readouterr().out
+    exclude.write_text("sample: [q2]\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="다시 만들지 않는다"):
+        freeze.main()
+
+
+def test_compare_diff_is_cand_minus_base_and_single_path_runs(tmp_path, monkeypatch, capsys):
+    from rag.eval.bootstrap import verdict
+    from rag.eval_multi import compare
+    cfg = _frozen_cfg(tmp_path)
+    monkeypatch.setattr(compare, "load_cfg", lambda: cfg)
+    runs = {}
+    for name, at in [("base", {"q0": {1: "d0"}, "q1": {}}),
+                     ("cand", {"q0": {1: "d0"}, "q1": {2: "d1"}})]:
+        runs[name] = tmp_path / f"{name}-multidoc.csv"
+        make_run(at).to_csv(runs[name], index=False)
+    single = tmp_path / "single.json"
+    single.write_text(json.dumps({
+        "layer": "dev-full", "diff": 0.0, "ci": [-0.01, 0.01],
+        "verdict": verdict(0.0, -0.01, 0.01, cfg.eval.bootstrap.min_gain),
+        "base": {"run": "base-dev-full.csv"}, "cand": {"run": "cand-dev-full.csv"}}),
+        encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["x", "--base", str(runs["base"]),
+                                     "--cand", str(runs["cand"]), "--single", str(single)])
+    compare.main()
+    result = json.loads(capsys.readouterr().out)
+    recall = next(r for r in result["diffs"] if r["group"] == "all" and r["metric"] == "recall@5")
+    assert recall["diff"] == pytest.approx(0.5)  # 후보 - 기준: q1만 0 → 1
+    meta = result["metadata_verdict"]
+    assert (meta["single_verdict"], meta["stage"]) == ("보류", "multi-doc")
+    assert meta["recall@5"]["diff"] == pytest.approx(0.5)
+    assert meta["single"]["path"] == str(single)
+
+
+def test_score_and_compare_out_are_guarded(tmp_path, monkeypatch, capsys):
+    from rag.eval_multi import compare, score
+    cfg = _frozen_cfg(tmp_path)
     monkeypatch.setattr(score, "load_cfg", lambda: cfg)
     monkeypatch.setattr(compare, "load_cfg", lambda: cfg)
     runs = {}

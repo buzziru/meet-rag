@@ -190,6 +190,8 @@ chunk_sweep:
 # multi-doc 묶음 구성 (docs/slices/07-bundles.md). 값은 D-13에서 확정
 multidoc:
   types: [conf, law, questioner]
+  # G3 동결 세트(paths.multidoc_frozen)의 sha256(D-15). 읽는 곳마다 대조해 다르면 멈춘다(S30)
+  frozen_sha256: 0c385a2bad74c6244e203fb6a428993badf4afb04db4848276a3b48d1a874436
   # S9 채점 (docs/SPEC.md "보조 관찰"). 순위 파일은 질의마다 서로 다른 문서 max(ks)개 이상
   eval:
     ks: [5, 10]

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from rag.eval.score import OVERWRITE_HINT
 from rag.eval_multi.metrics import (
+    frozen_path,
     load_gold,
     metric_table,
     per_query,
@@ -14,7 +15,7 @@ from rag.eval_multi.metrics import (
     sha256,
     to_markdown,
 )
-from rag.index import ROOT, load_cfg, write_guarded
+from rag.index import load_cfg, write_guarded
 
 
 def main() -> None:
@@ -26,7 +27,7 @@ def main() -> None:
 
     cfg = load_cfg()
     ev = cfg.multidoc.eval
-    frozen = ROOT / cfg.paths.multidoc_frozen
+    frozen = frozen_path(cfg)
     gold = load_gold(frozen)
     scores = per_query(ranked_docs(read_run(args.run), gold, max(ev.ks)), gold, ev.ks)
     table = metric_table(scores, gold, ev.breakdowns)
