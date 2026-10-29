@@ -19,16 +19,19 @@ from itertools import groupby
 from pathlib import Path
 
 import numpy as np
-import torch
 from langsmith import traceable
 from langsmith.run_trees import get_cached_client
-from sentence_transformers import CrossEncoder
 
 from rag.index import ROOT, load_cfg, pinned, refuse_existing, require_env, write_guarded
 from rag.retrieve import rerank_basis, rerank_basis_path
 
 
-def load_model(rr) -> CrossEncoder:
+def load_model(rr):
+    # torch·sentence_transformers는 import에 십몇 초가 걸려 모델을 쓸 때만 부른다(rag.index와 같음,
+    # 테스트 리뷰 T1-1)
+    import torch
+    from sentence_transformers import CrossEncoder
+
     if rr.threads:
         torch.set_num_threads(rr.threads)
     return CrossEncoder(rr.model, revision=pinned(rr), max_length=rr.max_length,
@@ -71,6 +74,8 @@ def score(cfg) -> None:
 
 def latency(cfg) -> None:
     """질의 n개를 하나씩 재정렬해 질의당 시간(초)을 잰다. 첫 질의는 준비 실행으로 뺀다."""
+    import torch
+
     rr = cfg.retriever.rerank
     pairs = read_pairs(ROOT / cfg.paths.rerank_pairs)
     by_qid = [list(g) for _, g in groupby(pairs, key=lambda p: p["qid"])]
@@ -83,7 +88,7 @@ def latency(cfg) -> None:
         model.predict([(p["query"], p["text"]) for p in group], batch_size=rr.batch_size)
         times.append(time.perf_counter() - start)
     t = np.array(times[1:])
-    result = {"device": rr.device, "threads": torch.get_num_threads(), "dtype": rr.dtype,
+    result ={"device": rr.device, "threads": torch.get_num_threads(), "dtype": rr.dtype,
               "n_queries": len(t), "pairs_per_query": len(picked[1]),
               "mean": float(t.mean()), "p50": float(np.percentile(t, 50)),
               "p95": float(np.percentile(t, 95)), "max": float(t.max())}
