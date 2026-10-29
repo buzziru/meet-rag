@@ -161,7 +161,7 @@
 - 날짜: 2026-10-06(2026-10-07 인용 의미 판정·검사 모델·파일럿 재검사 갱신)
 
 ## D-15 G3 multi-doc 질의 검수와 세트 동결
-- 결정: 본 생성 통과 질의 `data/multidoc/queries.jsonl` 638건(SHA-256 `d2169035b3c5940069fd6a8b62e1f43820d6c50c1234b96a4a92201a8cc48061`)에서 검수로 38건을 빼 `data/multidoc/queries_g3.jsonl` 600건(`conf` 233, `law` 152, `questioner` 215)을 동결한다. 동결 SHA-256은 `0c385a2bad74c6244e203fb6a428993badf4afb04db4848276a3b48d1a874436`이다(`rag.multidoc.freeze`, 두 번 실행 일치). 제외 목록은 `configs/multidoc/g3_exclude.yaml`이다. 이후 세트를 고치지 않고, S9는 이 파일(`paths.multidoc_frozen`)을 입력으로 쓴다. `queries.jsonl`은 검사 기록에서 다시 만들어지는 파일이라 고치지 않고 제외를 적용한 결과를 따로 쓴다
+- 결정: 본 생성 통과 질의 `data/multidoc/queries.jsonl` 638건(SHA-256 `d2169035b3c5940069fd6a8b62e1f43820d6c50c1234b96a4a92201a8cc48061`)에서 검수로 38건을 빼 `data/multidoc/queries_g3.jsonl` 600건(`conf` 233, `law` 152, `questioner` 215)을 동결한다. 동결 SHA-256은 `0c385a2bad74c6244e203fb6a428993badf4afb04db4848276a3b48d1a874436`이다(`rag.multidoc.freeze`, 두 번 실행 일치). 제외 목록은 `configs/multidoc/g3_exclude.yaml`이다. 이후 세트를 고치지 않고, S9는 이 파일(`paths.multidoc_frozen`)을 입력으로 쓴다. `queries.jsonl`은 검사 기록에서 다시 만들어지는 파일이라 고치지 않고 제외를 적용한 결과를 따로 쓴다 보강: D-62
 - 검수 경과
   - 표본 검수: 638건에서 무작위 50건(`seed` 20260929, `rag.multidoc.review`, `conf` 14·`law` 11·`questioner` 25)을 사용자가 검수했다. 불량 3건은 모두 `law`다(`law-0012`·`law-0108` 질의 모호, `law-0190` 질의 전제와 정답 문서 내용 불일치). 정답 누락·과잉은 0건이다. 불량률은 전체 6%(95% 구간 1.3\~16.5%), `law` 27%(6\~61%)다. 파일럿 통과 질의는 본 생성에서 다시 만들어져 세트에 없어 표본에서 뺐다(사용자)
   - 범위 재판정: 표본에서 '각 회의에서 논의된 쟁점은?' 형식이 법안 하나로 범위가 좁혀지지 않으면 답의 범위가 정해지지 않는다고 봤다(사용자). 같은 형식(`g3_scope`: `law`에서 '각각'과 '쟁점|질의와 답변')의 표본 밖 113건을 사용자가 질의와 정답 회의 안건만 보고 판정해 모호 20건이 나왔다
@@ -514,7 +514,7 @@
   - 캐시 키: 요청 본문(model, messages, params, extra_body)의 sha256. 반복 재채점은 반복 번호를 키에 더하되 반복 0은 지금 키와 같게 둔다(다음 항목) 이후 변경(D-58, 리뷰 수정 SLICE 구현 뒤): 형식 재요청은 형식 교정 지시가 더해져 요청 본문이 달라 키가 갈린다. 첫 요청의 키는 그대로다
   - 판정용 세트 제외: `configs/gen_eval/dev_queries.yaml`(D-47 결정 5)
 - 동결하지 않은 실행 설정(지금 값을 기록만 한다): `deepseek_go_mixed`(기본 사고 과정 끔, `verdicts`·`key_statements`·`items`만 low), `max_tokens` 16384. `max_tokens`는 사고 과정을 high 이상으로 켰을 때 정한 값이라 측정 결과를 보고 바꿀 수 있다 → D-50 결정 2에서 고정
-- 점검: 테스트가 기본 설정의 지시 버전과 해시, 판정표 전체(`OUTCOMES` 12쌍과 `item_outcome`의 5 상태 × 5 처리)를 기대값과 대조한다. j_v8 한 글자나 판정표 한 칸을 바꾸면 실패한다. 기대값을 같이 고치면 통과하므로 PR 리뷰에서 테스트 파일 변경을 본다 보강(D-58 결정 6, 리뷰 수정 SLICE 구현 뒤): 교정 지시 파일 해시와 재요청 상한도 점검한다 보강(D-59): judge 단계별 요청 본문 sha256과 관련성 점수표도 점검한다
+- 점검: 테스트가 기본 설정의 지시 버전과 해시, 판정표 전체(`OUTCOMES` 12쌍과 `item_outcome`의 5 상태 × 5 처리)를 기대값과 대조한다. j_v8 한 글자나 판정표 한 칸을 바꾸면 실패한다. 기대값을 같이 고치면 통과하므로 PR 리뷰에서 테스트 파일 변경을 본다 보강(D-58 결정 6, 리뷰 수정 SLICE 구현 뒤): 교정 지시 파일 해시와 재요청 상한도 점검한다 보강(D-59): judge 단계별 요청 본문 sha256과 관련성 점수표도 점검한다 보강(S30, 테스트 리뷰 T2-1): 요청 본문을 모으는 Judge를 생성자로 만들어, 생성자가 정하는 요청 값(params·extra_body·step_params)이 바뀌어도 실패한다. 기대값과 동결 대상은 그대로다(사용자 결정 2026-10-29, `docs/slices/30-test-fixes.md` 결정 사항 2)
 - 날짜: 2026-10-26
 
 ## D-50 생성 평가 판정용 질의 수 330과 judge 실행 설정 (S24)
@@ -670,3 +670,10 @@
 - 바뀌는 것: D-11(이후 변경 줄), D-40(기본 프롬프트), D-51 결정 2(생성 기준), D-59 결정 5(H22의 기준), DECISIONS 머리 줄
 - 비용: 생성 비용·모델·제공자가 같아 운영 비용 변화가 없다(생성 $0.0815/330질의, 기준 $0.0791)
 - 날짜: 2026-10-28
+
+## D-62 G3 동결 세트를 읽을 때 sha256을 대조한다 (S30)
+- 결정(사용자 결정 2026-10-29, `docs/slices/30-test-fixes.md` 결정 사항 1 (a)): G3 동결 세트(`paths.multidoc_frozen`)를 읽는 네 곳(`rag.eval_multi.score`·`compare`, `rag.search`의 multi-doc 질의 목록, `rag.conditions.read_queries`)이 `rag.eval_multi.metrics.frozen_path`로 파일의 sha256을 D-15 값과 대조해 다르면 멈춘다. 값은 `configs/config.yaml`의 `multidoc.frozen_sha256`(새 키, `multidoc.eval` 밖)에 둔다. `rag.multidoc.freeze`는 `write_guarded`로 써서 같은 내용이면 그대로 두고 다르면 멈춘다. 보호 경로 `src/rag/eval_multi/` 수정을 사용자가 승인했다
+- 이유: 동결 sha를 결과에 기록만 하고 대조하지 않았고 `freeze`가 보호 없이 덮어썼다. `queries.jsonl`을 다시 만든 뒤 `freeze`를 다시 돌리면 600건 세트가 조용히 바뀌고, multi-doc 채점·비교·메타데이터 가설 판정이 D-16 기준선과 다른 세트로 계속된다(테스트 리뷰 T3-4)
+- 바뀌는 것: D-15(보강, 동결을 코드가 확인한다). 판정 규칙과 세트 내용은 그대로다
+- 감수하는 것: 동결 세트를 정당하게 바꾸려면(새 결정으로 다시 동결) `multidoc.frozen_sha256`도 같은 PR에서 고쳐야 한다
+- 날짜: 2026-10-29

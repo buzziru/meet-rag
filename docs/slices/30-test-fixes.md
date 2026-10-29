@@ -57,3 +57,34 @@
 - `src/rag/eval/`(보호 경로), judge 동결 대상의 내용과 기대값
 - 하네스 테스트(`.claude/`)
 - 리뷰 문서의 범위 밖 관찰(`eval_multi/metrics.py` 중복, 확인용 파일의 `write_guarded` 미사용)
+
+## 결과 (2026-10-29)
+
+커밋: 구현 162dcb2(T3-1), e0ce5b3(T3-4·T3-2), 0697541(T2-1), cef874c(T2-3), 4e4fde7(T2-4), 572f419(T1-4), f328109(T1-1), 7a999d7(T1-2), 53d79a8(T1-3)
+
+- 완료 기준 1: `uv run pytest -q` 363 passed(352 + 새 테스트 11), `uv run ruff check .` 통과
+- 완료 기준 2(판정 변형): 리뷰와 같은 방식(pytest 플러그인으로 모듈 사본을 끼움, 저장소 파일은 그대로)으로 돌렸다. 검색 compare의 diff 부호 뒤집기 2 failed, 주지표 `mrr@10` 2 failed, 재표본 단위를 질의로 1 failed(`tests/test_eval.py`). multi-doc base·cand 순서 바꾸기 1 failed(`tests/test_eval_multi.py`). 리뷰 때는 넷 모두 통과했다
+- 완료 기준 3(동결 테스트 범위): `Judge.__init__`의 `self.extra`를 `None`으로 바꾼 사본에서 `tests/test_gen_eval_freeze.py` 2 failed, 바꾸지 않으면 7 passed(기대 sha 그대로)
+- 완료 기준 4(G3 동결 대조): 합성 동결 파일에 한 글자를 더하면 `frozen_path`와 `rag.conditions.read_queries`가 "G3 동결 값"으로 멈춘다. `freeze.main`은 같은 내용이면 "그대로 둠", 제외 목록을 바꾸면 "다시 만들지 않는다"로 멈춘다. 실제 `data/multidoc/queries_g3.jsonl`은 대조를 통과한다
+- 완료 기준 5(생성 compare): judge 설정이 섞인 파일은 "2가지 섞여"로, qid 중복은 질의 불일치로 멈춘다. 두 분기를 뺀 사본에서 각각 1 failed
+- 그 밖의 변형 확인: judge `main`에서 `check_prompt`·`check_speakers`·레시피 수 검사를 뺀 사본 각 1 failed(T2-4). `rag.search.search`에서 재정렬을 끄거나(`use_rerank = False`) 후보 쌍 머리를 밀거나 조건 추출을 비운 사본 각 1\~3 failed(T1-4)
+- 완료 기준 6(시간, 같은 방식으로 두 번째 측정)
+
+  | | 리뷰 측정(a6fce38) | 구현 뒤 |
+  | --- | --- | --- |
+  | 전체 `uv run pytest -q` | 109.7\~118.8초(352개) | 56.3초(363개) |
+  | 테스트 실행 합(setup·call·teardown) | 73.9초 | 43.1초 |
+  | `--collect-only` | 44.6초 | 15.7초 |
+  | `test_bm25` 파일 합 | 14.7초 | 3.9초 |
+  | `test_revisions` 파일 합 | 9.7초 | 4.0초 |
+  | `test_exp_configs` 파일 합 | 10.2초 | 10.6초(새 `search()` 테스트 3개 포함) |
+  | `test_gen_eval` 파일 합 | 11.7초 | 9.4초(새 테스트 5개 포함) |
+
+- 완료 기준 7(기준 설정 불변): `+exp=current index.scope=full`(그리고 `search.queries=multidoc`)의 조립 결과를 main의 `configs/`와 비교하면 새 키 `multidoc.frozen_sha256` 하나만 다르다(해석 전 값 비교). 생성 레시피 코드(`rag.generate.recipe`)는 바꾸지 않았다
+- DECISIONS: D-62(G3 동결 sha 대조, 보호 경로 `src/rag/eval_multi/` 수정 승인), D-15 줄 끝 `보강: D-62`, D-49 점검 줄 `보강(S30, …)`(결정 사항 2 (a))
+
+### 지시서와 다르게 한 것
+
+- T1-3: config 캐시를 fixture로 두지 않고 `tests/conftest.py`에서 `rag.index.load_cfg`·`git_state`를 세션 캐시로 바꿔 끼웠다. 테스트의 `load_cfg` 호출이 약 100곳이라 fixture로 바꾸면 모든 호출을 고쳐야 한다. conftest는 테스트 모듈보다 먼저 불러와져 `from rag.index import load_cfg`도 캐시된 함수를 받고, 매번 복사본을 돌려준다
+- T1-4: `search()` 테스트는 `+exp=exp014`(재정렬 없음)와 `+exp=exp017`(재정렬, 검색 기준)로만 돌린다. EXP 18개 전부면 약 9초가 더 든다. 질의 목록·질의 임베딩·조건 추출기·재정렬 점수는 바꿔 끼우고, 순위·후보 쌍 파일은 `search`의 ROOT를 tmp로 바꿔 쓴다
+- T2-4: judge `main` 테스트는 처음 구현 당시 설정 `+exp=exp017`을 입력으로 쓴다(기본 config에는 생성 기록 경로가 없다)
