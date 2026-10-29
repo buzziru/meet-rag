@@ -33,6 +33,8 @@
 
 ## 결정 사항 (구현 전 확인)
 
+사용자 결정(2026-10-29): 1은 (a)(보호 경로 `src/rag/eval_multi/` 수정 승인, DECISIONS에 기록), 2는 (a), 3은 메인 판단대로 승인 대상으로 보지 않는다.
+
 1. T3-4 동결 sha를 대조하는 위치. 동결 세트를 읽는 곳은 `src/rag/eval_multi/score.py:29`, `compare.py:90`(보호 경로), `src/rag/search.py:86`, `src/rag/conditions.py:172` 넷이다
    - (a) 넷 모두에서 대조(추천): sha를 `configs/config.yaml`의 `multidoc.frozen_sha256`(새 키, `multidoc.eval` 밖)에 두고, 읽는 함수 하나(`rag.eval_multi.metrics`에 둠)를 네 곳이 부른다. 채점·비교까지 막는다. 보호 경로 `src/rag/eval_multi/`를 고치므로 사용자 승인과 DECISIONS 기록이 필요하다
    - (b) 보호 경로 밖(검색·조건)에서만 대조: `eval_multi`는 고치지 않는다. 동결 세트가 바뀌면 새 순위는 막히지만, 이미 있는 순위 파일을 바뀐 세트로 채점·비교하는 것은 막지 못한다
