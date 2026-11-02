@@ -878,57 +878,79 @@ def test_http_counts_record_sdk_retries():
     assert "응답 없음 1" in counts.summary(1)
 
 
-def test_run_all_stops_on_first_failure_and_names_it():
-    """한 항목이 실패하면 시작하지 않은 항목을 취소하고 실패 항목과 원인을 적는다(이슈 #156)."""
+def test_run_all_retries_only_failed_items_after_the_full_pass():
+    """실패한 항목은 전체를 마친 뒤 그것만 다시 처리하고, 결과는 입력 순서다(D-64)."""
     import threading
-    import time
 
     from rag.gen_eval.judge import run_all
-    started, lock = [], threading.Lock()
+    calls, lock = [], threading.Lock()
 
     def fn(x):
         with lock:
-            started.append(x)
-        if x == 2:
+            calls.append(x)
+            first = calls.count(x) == 1
+        if x == 2 and first:
             raise RuntimeError("timeout")
-        time.sleep(0.05)  # API 호출처럼 메인이 실패를 알아챌 시간이 있게 한다
         return x * 10
 
+    assert run_all(fn, list(range(10)), 3, str, 1, 8) == [x * 10 for x in range(10)]
+    assert calls.count(2) == 2 and all(calls.count(x) == 1 for x in range(10) if x != 2)
+    assert calls[-1] == 2  # 전체를 마친 뒤 다시 처리한다
+    assert run_all(lambda x: x * 10, [3, 1, 2], 4, str, 1, 8) == [30, 10, 20]
+
+
+def test_run_all_stops_when_items_still_fail_and_names_them():
+    """다시 처리해도 실패하면 결과를 돌려주지 않고 실패 항목과 원인을 적는다."""
+    from rag.gen_eval.judge import run_all
+    calls = []
+
+    def fn(x):
+        calls.append(x)
+        if x == 2:
+            raise RuntimeError("timeout")
+        return x
+
     with pytest.raises(SystemExit, match=r"judge 실패 1건(.|\n)*q2: RuntimeError: timeout"):
-        run_all(fn, list(range(100)), 1, lambda x: f"q{x}")
-    assert len(started) <= 5  # 실패 뒤 항목은 거의 시작하지 않는다(100개 중)
-    assert run_all(lambda x: x * 10, [3, 1, 2], 4, str) == [30, 10, 20]  # 입력 순서
+        run_all(fn, list(range(5)), 1, lambda x: f"q{x}", 1, 8)
+    assert calls == [0, 1, 2, 3, 4, 2]
 
 
-def test_run_all_does_not_wait_for_slow_earlier_item():
-    """앞 항목이 늦어도 뒤 항목의 실패에서 바로 멈춘다. map은 앞 항목이 끝날 때까지 실패를 몰라
-    다른 워커가 남은 항목을 계속 처리했다(이슈 #156)."""
-    import threading
+def test_run_all_stops_on_consecutive_failures_and_cancels_the_rest():
+    """연속 실패가 상한에 이르면 시작하지 않은 항목을 취소하고, 다시 처리하지 않고 멈춘다."""
     import time
 
     from rag.gen_eval.judge import run_all
-    started, lock = [], threading.Lock()
+    calls = []
 
     def fn(x):
-        with lock:
-            started.append(x)
-        if x == 0:
-            time.sleep(2)  # 응답이 늦는 앞 질의
-        elif x == 1:
+        calls.append(x)
+        time.sleep(0.05)  # API 호출처럼 메인이 실패를 알아챌 시간이 있게 한다
+        raise RuntimeError("down")
+
+    with pytest.raises(SystemExit, match=r"연속 실패 3건으로 멈춤(.|\n)*q0: RuntimeError"):
+        run_all(fn, list(range(100)), 1, lambda x: f"q{x}", 1, 3)
+    assert len(calls) <= 6 and len(set(calls)) == len(calls)  # 100개 중 일부만, 다시 처리 없음
+
+
+def test_run_all_success_resets_the_failure_streak():
+    """중간에 성공이 끼면 연속 실패 셈이 처음부터 시작해 끝까지 처리한다."""
+    from rag.gen_eval.judge import run_all
+    calls = []
+
+    def fn(x):
+        calls.append(x)
+        if x % 2 and calls.count(x) == 1:
             raise RuntimeError("timeout")
-        else:
-            time.sleep(0.05)
         return x
 
-    with pytest.raises(SystemExit, match="q1: RuntimeError"):
-        run_all(fn, list(range(100)), 2, lambda x: f"q{x}")
-    assert len(started) <= 6  # map이면 앞 질의 2초 동안 약 40개를 더 시작한다
+    assert run_all(fn, list(range(20)), 1, str, 1, 2) == list(range(20))
 
 
 def test_judge_configs_pass_timeout_and_retries():
     for judge in ("deepseek_go", "deepseek_go_mixed", "deepseek_openrouter"):
         j = load_cfg([f"judge={judge}"]).judge
         assert (j.timeout, j.max_retries) == (120, 1)
+        assert j.retry_passes >= 0 and j.stop_after_failures >= 1  # run_all이 그대로 읽는다(D-64)
 
 
 def test_swap_gold_oracle_and_no_gold():
