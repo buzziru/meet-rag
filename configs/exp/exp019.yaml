@@ -1,0 +1,12 @@
+# @package _global_
+# EXP-019 H20 발언자 머리 줄 기준 전환(D-63): EXP-018 위에서 근거에 질의자·답변자 머리 줄을 붙이고, 읽는 법을
+# 더한 프롬프트 v4와 표기를 읽는 judge 지시 j_v9를 쓴다(docs/experiments/EXP-019.md). 검색은 그대로다
+# judge/prompt는 config.yaml의 override가 우선해 override로 바꿀 수 없어 지시 파일을 그 자리에 합친다
+defaults:
+  - exp018
+  - /judge/prompt/j_v9@judge.prompt
+  - override /prompt: v4
+  - _self_
+
+speakers:
+  mode: head
