@@ -25,7 +25,7 @@ judge 호출이 재시도까지 실패하면 지금은 시작하지 않은 질�
 
 ## 수정 허용 파일
 
-`src/rag/gen_eval/judge.py`(`run_all`과 호출 두 곳), `configs/judge/deepseek_go.yaml`, `tests/test_gen_eval.py`, `docs/DECISIONS.md`, `docs/slices/31-judge-retry.md`, `CLAUDE.md`(바뀌는 호출법이 있으면), `docs/PLAN.md`·`docs/PLAN-done.md`
+`src/rag/gen_eval/judge.py`(`run_all`과 호출 두 곳), `configs/judge/deepseek_go.yaml`, `configs/judge/deepseek_openrouter.yaml`(같은 키를 두는 대안 경로), `tests/test_gen_eval.py`, `docs/DECISIONS.md`, `docs/slices/31-judge-retry.md`, `CLAUDE.md`(바뀌는 호출법이 있으면), `docs/PLAN.md`·`docs/PLAN-done.md`
 
 ## 범위 밖
 
