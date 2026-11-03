@@ -20,7 +20,8 @@ import os
 import sys
 import threading
 import time
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor
+from queue import Empty, SimpleQueue
 
 from langsmith import traceable
 from langsmith.run_trees import get_cached_client
@@ -433,13 +434,19 @@ def run_pass(fn, items: list, concurrency: int, stop_after: int) -> tuple[list, 
     Future 목록과 그렇게 멈췄는지를 돌려준다. Ctrl+C도 시작하지 않은 항목을 취소하고 올린다."""
     ex = ThreadPoolExecutor(concurrency)
     futures = [ex.submit(fn, x) for x in items]
-    pending, streak = set(futures), 0
+    finished = SimpleQueue()  # 끝난 순서대로 쌓인다. wait의 done은 set이라 연속을 셀 수 없다
+    for f in futures:
+        f.add_done_callback(finished.put)
+    left, streak = len(futures), 0
     try:
-        # Windows에서는 timeout 없는 대기가 Ctrl+C로 깨지 않아 1초마다 깨어난다
-        while pending and streak < stop_after:
-            done, pending = wait(pending, timeout=1, return_when=FIRST_COMPLETED)
-            for f in done:
-                streak = streak + 1 if f.exception() else 0
+        while left and streak < stop_after:
+            try:
+                # Windows에서는 timeout 없는 대기가 Ctrl+C로 깨지 않아 1초마다 깨어난다
+                f = finished.get(timeout=1)
+            except Empty:
+                continue
+            left -= 1
+            streak = streak + 1 if f.exception() else 0
     finally:
         ex.shutdown(cancel_futures=True)
     return futures, streak >= stop_after
