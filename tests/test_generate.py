@@ -198,7 +198,8 @@ def test_retrieve_expands_only_top_contexts_and_marks_follow_window(tmp_path, ex
     want = (0, 3) if expand["top"] else (0, 1)
     got = b["speakers"]["spans"][0]
     assert (got["start"], got["end"]) == want
-    assert render(b).split("\n", 1)[1].replace("〈답변 김 장관〉", "").replace("〈/답변〉", "") == first
+    body = render(b).split("\n", 1)[1]
+    assert body.replace("〈답변 김 장관〉", "").replace("〈/답변〉", "") == first
 
 
 def test_pipeline_rejects_half_set_context_expand(monkeypatch):
