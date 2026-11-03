@@ -41,3 +41,8 @@ G3 동결 세트의 sha256 대조(D-62)는 `rag.eval_multi.metrics.frozen_path`�
 ### 지시서와 다르게 한 것
 
 - search 테스트도 `tests/test_eval_multi.py`에 뒀다. 합성 동결 세트 도구를 함께 쓰기 때문이다
+- `src/rag/speakers.py`의 두 줄만 고치지 않고 `count_found`로 나눴다. 테스트로 부르기 위해서이고 빈 발언 외의 동작은 같다
+
+### 관찰
+
+원천 라벨을 세어 보니 빈 `comment`는 QA 39,633개에서 0건이고, 옛 집계와 새 집계의 `found`·`repeat`가 같다(질의 39,623·1,595, 답변 39,467·1,068). D-60과 S29의 수치는 그대로라 표시를 붙이지 않는다
