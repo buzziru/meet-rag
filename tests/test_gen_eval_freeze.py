@@ -25,6 +25,7 @@ FROZEN_J_V9_SHA256 = "e8a699e829f29ce2376059b0d724dc576122d3606daa88087f665f8cbc
 FROZEN_J_V10_SHA256 = "799f28d0d96b5fefdaa17277fc4f5424f70d0b086eb3637c4325dbe3c6b57ee8"
 FROZEN_J_V11_SHA256 = "c171d21e712fae6e7b8acf74301e2aab348f42ff0859cc075aef35eedee8ee83"
 FROZEN_J_V12_SHA256 = "6ca148f522e7097f28e8ee3c2d5a3ba4e922cead9614e13a9a95895b3e554617"
+FROZEN_J_V13_SHA256 = "846101ae88830a4f7ce57bf402f890cf5e26040e2f5e96da912c375868414057"
 FROZEN_FORMAT_RETRY = "fr_v1"
 FROZEN_FORMAT_RETRY_SHA256 = "95edd01f8bba4b487f7c57044e07f59de161257b5e0af43694b6d7b2a838042c"
 FROZEN_FORMAT_RETRY_LIMIT = 1
@@ -73,6 +74,12 @@ def test_j_v12_prompt_is_frozen():
     prompt = load_cfg(["index.scope=full", "judge/prompt=j_v12"]).judge.prompt
     assert prompt.version == "j_v12"
     assert sha(OmegaConf.to_container(prompt, resolve=True)) == FROZEN_J_V12_SHA256
+
+
+def test_j_v13_prompt_is_frozen():
+    prompt = load_cfg(["index.scope=full", "judge/prompt=j_v13"]).judge.prompt
+    assert prompt.version == "j_v13"
+    assert sha(OmegaConf.to_container(prompt, resolve=True)) == FROZEN_J_V13_SHA256
 
 
 def test_outcome_table_is_frozen():

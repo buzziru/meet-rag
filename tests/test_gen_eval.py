@@ -1001,10 +1001,18 @@ def test_generate_all_skips_unchanged_contexts():
     assert seen[0] == ("q0", "d0", "oracle")
 
 
-def _judged(qid, faith=None, rel=None, inc=None, over=0, judged=2, recipe=None, refusal="none"):
+def _verdicts(mismatch=0, n=4):
+    return [{"statement": f"s{i}", "verdict": 0 if i < mismatch else 1, "speaker_unclear": False,
+             "reason": "발언자 불일치: 다른 사람" if i < mismatch else "근거에 있다"}
+            for i in range(n)]
+
+
+def _judged(qid, faith=None, rel=None, inc=None, over=0, judged=2, recipe=None, refusal="none",
+            mismatch=0):
     """compare가 읽는 judge 기록의 최소 형태(S22 형식)."""
     return {"qid": qid, "refusal": refusal,
-            "faithfulness": None if faith is None else {"score": faith, "verdicts": []},
+            "faithfulness": None if faith is None
+            else {"score": faith, "verdicts": _verdicts(mismatch)},
             "relevance": None if rel is None else {"score": rel},
             "inclusion": None if inc is None else {"score": inc},
             "item_eval": {"items": [], "counts": {"over_refusal": over, "judged": judged}},
@@ -1023,12 +1031,15 @@ def test_gen_verdict_branches():
     from types import SimpleNamespace
 
     from rag.gen_eval.compare import gen_verdict
-    spec = SimpleNamespace(min_gain=0.02, over_refusal_max=0.02,
+    spec = SimpleNamespace(min_gain=0.02, over_refusal_max=0.02, speaker_mismatch_max=0.02,
                            floors={"faithfulness": -0.05, "relevance": -0.035})
     ok = {"faithfulness": (0.03, 0.01, 0.05), "relevance": (0.03, 0.01, 0.05),
           "composite": (0.03, 0.01, 0.05), "inclusion": (0, -1, 1),
-          "over_refusal": (0.0, -0.01, 0.01)}
+          "over_refusal": (0.0, -0.01, 0.01), "speaker_mismatch": (0.0, -0.01, 0.01)}
     assert gen_verdict(ok, spec) == ("채택", [])
+    wrong = ok | {"speaker_mismatch": (0.015, 0.005, 0.025)}
+    assert gen_verdict(wrong, spec) == ("보류", ["발언자 불일치 증가(상한 > 0.02)"])
+    assert gen_verdict(ok | {"speaker_mismatch": (0.01, 0.0, 0.02)}, spec) == ("채택", [])
     small = ok | {"composite": (0.01, 0.001, 0.02)}
     assert gen_verdict(small, spec) == ("보류", ["종합 지표 점 추정 < 0.02"])
     flat = ok | {"composite": (0.03, -0.01, 0.06)}
@@ -1086,6 +1097,8 @@ def _compare_main(tmp_path, monkeypatch, capsys, base, cand):
     monkeypatch.setattr(compare, "load_gold", lambda cfg, layer: gold)
     paths = []
     for name, rows in [("b", base), ("c", cand)]:
+        for r in rows:
+            r["judge_recipe"].setdefault("prompt_version", "j_v13")
         path = tmp_path / f"{name}.jsonl"
         path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
                         encoding="utf-8")
@@ -1107,6 +1120,49 @@ def test_gen_compare_main_pairs_and_reports_exclusions(tmp_path, monkeypatch, ca
     assert m["composite"]["n"] == 3 and m["relevance"]["n"] == 4 and m["inclusion"]["n"] == 3
     assert out["exclusions"]["base"]["faithfulness"] == {"excluded": {}, "format_errors": 1}
     assert out["exclusions"]["cand"]["inclusion"]["excluded"] == {"reference_unusable": 1}
+
+
+def test_gen_compare_main_fails_on_speaker_mismatch_increase(tmp_path, monkeypatch, capsys):
+    """종합 지표가 올라도 발언자 불일치가 늘면 진입점에서 채택되지 않는다(D-68)."""
+    qids = [f"q{i}" for i in range(12)]
+    base = [_judged(q, 0.7, 0.7, 0.5) for q in qids]
+    up = [_judged(q, 0.9, 0.9, 0.5) for q in qids]
+    assert _compare_main(tmp_path, monkeypatch, capsys, base, up)["verdict"] == "채택"
+    wrong = [_judged(q, 0.9, 0.9, 0.5, mismatch=1) for q in qids]
+    out = _compare_main(tmp_path, monkeypatch, capsys, base, wrong)
+    assert out["metrics"]["speaker_mismatch"]["diff"] == 0.25
+    assert out["verdict"] == "보류"
+    assert out["failed"] == ["발언자 불일치 증가(상한 > 0.02)"]
+
+
+def test_gen_compare_main_stops_on_judge_without_speaker_check(tmp_path, monkeypatch, capsys):
+    recipe = {"name": "j", "model": "m", "refusal": "r", "prompt_version": "j_v8"}
+    rows = [_judged(q, 0.5, 0.5, 0.5, recipe=recipe) for q in "abcd"]
+    with pytest.raises(SystemExit, match="j_v8은 발언자를 판정하지 않아"):
+        _compare_main(tmp_path, monkeypatch, capsys, rows, rows)
+
+
+def test_speaker_mismatch_counts_prefix_and_skips_uncomputed():
+    import math
+
+    from rag.gen_eval.report import speaker_mismatch
+    assert speaker_mismatch(_judged("a", 0.5, mismatch=1)) == 0.25
+    r = _judged("b", 1.0)
+    r["faithfulness"]["verdicts"][0]["reason"] = "질의자 발언인데 발언자 불일치는 아니다"
+    assert speaker_mismatch(r) == 0.0
+    assert math.isnan(speaker_mismatch(_judged("c")))
+    r = _judged("d", 0.5, mismatch=1)
+    r["faithfulness"]["score"] = None
+    assert math.isnan(speaker_mismatch(r))
+
+
+def test_speaker_names_only_from_cited_contexts():
+    from rag.gen_eval.report import speaker_names
+    who = {"questioners": [{"name": "홍길동"}], "answerers": [{"name": "김철수"}]}
+    other = {"questioners": [{"name": "이영희"}], "answerers": []}
+    run = {"answer": "김철수 장관과 이영희 위원[1]",
+           "contexts": [{"n": 1, "speakers": who}, {"n": 2, "speakers": other}]}
+    assert speaker_names(run) == {"김철수"}
 
 
 def test_gen_compare_main_stops_without_paired_queries(tmp_path, monkeypatch, capsys):

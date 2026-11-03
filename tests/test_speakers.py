@@ -145,6 +145,17 @@ def test_j_v12_differs_from_j_v11_only_in_relevance():
     assert v11["relevance"]["user"] == v12["relevance"]["user"]
 
 
+def test_j_v13_differs_from_j_v12_only_in_relevance():
+    """j_v13은 relevance 규칙만 고쳐 나머지 단계의 저장 응답을 그대로 쓴다(D-68)."""
+    d = ROOT / "configs/judge/prompt"
+    v12, v13 = (yaml.safe_load((d / f"{v}.yaml").read_text(encoding="utf-8"))
+                for v in ("j_v12", "j_v13"))
+    assert (v12.pop("version"), v13.pop("version")) == ("j_v12", "j_v13")
+    assert {k for k in v12 if v12[k] != v13[k]} == {"relevance"}
+    assert v12["relevance"]["user"] == v13["relevance"]["user"]
+    assert "표기를 뺐을 때" not in v13["relevance"]["system"]
+
+
 def test_j_v9_differs_from_j_v8_only_in_speaker_sentence():
     """j_v9는 verdicts 규칙 5와 items 규칙 3의 첫 문장만 바꾼다(S29 결정 사항 1)."""
     d = ROOT / "configs/judge/prompt"

@@ -1,0 +1,7 @@
+# @package _global_
+# 기준선 재채점과 j_v13 재검증(D-68, docs/slices/32-attribution-safety.md): EXP-019 생성 기록을 j_v13으로 다시 채점한다.
+# judge/prompt는 config.yaml의 override가 우선해 override로 바꿀 수 없어 지시 파일을 그 자리에 합친다
+defaults:
+  - exp019
+  - /judge/prompt/j_v13@judge.prompt
+  - _self_
