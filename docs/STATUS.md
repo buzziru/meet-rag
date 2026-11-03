@@ -1,23 +1,22 @@
 # STATUS (세션 종료 시 덮어씀)
 
 ## 현재 위치
-- 생성 기준은 아직 EXP-018이다(DECISIONS 머리 줄, `configs/exp/current.yaml`). 발언자 머리 줄을 지표와 무관한 메타데이터로 정했고(D-63), EXP-019 결과 PR에서 기준을 옮긴다
-- 작업 브랜치 `exp/exp019-speakers-head`(PR 없음). gen-small을 마쳤고, judge 지시 재검증 중이다. j_v10은 질의자 주장을 사실처럼 쓴 진술에 1을 주는 쪽으로 치우쳐 쓰지 않기로 했고 `verdicts`만 고친 j_v11을 만들었다(D-63 결정 8, `docs/experiments/EXP-019.md` 실행 절)
-- 이번 세션 병합: #189(S31 judge 실패 질의 재처리, D-64). 이 브랜치에는 아직 합치지 않았다
-- 진행 기록: `_workspace/exp019_main_progress.md`
+- 생성 기준을 EXP-019로 옮기는 결과 PR을 준비했다(`exp/exp019-speakers-head`, D-63). 판정은 보류이고 기준 전환은 판정과 무관하다(D-63 결정 2)
+- 진행 기록: `_workspace/exp019_main_progress.md`(블라인드 회차 확인과 SPEC 정리 내용 포함)
 
 ## 실행 중 작업
 - 없음
 
 ## 판정 대기
-- EXP-019(재검증 뒤 gen-full, 아직 실행 전)
-
-## 리뷰 대기 PR
 - 없음
 
+## 리뷰 대기 PR
+- EXP-019 결과 PR
+
 ## 다음 행동
-1. [B] main 맞추기(`fix/s31-judge-retry` 정리) 뒤 EXP 브랜치에 `main`을 합친다
-2. [B] j_v11 재채점은 끝났다(숫자는 EXP-019 실행 절). 바뀐 53질의를 서브에이전트로 분류해(사용자 지시) 사용자에게 보고한다. 받아들이면 gen-full로 간다. 절차와 이후 단계는 진행 기록에 있다
+1. [F] EXP-019 PR 병합 뒤 `chore/` PR: `gen-exp.md:35`(호출 하나가 실패하면 멈춘다), `gen-exp.md:10`·`protocol-guard`의 기준 judge 지시 표기. H22 초안 전에 끝낸다
+2. SPEC 정리 `docs/` PR: 진행 기록의 "SPEC 검토" 절대로 `docs/drafts/` 초안을 두고 사용자 승인을 받는다
+3. [B] H22 초안: 착수 전 확인과 지시 설계는 PLAN H22 항목에 있다
 
 ## 사용자 확인 필요
-- j_v11 재검증 결과를 받아들일지(결과 보고 뒤)
+- 없음
