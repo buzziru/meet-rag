@@ -42,6 +42,7 @@ from rag.gen_eval.report import (
     require_s22,
     unlisted_table,
 )
+from rag.gen_eval.report import main as report_main
 from rag.gen_eval.review import main as review_main
 from rag.index import load_cfg
 
@@ -1239,29 +1240,34 @@ def _stop_at_first_work(monkeypatch, name):
     monkeypatch.setattr(name, stop)
 
 
-@pytest.mark.parametrize("first_work", ["rag.gen_eval.judge.refuse_existing",
-                                        "rag.gen_eval.report.read_jsonl"])
+ENTRIES = [(judge_main, "rag.gen_eval.judge.refuse_existing"),
+           (report_main, "rag.gen_eval.report.read_jsonl")]
+
+
+@pytest.mark.parametrize(("main", "first_work"), ENTRIES)
 @pytest.mark.parametrize("args", [
     ["+exp=exp019", "judge/prompt=j_v8"],
     ["judge/prompt=j_v8", "+exp=exp019"],  # 순서가 달라도 EXP의 지시가 이긴다
+    ["+exp=exp019", "judge/prompt=j_v11", "judge/prompt=j_v8"],  # 뒤 값을 본다
 ])
-def test_ignored_judge_prompt_override_stops_entry(monkeypatch, first_work, args):
+def test_ignored_judge_prompt_override_stops_entry(monkeypatch, main, first_work, args):
     """EXP가 합친 지시(exp019는 j_v11)에 덮인 override는 첫 작업 전에 원인과 함께 멈춘다."""
-    from rag.gen_eval.report import main as report_main
     _stop_at_first_work(monkeypatch, first_work)
     monkeypatch.setattr(sys, "argv", ["entry", *args])
-    main = judge_main if "judge" in first_work else report_main
     with pytest.raises(SystemExit, match="j_v8.*무시.*j_v11"):
         main()
 
 
+@pytest.mark.parametrize(("main", "first_work"), ENTRIES)
 @pytest.mark.parametrize(("args", "version"), [
     (["+exp=exp018", "judge/prompt=j_v10"], "j_v10"),  # 지시를 합치지 않는 EXP(EXP-019 재채점)
+    (["+exp=exp018", "judge/prompt='j_v10'"], "j_v10"),  # Hydra가 따옴표를 벗겨 적용한다
+    (["+exp=exp018", "judge/prompt=j_v9", "judge/prompt=j_v10"], "j_v10"),  # 뒤 값이 적용된다
     (["+exp=exp019", "judge/prompt=j_v11"], "j_v11"),  # EXP가 합친 지시와 같다
     (["+exp=exp019"], "j_v11"),
 ])
-def test_applied_judge_prompt_override_reaches_judge(monkeypatch, args, version):
-    _stop_at_first_work(monkeypatch, "rag.gen_eval.judge.refuse_existing")
-    monkeypatch.setattr(sys, "argv", ["rag.gen_eval.judge", *args])
+def test_applied_judge_prompt_override_reaches_entry(monkeypatch, main, first_work, args, version):
+    _stop_at_first_work(monkeypatch, first_work)
+    monkeypatch.setattr(sys, "argv", ["entry", *args])
     with pytest.raises(_PassedConfigCheck, match=f"-{version}.jsonl$"):
-        judge_main()
+        main()
