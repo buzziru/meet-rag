@@ -1,0 +1,7 @@
+# @package _global_
+# EXP-020 H22 생성 프롬프트에서 답을 먼저 쓰고 발언자를 밝히며 질의자 주장을 구분하게 한다(docs/experiments/EXP-020.md).
+# EXP-019 위에서 프롬프트만 v5로 바꾼다. 검색, 머리 줄, judge는 그대로다
+defaults:
+  - exp019
+  - override /prompt: v5
+  - _self_
