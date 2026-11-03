@@ -202,7 +202,10 @@ def test_retrieve_expands_only_top_contexts_and_marks_follow_window(tmp_path, ex
     assert body.replace("〈답변 김 장관〉", "").replace("〈/답변〉", "") == first
 
 
-def test_pipeline_rejects_half_set_context_expand(monkeypatch):
+@pytest.mark.parametrize("over", ["generator.context_expand.top=1",
+                                  "generator.context_expand.top=-1",
+                                  "generator.context_expand.chunks=-1"])
+def test_pipeline_rejects_bad_context_expand(monkeypatch, over):
     from types import SimpleNamespace
 
     import rag.generate as g
@@ -212,4 +215,4 @@ def test_pipeline_rejects_half_set_context_expand(monkeypatch):
     monkeypatch.setattr(g, "ChunkStore", lambda dirs: SimpleNamespace(names=[], bounds=[0]))
     monkeypatch.setattr(g, "corpus_meta", lambda cfg: [])
     with pytest.raises(SystemExit, match="context_expand"):
-        g.Pipeline(load_cfg(["index.scope=full", "generator.context_expand.top=1"]))
+        g.Pipeline(load_cfg(["index.scope=full", over]))

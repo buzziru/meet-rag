@@ -129,8 +129,9 @@ class Pipeline:
         self.doc_meta = {d["doc_id"]: {k: d[k] for k in CONTEXT_META} for d in corpus_meta(cfg)}
         # 발언자 표시(S29): 문서 화자 목록과 원천 라벨의 발언 구간. 구간은 시작할 때 만든다(약 7초)
         self.expand = cfg.generator.context_expand
-        if bool(self.expand.top) != bool(self.expand.chunks):
-            raise SystemExit("generator.context_expand는 top과 chunks를 함께 켜거나 끈다: "
+        if self.expand.top < 0 or self.expand.chunks < 0 or (
+                bool(self.expand.top) != bool(self.expand.chunks)):
+            raise SystemExit("generator.context_expand의 top·chunks는 0 이상이고 함께 켠다: "
                              f"{self.expand}")
         self.speakers = check_mode(cfg.speakers.mode)
         if self.speakers != "off":
