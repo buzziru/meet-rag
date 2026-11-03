@@ -14,8 +14,8 @@
 - EXP-019 결과 PR
 
 ## 다음 행동
-1. [F] EXP-019 PR 병합 뒤 `chore/` PR: `gen-exp.md:35`(호출 하나가 실패하면 멈춘다), `gen-exp.md:10`·`protocol-guard`의 기준 judge 지시 표기. H22 초안 전에 끝낸다
-2. SPEC 정리 `docs/` PR: 진행 기록의 "SPEC 검토" 절대로 `docs/drafts/` 초안을 두고 사용자 승인을 받는다
+1. [F] EXP-019 PR 병합 뒤 `chore/` PR: `gen-exp.md:35`(호출 하나가 실패하면 멈춘다), `gen-exp.md:10`·`protocol-guard`의 기준 judge 지시 표기, `src/rag/gen_eval/judge.py:96`의 안내 문구. H22 초안 전에 끝낸다
+2. SPEC 정리 `docs/` PR: `docs/drafts/` 초안을 두고 사용자 승인을 받는다. 사용자가 정한 범위는 충돌 정리, 미결 사항 5(생성 test 규모), 재검증 규칙(재채점·변동 폭·사례 대조), `docs/SPEC.md:234` 비용 문장, ZDR 날짜, 설명 이동, `docs/CLAUDE.md` 재발 방지다. 블라인드 문장: 사람 검수는 모듈을 만드는 과정에서 했고(S14, S14c), 블라인드 확인은 S25에서 1질의 뒤 중단했다(사용자 확인 2026-11-03, D-51)
 3. [B] H22 초안: 착수 전 확인과 지시 설계는 PLAN H22 항목에 있다
 
 ## 사용자 확인 필요
