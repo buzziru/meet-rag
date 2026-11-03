@@ -1,0 +1,8 @@
+# @package _global_
+# EXP-020 H22 생성 프롬프트에서 답을 먼저 쓰고 발언자를 밝히며 질의자 주장을 구분하게 한다(docs/experiments/EXP-020.md).
+# EXP-019 위에서 프롬프트를 v6으로, judge 지시를 j_v12로 바꾼다(기준도 j_v12로 다시 채점, D-66). 검색과 머리 줄은 그대로다
+defaults:
+  - exp019
+  - /judge/prompt/j_v12@judge.prompt
+  - override /prompt: v6
+  - _self_
