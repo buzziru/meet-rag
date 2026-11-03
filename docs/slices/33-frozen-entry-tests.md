@@ -29,3 +29,15 @@ G3 동결 세트의 sha256 대조(D-62)는 `rag.eval_multi.metrics.frozen_path`�
 - `src/rag/eval_multi/` 코드 변경(보호 경로)
 - 노트북이 동결 파일을 직접 읽는 경로(D-62 감수)
 - 일일 리뷰의 다른 항목, 빠진 경계 테스트(`check_speaker_judge`의 `j_v9`, 버전 없음)
+
+## 결과 (2026-11-03)
+
+커밋: 구현 1626e17
+
+- 완료 기준 1: `uv run pytest -q` 390 통과, `uv run ruff check .` 통과
+- 완료 기준 2: `score.main`, `compare.main`, `search`의 `frozen_path`를 대조 없는 경로 반환으로 바꾼 사본 3종에서 해당 진입점 테스트가 모두 실패했다(저장소 파일은 그대로, pytest 플러그인). 정답 문서 하나만 바꾼 입력이라 대조가 없으면 오류 없이 이어지다 `pytest.raises`에서 실패한다
+- 완료 기준 3: `tests/test_speakers.py::test_count_found_skips_empty_comment` 통과. 확인용 출력을 `count_found`로 나눴고 `doc_spans`와 생성 입력은 그대로다
+
+### 지시서와 다르게 한 것
+
+- search 테스트도 `tests/test_eval_multi.py`에 뒀다. 합성 동결 세트 도구를 함께 쓰기 때문이다
