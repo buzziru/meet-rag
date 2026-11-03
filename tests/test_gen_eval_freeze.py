@@ -19,7 +19,7 @@ from rag.index import load_cfg
 
 FROZEN_PROMPT = "j_v8"
 FROZEN_PROMPT_SHA256 = "fc8b56034f35d1809db92f1ce5cdf250f09773c11f407379088a40da86bd4de8"
-# 발언자 표시 기록용 지시(S29). 기본값이 아니고 H20 EXP에서 judge/prompt=j_v9로 고른다
+# 발언자 표시 기록용 지시(S29). 기본값이 아니고 기준 EXP는 뒤 버전(+exp=current)을 쓴다
 FROZEN_J_V9_SHA256 = "e8a699e829f29ce2376059b0d724dc576122d3606daa88087f665f8cbc4e77eb"
 # 지목한 화자까지 판정하는 지시(D-63)
 FROZEN_J_V10_SHA256 = "799f28d0d96b5fefdaa17277fc4f5424f70d0b086eb3637c4325dbe3c6b57ee8"

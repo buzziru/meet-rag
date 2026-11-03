@@ -1,6 +1,6 @@
 # DECISIONS
 
-현재 기준 설정(config 별칭 `configs/exp/current.yaml`): 검색 EXP-017(D-36), 생성 EXP-018(프롬프트 v3, judge j_v8·`deepseek_go_mixed`·형식 재요청 `fr_v1`, OpenRouter CoreWeave fp4, D-61). 생성 기준 결과는 `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v3-dev-full-deepseek_go_mixed-j_v8.jsonl`이다(해시는 D-61). 기준을 바꾸는 결정은 이 줄도 함께 고친다
+현재 기준 설정(config 별칭 `configs/exp/current.yaml`): 검색 EXP-017(D-36), 생성 EXP-019(`speakers.mode=head`, 프롬프트 v4, judge j_v11·`deepseek_go_mixed`·형식 재요청 `fr_v1`, OpenRouter CoreWeave fp4, D-63). 생성 기준 결과는 `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v4-dev-full-spk-head-deepseek_go_mixed-j_v11.jsonl`이다(해시는 EXP-019 실행 절). 기준을 바꾸는 결정은 이 줄도 함께 고친다
 
 ## D-01 기본 생성 모델 Gemma 4 31B
 - 이유: Google AI Studio 무료 쿼터로 호출할 수 있다. 회의록 시스템에 적용할 때 보안상 내부 서빙이 필요하고, 31B는 내부 서빙이 가능한 규모다
@@ -663,7 +663,7 @@
 ## D-61 EXP-018(H24+H19 거부 형식)을 보류에서 예외 채택하고 프롬프트 v3를 생성 기준으로 한다
 - 결정(사용자 결정 2026-10-28)
   1. EXP-018의 SPEC 판정은 보류다(종합 지표 +0.001 [−0.017, +0.020], 과잉 거부율 +0.021 [+0.002, +0.041]로 과잉 거부 안전 조건 실패, 기준별 하락 조건 통과). D-56 결정 2의 보류 예외 경로로 예외 채택한다
-  2. 생성 기준 config를 EXP-018(`configs/exp/exp018.yaml`, 프롬프트 v3)로 한다. 지금 기준은 별칭 `configs/exp/current.yaml`(→ exp018) 한 곳에만 두고, `configs/config.yaml` 기본값(`prompt: v2`)은 바꾸지 않는다(검색 기준과 같은 방식, PR #180 리뷰). 명령은 `+exp=current`를 쓰고, 새 EXP config는 기준 EXP를 직접 상속한다. 생성 기준 결과는 `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v3-dev-full-deepseek_go_mixed-j_v8.jsonl`(SHA-256 `7de6876e2fa9968e…`), 생성 기록은 `data/gen_eval/runs/hybrid-cond-filter-law-ms256-k20-ce-v3-dev-full.jsonl`이다. 다음 생성 EXP(H22)는 이 결과와 비교한다 이후 변경(D-63, EXP-019 결과 PR 뒤): 생성 기준과 H22의 비교 대상은 EXP-019 결과다
+  2. 생성 기준 config를 EXP-018(`configs/exp/exp018.yaml`, 프롬프트 v3)로 한다. 지금 기준은 별칭 `configs/exp/current.yaml`(→ exp018) 한 곳에만 두고, `configs/config.yaml` 기본값(`prompt: v2`)은 바꾸지 않는다(검색 기준과 같은 방식, PR #180 리뷰). 명령은 `+exp=current`를 쓰고, 새 EXP config는 기준 EXP를 직접 상속한다. 생성 기준 결과는 `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v3-dev-full-deepseek_go_mixed-j_v8.jsonl`(SHA-256 `7de6876e2fa9968e…`), 생성 기록은 `data/gen_eval/runs/hybrid-cond-filter-law-ms256-k20-ce-v3-dev-full.jsonl`이다. 다음 생성 EXP(H22)는 이 결과와 비교한다 이후 변경(D-63, EXP-019 결과 PR 뒤): 생성 기준과 H22의 비교 대상은 EXP-019 결과다 대체: D-63(생성 기준은 EXP-019)
 - 이유(사용자): 종합 지표 변화가 작을 것(상한 +0.001)으로 보고된 실험이다. 지정 거부 문구를 쓰지 않아 생기는 불필요한 점수 하락을 막는 안전장치였고, 의도대로 작동하는 것을 평가로 확인했다(지정 문구 없는 거부 23 → 4). 거부 문구가 지시에 들어가면 거부가 늘어나는 것은 일반적으로 알려진 LLM의 동작 방식·프롬프트 작성 요령과 일치하는 합리적 추론이다
 - 근거: `notebooks/39_01_EXP018_거부분석.ipynb`. 새로 거부한 44질의 중 18개는 기준의 지정 문구 없는 거부가 거부로 세지게 된 것이고, 26개는 기준에서 답하던 질의를 새로 거부했다(청크에 핵심 답이 있는 질의 11개, 대부분 부분 거부). 부분 거부 24질의는 모두 거부 문장 1개와 내용 문장(평균 2.1개)이 나뉘어 내용이 채점됐다(H19)
 - 감수하는 것: 과잉 거부 안전 조건을 넘었다. 전체 거부 9 → 28, 부분 거부 1 → 24, 과잉 거부 항목 9 → 20이고, 근거에 핵심 답이 있는데 거부한 질의가 5/195 → 16/195로 늘었다. 핵심 답변 포함도(보조)는 −0.019 [−0.045, +0.006]이다. 내용과 거부를 한 문장에 쓰는 답변이 일부 남는다(노트북 사례 047642-0015). 이후 거부를 늘릴 수 있는 지시(H22 등)는 v3 위에서 과잉 거부 조건으로 다시 본다
