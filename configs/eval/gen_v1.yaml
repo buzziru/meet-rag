@@ -5,3 +5,4 @@ floors:  # 기준별 하락 안전 조건: 차이(후보 − 기준) 95% 구간 
   faithfulness: -0.05
   relevance: -0.035
 over_refusal_max: 0.02  # 과잉 거부 안전 조건 δ_r: 차이 95% 구간 상한
+speaker_mismatch_max: 0.02  # 잘못 귀속 안전 조건 δ_a: 발언자 불일치 비율 차이 95% 구간 상한(D-68)

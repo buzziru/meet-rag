@@ -10,6 +10,7 @@ rag.gen_eval.compare가 낸다(S27). gen_eval.item_cases를 주면 판정 확인
 gen_eval.queries=dev-small gen_eval.n=20). 읽은 결과의 질의가 표본과 다르면 멈춘다(리뷰 G2-3).
 """
 
+import re
 import sys
 from collections import Counter
 from hashlib import sha256
@@ -21,6 +22,9 @@ from rag.gen_eval.checks import HANDLINGS, STATES, item_outcome, unlisted_refusa
 from rag.gen_eval.common import eval_qids, read_jsonl, stable
 from rag.gen_eval.judge import sha
 from rag.index import ROOT, load_cfg
+
+SPEAKER_MISMATCH = "발언자 불일치"  # judge가 이유 첫머리에 쓰는 말(`verdicts` 규칙 2, G3)
+CITE = re.compile(r"\[(\d+)\]")
 
 
 def mean(xs: list[float]) -> str:
@@ -52,6 +56,23 @@ def criterion(rows: list[dict], key: str) -> tuple[list[float], Counter, int]:
     return scores, excluded, errors
 
 
+def speaker_mismatch(r: dict) -> float:
+    """이유 첫머리가 발언자 불일치인 진술 수 / 진술 수. 충실성을 계산하지 않았으면 NaN(D-68)."""
+    f = r.get("faithfulness") or {}
+    verdicts = f.get("verdicts") or []
+    if f.get("score") is None or not verdicts:
+        return np.nan
+    return sum(v["reason"].startswith(SPEAKER_MISMATCH) for v in verdicts) / len(verdicts)
+
+
+def speaker_names(run: dict) -> set[str]:
+    """답변이 인용한 근거의 머리 줄 화자 이름 중 답변에 나온 것."""
+    cited = {int(n) for n in CITE.findall(run["answer"])}
+    names = {p["name"] for c in run["contexts"] if c["n"] in cited and c.get("speakers")
+             for field in ("questioners", "answerers") for p in c["speakers"][field]}
+    return {n for n in names if n and n in run["answer"]}
+
+
 def per_query(rows: list[dict]) -> pd.DataFrame:
     """질의 단위 값. 계산하지 않은 기준(전체 거부, 제외 조건, 형식 오류)은 NaN이다.
     종합 지표는 충실성·관련성 평균이고 둘 중 하나라도 없으면 NaN이다(D-53). 과잉 거부율은 질의마다
@@ -63,7 +84,8 @@ def per_query(rows: list[dict]) -> pd.DataFrame:
             key: (r.get(key) or {}).get("score", np.nan)
             for key in ("faithfulness", "relevance", "inclusion")
         } | {"over_refusal": counts["over_refusal"] / counts["judged"]
-             if counts.get("judged") else np.nan}
+             if counts.get("judged") else np.nan,
+             "speaker_mismatch": speaker_mismatch(r)}
     df = pd.DataFrame.from_dict(out, orient="index").astype(float)
     df["composite"] = df[["faithfulness", "relevance"]].mean(axis=1, skipna=False)
     return df
@@ -82,10 +104,9 @@ def check_qids(cfg, rows: list[dict]) -> None:
             "paths.gen_judge=<결과 경로>를 맞춰 실행한다")
 
 
-def unlisted_table(cfg, rows: list[dict]) -> list[tuple[str, int]] | str:
-    """(구분, 답변 수). 지정 거부 문구 없이 거부한 답변을 충실성 '진술 없음'과 교차해 센다.
-    거부 판별과 지표는 바꾸지 않는다. 답변은 judge 결과를 만든 생성 기록(paths.gen_runs)에서
-    읽는다. 생성 기록이 없거나 맞지 않으면 이 표만 내지 않도록 이유를 돌려준다(이슈 #156)."""
+def matching_gens(cfg, rows: list[dict]) -> dict[str, dict] | str:
+    """judge 결과를 만든 생성 기록(paths.gen_runs)을 qid로 돌려준다. 없거나 맞지 않으면 이유를
+    돌려준다. 호출하는 표만 내지 않으려는 것이다(이슈 #156)."""
     rec = rows[0]["judge_recipe"]
     path = ROOT / cfg.paths.gen_runs
     gens = {r["qid"]: r for r in read_jsonl(path)} if path.exists() else {}
@@ -93,6 +114,17 @@ def unlisted_table(cfg, rows: list[dict]) -> list[tuple[str, int]] | str:
     if missing or sha(stable(gens[rows[0]["qid"]]["recipe"])) != rec.get("gen_recipe_sha256"):
         return (f"{cfg.paths.gen_runs}이 judge 결과를 만든 생성 기록이 아니라 내지 않는다"
                 f"(없는 qid {len(missing)}개 또는 레시피 해시 다름)")
+    return gens
+
+
+def unlisted_table(cfg, rows: list[dict]) -> list[tuple[str, int]] | str:
+    """(구분, 답변 수). 지정 거부 문구 없이 거부한 답변을 충실성 '진술 없음'과 교차해 센다.
+    거부 판별과 지표는 바꾸지 않는다. 답변은 judge 결과를 만든 생성 기록(paths.gen_runs)에서
+    읽는다. 생성 기록이 없거나 맞지 않으면 이 표만 내지 않도록 이유를 돌려준다(이슈 #156)."""
+    gens = matching_gens(cfg, rows)
+    if isinstance(gens, str):
+        return gens
+    rec = rows[0]["judge_recipe"]
     parts = list(cfg.gen_eval.unlisted_refusal)
     pairs = Counter((unlisted_refusal(gens[r["qid"]]["answer"], rec["refusal"], parts),
                      (r.get("faithfulness") or {}).get("error") == "진술 없음") for r in rows)
@@ -263,6 +295,16 @@ def main() -> None:
                    for v in (r.get("faithfulness") or {}).get("verdicts", [])) for r in rows]
     print(f"\n충실성 판정에서 발언자를 구분할 수 없는 진술 {sum(unclear)}개, 그런 진술이 든 질의 "
           f"{sum(1 for k in unclear if k)}개(기준 문서 F7)")
+
+    mismatch = per_query(rows)["speaker_mismatch"].dropna()
+    print(f"발언자 불일치 비율(질의 평균, D-68 안전 조건의 정의) {mean(list(mismatch))} "
+          f"({len(mismatch)}질의, 불일치가 있는 질의 {int((mismatch > 0).sum())}개)")
+    gens = matching_gens(cfg, rows)
+    if isinstance(gens, str):
+        print(f"인용 근거의 화자 이름이 나온 답변: {gens}")
+    else:
+        named = sum(bool(speaker_names(gens[r["qid"]])) for r in rows)
+        print(f"인용 근거의 화자 이름이 나온 답변 {rate(named, n)}(판정과 함께 보고한다, D-68)")
 
     print("\n생성 답변 형식: 지정 거부 문구를 쓰지 않은 거부(거부로 세지 않고 지표도 그대로)\n")
     table = unlisted_table(cfg, rows)

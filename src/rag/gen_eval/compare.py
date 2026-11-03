@@ -25,7 +25,9 @@ JUDGE_KEYS = ("name", "model", "base_url", "params", "extra_body", "step_params"
 # 생성 프롬프트(거부 문구, 도입 문구)나 검색 조건(날짜 정규식)에서 오는 값. 실험이 바꾸는 것이라
 # 멈추지 않고 차이만 낸다(PR #167 리뷰)
 CHECK_KEYS = ("refusal", "filler_phrases", "check_patterns")
-METRICS = ("faithfulness", "relevance", "composite", "inclusion", "over_refusal")
+METRICS = ("faithfulness", "relevance", "composite", "inclusion", "over_refusal",
+           "speaker_mismatch")
+SPEAKER_JUDGE_MIN = 10  # 지목한 화자를 판정하는 첫 지시 j_v10(D-63 결정 7)
 
 
 def gen_verdict(ci: dict[str, tuple[float, float, float]], spec) -> tuple[str, list[str]]:
@@ -39,6 +41,8 @@ def gen_verdict(ci: dict[str, tuple[float, float, float]], spec) -> tuple[str, l
               if ci[key][1] < spec.floors[key]]
     if ci["over_refusal"][2] > spec.over_refusal_max:
         safety.append(f"과잉 거부 증가(상한 > {spec.over_refusal_max})")
+    if ci["speaker_mismatch"][2] > spec.speaker_mismatch_max:
+        safety.append(f"발언자 불일치 증가(상한 > {spec.speaker_mismatch_max})")
     if hi < 0:
         return "기각", safety
     failed = (["종합 지표 구간 하한 ≤ 0"] if lo <= 0 else []) + (
@@ -73,6 +77,16 @@ def check_inputs(runs: dict[str, Path], rows: dict[str, list[dict]], qids: list[
             for k in CHECK_KEYS if recipes["base"].get(k) != recipes["cand"].get(k)}
 
 
+def check_speaker_judge(rows: list[dict], path: Path) -> None:
+    """발언자를 판정하지 않는 지시로 채점한 결과는 불일치가 언제나 0이라 안전 조건을 조용히
+    통과한다. 그런 결과는 비교하지 않는다(D-68)."""
+    version = rows[0]["judge_recipe"].get("prompt_version") or ""
+    number = int(version.removeprefix("j_v")) if version.startswith("j_v") else -1
+    if number < SPEAKER_JUDGE_MIN:
+        raise SystemExit(f"{path}: 지시 {version or '기록 없음'}은 발언자를 판정하지 않아 "
+                         f"잘못 귀속 안전 조건을 잴 수 없다(j_v{SPEAKER_JUDGE_MIN} 이후만 비교)")
+
+
 def exclusions(rows: list[dict]) -> dict:
     """실행 하나의 기준별 뺀 이유와 judge 형식 오류 수(리뷰 G2-4, 기준 문서 K8·P6). report와 같은
     집계다. 과잉 거부율은 항목 평가가 형식 오류인 질의 수다."""
@@ -98,6 +112,8 @@ def main() -> None:
     rows = {name: read_jsonl(path) for name, path in runs.items()}
     qids = eval_qids(cfg)
     check_diff = check_inputs(runs, rows, qids)
+    for name, rs in rows.items():
+        check_speaker_judge(rs, runs[name])
 
     bs = cfg.eval.bootstrap
     groups = load_gold(cfg, cfg.gen_eval.queries)[bs.unit]
