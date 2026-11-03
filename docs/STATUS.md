@@ -1,9 +1,10 @@
 # STATUS (세션 종료 시 덮어씀)
 
 ## 현재 위치
-- 생성 기준은 EXP-019다(D-63, PR #190 병합). 판정은 보류이고 기준 전환은 판정과 무관하다
-- 하네스 `chore/f-gen-exp-judge-defer` PR 리뷰 대기(ADR-0078). 이 STATUS는 그 브랜치에 있다
-- 진행 기록: `_workspace/specdoc_main_progress.md`(SPEC 지적·결정·문안), `_workspace/h22_main_progress.md`, `_workspace/exp019_main_progress.md`(끝남). 메인 체크아웃에만 있으므로 worktree 세션이면 메인에서 읽는다
+- 생성 기준은 EXP-019 설정에 judge j_v13이다(`exp019_j13`, D-68, DECISIONS 머리 줄). EXP-020(H22 프롬프트 v6)은 보류이고 예외 채택하지 않았다(D-67)
+- 생성 판정에 잘못 귀속 안전 조건을 더했다(발언자 불일치 비율 차이 상한 0.02, D-68). 하네스: 폴더 규약 `src/CLAUDE.md`·`tests/CLAUDE.md`, 판정 코드 PR의 병합 전 코드 리뷰, 일일 코드 리뷰(ADR-0080·0081)
+- 생성 실험은 묶을 수 있는 가설을 함께 실험한다(D-67 결정 5). 지시는 더 고치지 않는다(D-68 결정 2)
+- 진행 기록: `_workspace/h22_main_progress.md`. 메인 체크아웃에만 있으므로 worktree 세션이면 메인에서 읽는다
 
 ## 실행 중 작업
 - 없음
@@ -12,13 +13,12 @@
 - 없음
 
 ## 리뷰 대기 PR
-- `chore/f-gen-exp-judge-defer`
+- #198 `feat/s33-frozen-entry-tests`(동결 세트 대조를 진입점에서 검증, 양방향). 이 STATUS는 그 브랜치에 있다
 
 ## 다음 행동
-1. SPEC 정리 `docs/` PR: 진행 기록대로 `docs/drafts/`에 초안을 두고 사용자 승인을 받는다. 정한 범위는 지적 정리, 미결 사항 5(생성 test 규모), 재검증 규칙(재채점·변동 폭·사례 대조), `docs/SPEC.md:234` 비용 문장, ZDR 날짜(2026-11-30까지), 설명 이동, 블라인드 문안, `docs/CLAUDE.md` 재발 방지다
-2. [B] H22 초안: 먼저 EXP-019에서 관련성이 답함 → 일부로 내려간 질의를 읽어 원인을 가린다(PLAN H22, 진행 기록). 작업 전 새 세션을 쓴다
-
-3. [A] 일일 코드 리뷰 시험 지적 처리(ADR-0081): `tests/test_eval_multi.py:206` 동결 sha 보호를 `rag.eval_multi.score.main`, `rag.eval_multi.compare.main`, `rag.search.search` 진입점에서 검증한다(세 곳에서 대조를 없앤 사본에서 테스트가 모두 통과함). `src/rag/speakers.py:132-133` 확인용 출력이 빈 comment를 `found`·`repeat`에 세는 것은 영향이 작아 함께 볼 때 고친다
+1. [B] H22 잘못 귀속 변형 초안: PLAN H22 변형을 EXP-021 문서와 config로 쓴다. H22의 첫 변형으로 센다. 프롬프트만 바꾸는 H18·H23과 묶을지 초안에서 정한다(D-67 결정 5). EXP-020 결과(이름 답변 308/330, 질의자 발언을 답변자 말로 쓴 유형이 주된 오류, 첫 문장 답 17/30)를 설계에 쓴다. 착수 지시 전에는 실행하지 않는다
+2. `marks`(H20) 위치를 위 결과를 보고 정한다. 그다음 H10(근거가 바뀌어 비용이 커 따로 한다)
+3. 생성 단계 종료: SPEC·DECISIONS 정합 점검 → SPEC 미결 5(생성 test 질의 범위) 결정 → test 1회
 
 ## 사용자 확인 필요
 - 없음
