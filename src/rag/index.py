@@ -40,7 +40,22 @@ OmegaConf.register_new_resolver("spk", lambda m: "" if m == "off" else f"-spk-{m
 
 def load_cfg(overrides=()):
     with initialize_config_dir(config_dir=str(ROOT / "configs"), version_base=None):
-        return compose(config_name="config", overrides=list(overrides))
+        cfg = compose(config_name="config", overrides=list(overrides))
+    check_judge_prompt_override(cfg, overrides)
+    return cfg
+
+
+def check_judge_prompt_override(cfg, overrides) -> None:
+    """명령줄 judge/prompt가 조립 결과와 다르면 멈춘다. EXP config가 지시 파일을 judge.prompt에
+    합치면 그 값이 override를 덮어, 오류 없이 다른 지시로 채점하고 그 지시의 결과 경로를 읽는다.
+    """
+    for o in overrides:
+        group, _, asked = o.partition("=")
+        if group == "judge/prompt" and asked != cfg.judge.prompt.version:
+            raise SystemExit(f"{o}이(가) 무시되어 judge 지시가 "
+                             f"{cfg.judge.prompt.version}로 조립됐다. "
+                             "EXP config가 지시 파일을 합치면 명령줄로 바꿀 수 없다. "
+                             "지시를 바꾸려면 그 지시를 합치는 EXP config를 쓴다")
 
 
 def corpus_meta(cfg) -> list[dict]:

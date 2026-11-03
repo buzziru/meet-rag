@@ -1226,3 +1226,42 @@ def test_report_item_handling_error_is_not_pre_s22():
     assert s["errors"] == 1 and s["queries"] == 2 and s["accuracy"] == (1, 1)
     with pytest.raises(SystemExit, match="S22 이전"):
         require_s22([{"item_eval": {"items": ok["items"]}}])
+
+
+class _PassedConfigCheck(Exception):
+    """config 확인을 지나 첫 작업에 닿았다. judge·report가 data/를 읽거나 API를 부르기 전에
+    끊는다."""
+
+
+def _stop_at_first_work(monkeypatch, name):
+    def stop(path, *a):
+        raise _PassedConfigCheck(str(path))
+    monkeypatch.setattr(name, stop)
+
+
+@pytest.mark.parametrize("first_work", ["rag.gen_eval.judge.refuse_existing",
+                                        "rag.gen_eval.report.read_jsonl"])
+@pytest.mark.parametrize("args", [
+    ["+exp=exp019", "judge/prompt=j_v8"],
+    ["judge/prompt=j_v8", "+exp=exp019"],  # 순서가 달라도 EXP의 지시가 이긴다
+])
+def test_ignored_judge_prompt_override_stops_entry(monkeypatch, first_work, args):
+    """EXP가 합친 지시(exp019는 j_v11)에 덮인 override는 첫 작업 전에 원인과 함께 멈춘다."""
+    from rag.gen_eval.report import main as report_main
+    _stop_at_first_work(monkeypatch, first_work)
+    monkeypatch.setattr(sys, "argv", ["entry", *args])
+    main = judge_main if "judge" in first_work else report_main
+    with pytest.raises(SystemExit, match="j_v8.*무시.*j_v11"):
+        main()
+
+
+@pytest.mark.parametrize(("args", "version"), [
+    (["+exp=exp018", "judge/prompt=j_v10"], "j_v10"),  # 지시를 합치지 않는 EXP(EXP-019 재채점)
+    (["+exp=exp019", "judge/prompt=j_v11"], "j_v11"),  # EXP가 합친 지시와 같다
+    (["+exp=exp019"], "j_v11"),
+])
+def test_applied_judge_prompt_override_reaches_judge(monkeypatch, args, version):
+    _stop_at_first_work(monkeypatch, "rag.gen_eval.judge.refuse_existing")
+    monkeypatch.setattr(sys, "argv", ["rag.gen_eval.judge", *args])
+    with pytest.raises(_PassedConfigCheck, match=f"-{version}.jsonl$"):
+        judge_main()
