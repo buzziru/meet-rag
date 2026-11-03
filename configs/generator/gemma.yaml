@@ -5,6 +5,10 @@ api_key_env: GOOGLE_API_KEY
 model: models/gemma-4-31b-it
 # 프롬프트에 넣는 상위 문서 수. 문서마다 최고 점수 청크 하나(D-05)
 context_docs: 5
+# 상위 top개 근거에 같은 크기의 앞뒤 청크를 chunks개씩 이어 붙인다(EXP-021). 0이면 지금처럼 청크 하나다
+context_expand:
+  top: 0
+  chunks: 0
 # 답변을 받는 대로 출력할지. 함수 인자로도 고른다
 stream: false
 # 생성 파라미터. 레시피로 기록한다

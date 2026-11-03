@@ -1,0 +1,15 @@
+# @package _global_
+# EXP-021 H22 변형: 라벨 발언 표지(H20 marks), 1위 근거 앞뒤 청크 확장, 프롬프트 v8(H18 포함)을 함께 시험한다
+# (docs/experiments/EXP-021.md, D-69). 기준 EXP-019_j13을 직접 상속한다. 검색과 judge는 그대로다
+defaults:
+  - exp019_j13
+  - override /prompt: v8
+  - _self_
+
+speakers:
+  mode: marks
+
+generator:
+  context_expand:
+    top: 1
+    chunks: 1
