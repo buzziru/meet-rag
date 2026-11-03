@@ -3,5 +3,5 @@
 # DECISIONS 머리 줄만 고친다. 새 EXP config는 이 파일이 아니라 기준 EXP를 직접 상속한다
 # (별칭을 상속하면 기준이 바뀔 때 지난 EXP 설정도 바뀐다, PR #180 리뷰)
 defaults:
-  - exp020_base  # 검색 EXP-017 + 머리 줄 + 생성 프롬프트 v4 + judge j_v12(D-63, D-66, D-67)
+  - exp019_j13  # 검색 EXP-017 + 머리 줄 + 생성 프롬프트 v4 + judge j_v13(D-63, D-67, D-68)
   - _self_

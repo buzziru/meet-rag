@@ -6,7 +6,7 @@
 
 - `rag.gen_eval.report.per_query`: 질의 단위 값에 `speaker_mismatch`를 더한다. 이유 첫머리가 "발언자 불일치"인 진술 수 / 진술 수이고, 진술이 없거나 충실성을 계산하지 않은 질의는 NaN이다. report 기준 표에 값과 진술·질의 수를 낸다. report와 compare가 같은 함수를 쓴다(리뷰 G2-6)
 - `rag.gen_eval.compare`: `METRICS`에 더하고, `gen_verdict`에서 차이의 95% 구간 상한이 `spec.speaker_mismatch_max`를 넘으면 안전 조건 실패로 낸다. 짝지은 값이 0개이면 지금처럼 멈춘다(리뷰 G2-1)
-- 입력 전제: `speaker_mismatch_max`가 config에 없으면 시작할 때 멈춘다. 발언자 판정이 없는 지시(j_v10 이전 `verdicts`)로 채점한 결과를 비교하면 값이 0으로 조용히 통과하므로, 지시 버전을 보고 멈춘다. 사례: j_v8 결과끼리 compare → 원인을 적고 멈춘다. 기존 EXP-019·EXP-020을 다시 판정하려면 결과 파일 비교 자체는 j_v11 이후 되지만, 판정을 바꾸지 않는다(결정 사항 2)
+- 입력 전제: 발언자 판정이 없는 지시(j_v10 이전 `verdicts`)로 채점한 결과를 비교하면 값이 0으로 조용히 통과하므로, 지시 버전을 보고 멈춘다. 사례: j_v8 결과끼리 compare → 원인을 적고 멈춘다. 기존 EXP-019·EXP-020을 다시 판정하려면 결과 파일 비교 자체는 j_v11 이후 되지만, 판정을 바꾸지 않는다(결정 사항 2)
 - `configs/eval/gen_v1.yaml`: `speaker_mismatch_max: 0.02`(보호 경로, 초안 승인으로 받음)
 - `configs/judge/prompt/j_v13.yaml`: j_v12에서 `relevance` 규칙 2·3 두 문장. 동결 테스트에 해시, "relevance만 다름" 테스트
 - `configs/exp/exp019_j13.yaml`(새 파일): `exp019`를 직접 상속하고 지시 파일을 j_v13으로 합친다. EXP-019 생성 기록을 j_v13으로 채점한다. `tests/test_exp_configs.py`가 DECISIONS 머리 줄에서 별칭 대상 이름을 찾으므로 머리 줄에 `EXP-019_j13`로 적는다. 별칭 `current`와 DECISIONS 머리 줄을 그쪽으로 옮긴다
@@ -42,3 +42,20 @@
 
 1. 초안 `docs/drafts/spec-attribution-safety.md` 승인(SPEC, `configs/eval/gen_v1.yaml`, 기준 문서, j_v13). 기록은 D-68
 2. 메인이 정함(D-68 결정 4, P1): 이미 나온 compare JSON은 고치지 않는다. 지금 코드로 EXP-020을 다시 비교하면 새 조건도 걸리지만 판정 기록은 바꾸지 않는다
+
+## 결과 (2026-11-03)
+
+커밋: 구현 1babba5
+
+- 사용자 승인: 허용폭 0.02, 초안(화자 이름이 나온 답변 수를 보고에 더함), j_v13 사용(재검증 수용, 지시를 더 고치지 않음)
+- 같은 설정 재실행(사용자 승인 2026-11-03 대화): `rag.gen_eval.generate +exp=current gen_eval.gen_rep=1` → `rag.gen_eval.judge`(같은 override), 그때 별칭은 EXP-019 설정과 j_v12, 커밋 1fa2d58, `LANGSMITH_TRACING=false`. 생성 $0.0882, judge 새 호출 1,226회, 응답 없음 0. 결과 `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v4-dev-full-spk-head-r1-deepseek_go_mixed-j_v12.jsonl`(SHA-256 `d8c116588d5442df7b68560b2fe44a2875766f780173600453ff81fa81ad0c8a`). 답변이 글자까지 같은 질의 67/330. 반폭은 노트북 42_01과 D-68
+- 기준선 재채점(커밋 1babba5): `rag.gen_eval.judge +exp=exp019_j13`, `LANGSMITH_TRACING=false`. 새 호출 302회, 저장 응답 2,100회, 응답 없음 0. 결과 `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v4-dev-full-spk-head-deepseek_go_mixed-j_v13.jsonl`(SHA-256 `3e077d08d42b6c52c6610efcd7d492546fc479edd8454d7bbff166e5d1a738a0`). 충실성 0.872(297), 관련성 0.879(302), 불일치 비율 0.026(297질의), 이름 답변 147/330, 형식 오류 4
+- 재검증: 같은 생성 기록의 j_v12 대 j_v13. 관련성 −0.002 [−0.021, +0.018](302), 종합 −0.001 [−0.011, +0.009](297), 충실성과 불일치 비율은 같다(메인이 임시로 셈, 회의 단위 10,000회). 판정 이동 30질의: 답함 → 일부 15, 일부 → 답함 7, 답하지 않음 → 일부 6, 일부 → 답하지 않음 1, 답하지 않음 → 답함 1. 분포는 답함 241 → 234, 일부 50 → 63, 답하지 않음 11 → 5
+- 사례 대조(서브에이전트 판단 1회, 메인이 4질의 직접 확인): 교정 10, 부당한 강화 10, 부당한 완화 4, 경계 6. j_v13이 맞는 쪽 11, j_v12가 맞는 쪽 17, 둘 다 다름 2. 문구로 설명되는 6건 중 5건은 맞게 바뀌었고 24건은 바꾸지 않은 규칙의 적용이 달라진 것으로 보인다(추론, 반복 채점 없음). 질의자 말만 전한 7질의는 일부 5, 답함 2
+- 완료 기준 5에 걸려 멈추고 보고했고, 사용자가 j_v13 사용을 정했다. 흔들림과 오판은 그전부터 감수해 온 사항이다
+
+### 지시서와 다르게 한 것
+
+- `speaker_mismatch_max`가 config에 없을 때 멈추는 검사를 넣지 않았다. 값이 없으면 config 오류로 멈춰 검사가 겹친다
+- 화자 이름이 나온 답변 수를 report에 더했다(사용자 결정, D-68 결정 1)
+
