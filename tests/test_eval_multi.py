@@ -216,6 +216,71 @@ def test_frozen_set_stops_when_sha_differs(tmp_path):
             read()
 
 
+def _frozen_run(tmp_path):
+    """합성 동결 세트의 정답을 1위로 낸 순위 파일."""
+    run = tmp_path / "run.csv"
+    rows = [f"q{i},{rank},{f'd{i}' if rank == 1 else f'x{i}{rank}'}"
+            for i in range(2) for rank in range(1, 11)]
+    run.write_text("qid,rank,doc_id\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    return run
+
+
+def _break_frozen(cfg):
+    """정답 문서 하나만 바꾼다. 대조가 없으면 오류 없이 다른 세트로 이어지는 경우다."""
+    path = Path(cfg.paths.multidoc_frozen)
+    path.write_text(path.read_text(encoding="utf-8").replace('"d0"', '"d9"'), encoding="utf-8")
+
+
+def test_score_main_checks_frozen_set(tmp_path, monkeypatch, capsys):
+    from rag.eval_multi import score
+    cfg = _frozen_cfg(tmp_path)
+    monkeypatch.setattr(score, "load_cfg", lambda: cfg)
+    monkeypatch.setattr("sys.argv", ["score", "--run", str(_frozen_run(tmp_path))])
+    score.main()
+    assert sha256(Path(cfg.paths.multidoc_frozen)) in capsys.readouterr().out
+    _break_frozen(cfg)
+    with pytest.raises(SystemExit, match="G3 동결 값"):
+        score.main()
+
+
+def test_compare_main_checks_frozen_set(tmp_path, monkeypatch, capsys):
+    from rag.eval_multi import compare
+    cfg = _frozen_cfg(tmp_path)
+    run = _frozen_run(tmp_path)
+    other = tmp_path / "other.csv"
+    other.write_text(run.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(compare, "load_cfg", lambda: cfg)
+    monkeypatch.setattr("sys.argv", ["compare", "--base", str(run), "--cand", str(other)])
+    compare.main()
+    out = json.loads(capsys.readouterr().out)
+    assert out["frozen_sha256"] == cfg.multidoc.frozen_sha256
+    _break_frozen(cfg)
+    with pytest.raises(SystemExit, match="G3 동결 값"):
+        compare.main()
+
+
+def test_search_checks_frozen_set_before_ranking(tmp_path, monkeypatch):
+    """인덱스·모델을 불러오지 않게 Retriever를 바꾸고, 대조를 지나면 다음 단계에서 멈춘다."""
+    from rag import search
+
+    class Passed(Exception):
+        pass
+
+    def reached(cfg, qids, path):
+        raise Passed(qids)
+
+    cfg = OmegaConf.merge(_frozen_cfg(tmp_path),
+                          {"search": {"queries": "multidoc"}, "index": {"scope": "full"}})
+    monkeypatch.setattr(search, "Retriever", lambda c: object())
+    monkeypatch.setattr(search, "query_embeddings", reached)
+    with pytest.raises(Passed) as e:
+        search.search(cfg)
+    assert e.value.args[0] == ["q0", "q1"]
+    _break_frozen(cfg)
+    with pytest.raises(SystemExit, match="G3 동결 값"):
+        search.search(cfg)
+
+
 def test_freeze_does_not_overwrite_frozen_set(tmp_path, monkeypatch, capsys):
     from rag.index import load_cfg
     from rag.multidoc import freeze

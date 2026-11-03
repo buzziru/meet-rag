@@ -112,6 +112,14 @@ def fill_counts(docs: Iterable[dict]) -> Counter:
     return c
 
 
+def count_found(found: Counter, role: str, comment: str, context: str) -> None:
+    """QA 수와 발언이 본문에 그대로·여러 번 있는 수. 빈 발언은 어느 본문에나 들어 있어 뺀다."""
+    found[f"{role}.qa"] += 1
+    if comment:
+        found[f"{role}.found"] += comment in context
+        found[f"{role}.repeat"] += context.count(comment) > 1
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="발언자 정보 채움 비율과 겹침 표지 수")
     ap.add_argument("--gen", help="생성 기록(jsonl). 근거마다 겹침 표지가 붙는지 센다")
@@ -128,9 +136,7 @@ def main() -> None:
         """발언이 본문에 그대로 있는 QA 수를 세며 라벨을 넘긴다. --gen이면 본문을 남긴다."""
         for split, r in iter_labels(ROOT / cfg.paths.raw_dir):
             for role in ROLES:
-                found[f"{role}.qa"] += 1
-                found[f"{role}.found"] += r[role]["comment"] in r["context"]
-                found[f"{role}.repeat"] += r["context"].count(r[role]["comment"]) > 1
+                count_found(found, role, r[role]["comment"], r["context"])
             if args.gen:
                 contexts[make_doc_id(r["conference_number"], r["context"])] = r["context"]
             yield split, r

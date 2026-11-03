@@ -173,3 +173,15 @@ def test_j_v9_differs_from_j_v8_only_in_speaker_sentence():
         head, tail = a.split(old)
         assert b.startswith(head) and b.endswith(tail)
         assert "〈질의 …〉" in b[len(head):len(b) - len(tail)]
+
+
+def test_count_found_skips_empty_comment():
+    from collections import Counter
+
+    from rag.speakers import count_found
+    found = Counter()
+    count_found(found, "answer", "", "본문")  # 빈 문자열은 어떤 본문에도 들어 있다
+    assert found["answer.qa"] == 1 and found["answer.found"] == 0 and found["answer.repeat"] == 0
+    count_found(found, "answer", "예산", "예산과 예산")
+    count_found(found, "answer", "없음", "본문")
+    assert found["answer.qa"] == 3 and found["answer.found"] == 1 and found["answer.repeat"] == 1
