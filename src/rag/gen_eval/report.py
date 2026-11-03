@@ -237,7 +237,7 @@ def print_items(rows: list[dict]) -> None:
           + " ---: |" * len(HANDLINGS))
     for st in STATES:
         print(f"| {st} | " + " | ".join(str(s["table"][st, h]) for h in HANDLINGS) + " |")
-    print(f"\n거부 정확도(블라인드 확인 전 참고값, 모호·회피 뺀 항목 중 맞는 처리) "
+    print(f"\n거부 정확도(블라인드 확인을 중단해 참고값, 모호·회피 뺀 항목 중 맞는 처리) "
           f"{rate(*s['accuracy'])}, 모호·회피 항목 {rate(*s['ambiguous'])}, "
           f"모호·회피 항목 중 상황 전달 {rate(*s['situation'])}, "
           f"발언자 구분 불가 항목 {s['speaker_unclear']}\n")
