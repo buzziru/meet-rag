@@ -6,7 +6,7 @@
 
 - `rag.gen_eval.report.per_query`: 질의 단위 값에 `speaker_mismatch`를 더한다. 이유 첫머리가 "발언자 불일치"인 진술 수 / 진술 수이고, 진술이 없거나 충실성을 계산하지 않은 질의는 NaN이다. report 기준 표에 값과 진술·질의 수를 낸다. report와 compare가 같은 함수를 쓴다(리뷰 G2-6)
 - `rag.gen_eval.compare`: `METRICS`에 더하고, `gen_verdict`에서 차이의 95% 구간 상한이 `spec.speaker_mismatch_max`를 넘으면 안전 조건 실패로 낸다. 짝지은 값이 0개이면 지금처럼 멈춘다(리뷰 G2-1)
-- 입력 전제: 발언자 판정이 없는 지시(j_v10 이전 `verdicts`)로 채점한 결과를 비교하면 값이 0으로 조용히 통과하므로, 지시 버전을 보고 멈춘다. 사례: j_v8 결과끼리 compare → 원인을 적고 멈춘다. 기존 EXP-019·EXP-020을 다시 판정하려면 결과 파일 비교 자체는 j_v11 이후 되지만, 판정을 바꾸지 않는다(결정 사항 2)
+- 입력 전제: 발언자 판정이 없는 지시(j_v9 이전 `verdicts`)로 채점한 결과를 비교하면 값이 0으로 조용히 통과하므로, 지시 버전을 보고 멈춘다. 사례: j_v8 결과끼리 compare → 원인을 적고 멈춘다. 기존 EXP-019·EXP-020을 다시 판정하려면 결과 파일 비교 자체는 j_v10 이후 되지만, 판정을 바꾸지 않는다(결정 사항 2)
 - `configs/eval/gen_v1.yaml`: `speaker_mismatch_max: 0.02`(보호 경로, 초안 승인으로 받음)
 - `configs/judge/prompt/j_v13.yaml`: j_v12에서 `relevance` 규칙 2·3 두 문장. 동결 테스트에 해시, "relevance만 다름" 테스트
 - `configs/exp/exp019_j13.yaml`(새 파일): `exp019`를 직접 상속하고 지시 파일을 j_v13으로 합친다. EXP-019 생성 기록을 j_v13으로 채점한다. `tests/test_exp_configs.py`가 DECISIONS 머리 줄에서 별칭 대상 이름을 찾으므로 머리 줄에 `EXP-019_j13`로 적는다. 별칭 `current`와 DECISIONS 머리 줄을 그쪽으로 옮긴다
