@@ -160,14 +160,17 @@ def code_review_section(client: anthropic.Anthropic, prs: list[dict]) -> str | N
         content = json.dumps(data, ensure_ascii=False)
         print(f"[리뷰] 입력 {len(content)}자, 뺀 항목 {len(omitted)}개")
         response, failure = ask_with_fallback(client, content, ask_review)
-    except (anthropic.APIError, subprocess.CalledProcessError, OSError, ValueError) as e:
+    except Exception as e:  # 스트림 도중 오류 등 어떤 실패도 받아 둔 종합을 막지 않는다
         print(f"[리뷰] 실패: {type(e).__name__}: {e}")
         return f"{REVIEW_HEADING}\n\n리뷰 실패: `{type(e).__name__}`. 실행 로그를 본다."
     if response.stop_reason != "end_turn":
         return f"{REVIEW_HEADING}\n\n리뷰 중단: `{response.stop_reason}`. 실행 로그를 본다."
     text = "".join(b.text for b in response.content if b.type == "text").strip()
     if text == NO_FINDINGS:
-        return None
+        if not omitted:
+            return None
+        # 다 보고 지적이 없는 날과 구별되게 적는다
+        return f"{REVIEW_HEADING}\n\n지적 없음. 크기 상한으로 뺀 항목: {', '.join(omitted)}"
     note = f"작성 모델: `{response.model}`"
     if failure:
         note += f" (`{os.environ['MODEL']}`이 {failure}로 실패해 대체 모델로 작성)"

@@ -55,7 +55,7 @@ jobs:
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" \
             | jq -r .value > "$RUNNER_TEMP/gha-jwt"
 
-      # 수집과 이슈 생성은 스크립트가 gh로 하고, Claude는 Messages API로 한 번만 부른다(도구 없음)
+      # 수집과 이슈 생성은 스크립트가 gh로 하고, Claude는 Messages API로 종합과 코드 리뷰를 따로 부른다(도구 없음)
       - name: 일일 종합과 코드 리뷰
         if: steps.prs.outputs.numbers != ''
         env:

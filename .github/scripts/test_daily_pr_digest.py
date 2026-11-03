@@ -173,6 +173,21 @@ def test_section_is_none_without_findings(digest, monkeypatch, review_env):
     assert digest.code_review_section(None, [MERGED]) is None
 
 
+def test_section_without_findings_reports_omitted_items(digest, monkeypatch, review_env):
+    monkeypatch.setattr(digest, "ask_review", lambda *a: review_response("NO_FINDINGS"))
+    monkeypatch.setattr(digest, "REVIEW_MAX_CHARS", 60)
+    section = digest.code_review_section(None, [MERGED])
+    assert "지적 없음" in section and "파일 src/a.py" in section
+
+
+def test_section_reports_error_during_stream(digest, monkeypatch, review_env):
+    def fail(*a):
+        raise RuntimeError("끊김")  # SDK가 APIError로 바꾸지 않는 스트림 도중 오류
+
+    monkeypatch.setattr(digest, "ask_review", fail)
+    assert "RuntimeError" in digest.code_review_section(None, [MERGED])
+
+
 def test_section_reports_unfinished_response(digest, monkeypatch, review_env):
     monkeypatch.setattr(
         digest, "ask_review", lambda *a: review_response("잘린 글", "max_tokens")
