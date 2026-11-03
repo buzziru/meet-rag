@@ -1156,6 +1156,26 @@ def test_speaker_mismatch_counts_prefix_and_skips_uncomputed():
     assert math.isnan(speaker_mismatch(r))
 
 
+def test_matching_gens_refuses_other_generation_record(tmp_path, monkeypatch):
+    """이름 수와 지정 문구 없는 거부는 judge 결과를 만든 생성 기록으로만 센다(코드 리뷰, D-68)."""
+    from types import SimpleNamespace
+
+    from rag.gen_eval import report
+    from rag.gen_eval.common import stable
+    from rag.gen_eval.judge import sha
+    monkeypatch.setattr(report, "ROOT", tmp_path)
+    cfg = SimpleNamespace(paths=SimpleNamespace(gen_runs="runs.jsonl"))
+    gen = {"qid": "a", "recipe": {"prompt_version": "v4"}, "answer": "x", "contexts": []}
+    rows = [{"qid": "a", "judge_recipe": {"gen_recipe_sha256": sha(stable(gen["recipe"]))}}]
+    assert "생성 기록이 아니라" in report.matching_gens(cfg, rows)  # 파일 없음: 표만 뺀다
+    path = tmp_path / "runs.jsonl"
+    path.write_text(json.dumps(gen) + "\n", encoding="utf-8")
+    assert report.matching_gens(cfg, rows) == {"a": gen}
+    other = gen | {"recipe": {"prompt_version": "v6"}}
+    path.write_text(json.dumps(other) + "\n", encoding="utf-8")
+    assert "레시피 해시" in report.matching_gens(cfg, rows)  # qid가 같아도 다른 기록은 세지 않는다
+
+
 def test_speaker_names_only_from_cited_contexts():
     from rag.gen_eval.report import speaker_names
     who = {"questioners": [{"name": "홍길동"}], "answerers": [{"name": "김철수"}]}

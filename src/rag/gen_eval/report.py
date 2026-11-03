@@ -104,10 +104,9 @@ def check_qids(cfg, rows: list[dict]) -> None:
             "paths.gen_judge=<결과 경로>를 맞춰 실행한다")
 
 
-def unlisted_table(cfg, rows: list[dict]) -> list[tuple[str, int]] | str:
-    """(구분, 답변 수). 지정 거부 문구 없이 거부한 답변을 충실성 '진술 없음'과 교차해 센다.
-    거부 판별과 지표는 바꾸지 않는다. 답변은 judge 결과를 만든 생성 기록(paths.gen_runs)에서
-    읽는다. 생성 기록이 없거나 맞지 않으면 이 표만 내지 않도록 이유를 돌려준다(이슈 #156)."""
+def matching_gens(cfg, rows: list[dict]) -> dict[str, dict] | str:
+    """judge 결과를 만든 생성 기록(paths.gen_runs)을 qid로 돌려준다. 없거나 맞지 않으면 이유를
+    돌려준다. 호출하는 표만 내지 않으려는 것이다(이슈 #156)."""
     rec = rows[0]["judge_recipe"]
     path = ROOT / cfg.paths.gen_runs
     gens = {r["qid"]: r for r in read_jsonl(path)} if path.exists() else {}
@@ -115,6 +114,17 @@ def unlisted_table(cfg, rows: list[dict]) -> list[tuple[str, int]] | str:
     if missing or sha(stable(gens[rows[0]["qid"]]["recipe"])) != rec.get("gen_recipe_sha256"):
         return (f"{cfg.paths.gen_runs}이 judge 결과를 만든 생성 기록이 아니라 내지 않는다"
                 f"(없는 qid {len(missing)}개 또는 레시피 해시 다름)")
+    return gens
+
+
+def unlisted_table(cfg, rows: list[dict]) -> list[tuple[str, int]] | str:
+    """(구분, 답변 수). 지정 거부 문구 없이 거부한 답변을 충실성 '진술 없음'과 교차해 센다.
+    거부 판별과 지표는 바꾸지 않는다. 답변은 judge 결과를 만든 생성 기록(paths.gen_runs)에서
+    읽는다. 생성 기록이 없거나 맞지 않으면 이 표만 내지 않도록 이유를 돌려준다(이슈 #156)."""
+    gens = matching_gens(cfg, rows)
+    if isinstance(gens, str):
+        return gens
+    rec = rows[0]["judge_recipe"]
     parts = list(cfg.gen_eval.unlisted_refusal)
     pairs = Counter((unlisted_refusal(gens[r["qid"]]["answer"], rec["refusal"], parts),
                      (r.get("faithfulness") or {}).get("error") == "진술 없음") for r in rows)
@@ -289,10 +299,12 @@ def main() -> None:
     mismatch = per_query(rows)["speaker_mismatch"].dropna()
     print(f"발언자 불일치 비율(질의 평균, D-68 안전 조건의 정의) {mean(list(mismatch))} "
           f"({len(mismatch)}질의, 불일치가 있는 질의 {int((mismatch > 0).sum())}개)")
-    qids = {r["qid"] for r in rows}
-    named = sum(bool(speaker_names(run)) for run in read_jsonl(ROOT / cfg.paths.gen_runs)
-                if run["qid"] in qids)
-    print(f"인용 근거의 화자 이름이 나온 답변 {rate(named, n)}(판정과 함께 보고한다, D-68)")
+    gens = matching_gens(cfg, rows)
+    if isinstance(gens, str):
+        print(f"인용 근거의 화자 이름이 나온 답변: {gens}")
+    else:
+        named = sum(bool(speaker_names(gens[r["qid"]])) for r in rows)
+        print(f"인용 근거의 화자 이름이 나온 답변 {rate(named, n)}(판정과 함께 보고한다, D-68)")
 
     print("\n생성 답변 형식: 지정 거부 문구를 쓰지 않은 거부(거부로 세지 않고 지표도 그대로)\n")
     table = unlisted_table(cfg, rows)
