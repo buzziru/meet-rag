@@ -42,6 +42,7 @@ from rag.gen_eval.report import (
     require_s22,
     unlisted_table,
 )
+from rag.gen_eval.report import main as report_main
 from rag.gen_eval.review import main as review_main
 from rag.index import load_cfg
 
@@ -1226,3 +1227,47 @@ def test_report_item_handling_error_is_not_pre_s22():
     assert s["errors"] == 1 and s["queries"] == 2 and s["accuracy"] == (1, 1)
     with pytest.raises(SystemExit, match="S22 이전"):
         require_s22([{"item_eval": {"items": ok["items"]}}])
+
+
+class _PassedConfigCheck(Exception):
+    """config 확인을 지나 첫 작업에 닿았다. judge·report가 data/를 읽거나 API를 부르기 전에
+    끊는다."""
+
+
+def _stop_at_first_work(monkeypatch, name):
+    def stop(path, *a):
+        raise _PassedConfigCheck(str(path))
+    monkeypatch.setattr(name, stop)
+
+
+ENTRIES = [(judge_main, "rag.gen_eval.judge.refuse_existing"),
+           (report_main, "rag.gen_eval.report.read_jsonl")]
+
+
+@pytest.mark.parametrize(("main", "first_work"), ENTRIES)
+@pytest.mark.parametrize("args", [
+    ["+exp=exp019", "judge/prompt=j_v8"],
+    ["judge/prompt=j_v8", "+exp=exp019"],  # 순서가 달라도 EXP의 지시가 이긴다
+    ["+exp=exp019", "judge/prompt=j_v11", "judge/prompt=j_v8"],  # 뒤 값을 본다
+])
+def test_ignored_judge_prompt_override_stops_entry(monkeypatch, main, first_work, args):
+    """EXP가 합친 지시(exp019는 j_v11)에 덮인 override는 첫 작업 전에 원인과 함께 멈춘다."""
+    _stop_at_first_work(monkeypatch, first_work)
+    monkeypatch.setattr(sys, "argv", ["entry", *args])
+    with pytest.raises(SystemExit, match="j_v8.*무시.*j_v11"):
+        main()
+
+
+@pytest.mark.parametrize(("main", "first_work"), ENTRIES)
+@pytest.mark.parametrize(("args", "version"), [
+    (["+exp=exp018", "judge/prompt=j_v10"], "j_v10"),  # 지시를 합치지 않는 EXP(EXP-019 재채점)
+    (["+exp=exp018", "judge/prompt='j_v10'"], "j_v10"),  # Hydra가 따옴표를 벗겨 적용한다
+    (["+exp=exp018", "judge/prompt=j_v9", "judge/prompt=j_v10"], "j_v10"),  # 뒤 값이 적용된다
+    (["+exp=exp019", "judge/prompt=j_v11"], "j_v11"),  # EXP가 합친 지시와 같다
+    (["+exp=exp019"], "j_v11"),
+])
+def test_applied_judge_prompt_override_reaches_entry(monkeypatch, main, first_work, args, version):
+    _stop_at_first_work(monkeypatch, first_work)
+    monkeypatch.setattr(sys, "argv", ["entry", *args])
+    with pytest.raises(_PassedConfigCheck, match=f"-{version}.jsonl$"):
+        main()
