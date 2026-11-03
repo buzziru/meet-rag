@@ -288,6 +288,26 @@ class ChunkStore:
             f.seek(pos)
             return {**json.loads(f.readline()), "index": self.names[k]}
 
+    def window(self, i: int, n: int) -> dict:
+        """청크 i에 같은 인덱스·같은 문서의 앞뒤 청크를 n개씩 겹침 없이 이어 붙인 행(EXP-021).
+        chunk_id는 i의 값이고 start·end·text가 넓어진다. 문서 끝에서는 있는 만큼만 붙인다."""
+        row = self.get(i)
+        rows = [row]
+        for step in (-1, 1):
+            for j in range(i + step, i + step * (n + 1), step):
+                if not 0 <= j < self.bounds[-1]:
+                    break
+                r = self.get(j)
+                if r["index"] != row["index"] or r["doc_id"] != row["doc_id"]:
+                    break
+                rows.append(r)
+        rows.sort(key=lambda r: r["start"])
+        text, end = rows[0]["text"], rows[0]["end"]
+        for r in rows[1:]:
+            text += r["text"][end - r["start"]:]
+            end = r["end"]
+        return {**row, "start": rows[0]["start"], "end": end, "text": text}
+
     def texts(self, ids: set[int]) -> dict[int, str]:
         """여러 청크의 본문. 파일마다 한 번 열고 위치 순으로 읽는다."""
         by_file: dict[int, list[tuple[int, int]]] = {}

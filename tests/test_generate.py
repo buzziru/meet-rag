@@ -1,12 +1,14 @@
 import json
 
 import numpy as np
+import pytest
 from omegaconf import OmegaConf
 
 from rag.generate import build_messages, recipe
 from rag.index import load_cfg
 from rag.llm import answer_start, split_thought
 from rag.retrieve import ChunkStore, best_chunks
+from rag.speakers import render
 
 
 def context(n, text, url="http://example/1"):
@@ -150,3 +152,63 @@ def test_generate_records_finish_reason():
         create=lambda **kw: iter(stream))))
     out = Pipeline.generate.__wrapped__(pipe, [], True, False)
     assert out["finish_reason"] == "length" and out["answer"] == "답변이다"
+
+
+def _store(tmp_path, rows):
+    d = tmp_path / "snowflake-fixed-256" / "full"
+    d.mkdir(parents=True)
+    with (d / "chunks.jsonl").open("w", encoding="utf-8", newline="\n") as f:
+        for i, (doc, start, text) in enumerate(rows):
+            f.write(json.dumps({"chunk_id": i, "doc_id": doc, "start": start,
+                                "end": start + len(text), "text": text}) + "\n")
+    return ChunkStore([d])
+
+
+def test_chunk_store_window_merges_overlap_and_stops_at_document_edge(tmp_path):
+    store = _store(tmp_path, [("a", 0, "abcd"), ("b", 0, "0123"), ("b", 2, "2345"),
+                              ("b", 4, "4567"), ("c", 0, "xy")])
+    assert store.window(2, 0)["text"] == "2345"
+    w = store.window(2, 1)
+    assert (w["text"], w["start"], w["end"], w["chunk_id"]) == ("01234567", 0, 8, 2)
+    assert store.window(1, 1)["text"] == "012345"  # 앞은 다른 문서라 붙이지 않는다
+    assert store.window(3, 5)["text"] == "01234567"  # 뒤 문서와 파일 끝을 넘지 않는다
+    assert store.window(4, 1)["text"] == "xy"
+
+
+@pytest.mark.parametrize("expand,first", [({"top": 0, "chunks": 0}, "2345"),
+                                          ({"top": 1, "chunks": 1}, "01234567")])
+def test_retrieve_expands_only_top_contexts_and_marks_follow_window(tmp_path, expand, first):
+    import rag.generate as g
+    store = _store(tmp_path, [("b", 0, "0123"), ("b", 2, "2345"), ("b", 4, "4567"),
+                              ("c", 0, "wxyz"), ("c", 2, "yz01")])
+    pipe = object.__new__(g.Pipeline)
+    pipe.store, pipe.speakers = store, "marks"
+    pipe.expand = OmegaConf.create(expand)
+    pipe.doc_chunks = {"b": np.array([0, 1, 2]), "c": np.array([3, 4])}
+    meta = {k: "" for k in g.CONTEXT_META}
+    pipe.doc_meta = {"b": meta, "c": meta}
+    pipe.doc_speakers = {d: {"questioners": [], "answerers": []} for d in "bc"}
+    span = {"role": "answer", "name": "김", "affiliation": "", "position": "장관"}
+    pipe.spans = {"b": [{**span, "start": 0, "end": 3}], "c": [{**span, "start": 0, "end": 3}]}
+    scores = np.array([0, 1, 0, 1, 0], dtype=float)
+    pipe.rank = lambda query, q_emb, qid=None: (scores, ["b", "c"], [{}, {}])
+    b, c = pipe.retrieve("q", None, 2)
+    assert (b["text"], c["text"]) == (first, "wxyz")  # 2위 근거는 청크 하나 그대로다
+    # 표지 위치는 넓어진 본문 기준이다. 확장 전에는 청크 시작(2) 앞이 잘려 청크의 첫 글자만 남는다
+    want = (0, 3) if expand["top"] else (0, 1)
+    got = b["speakers"]["spans"][0]
+    assert (got["start"], got["end"]) == want
+    assert render(b).split("\n", 1)[1].replace("〈답변 김 장관〉", "").replace("〈/답변〉", "") == first
+
+
+def test_pipeline_rejects_half_set_context_expand(monkeypatch):
+    from types import SimpleNamespace
+
+    import rag.generate as g
+    monkeypatch.setattr(g, "Retriever", lambda cfg: SimpleNamespace(
+        dense_ids=[], dirs=[], use_cond=False, use_rerank=False))
+    monkeypatch.setattr(g, "chunks_by_doc", lambda ids: {})
+    monkeypatch.setattr(g, "ChunkStore", lambda dirs: SimpleNamespace(names=[], bounds=[0]))
+    monkeypatch.setattr(g, "corpus_meta", lambda cfg: [])
+    with pytest.raises(SystemExit, match="context_expand"):
+        g.Pipeline(load_cfg(["index.scope=full", "generator.context_expand.top=1"]))

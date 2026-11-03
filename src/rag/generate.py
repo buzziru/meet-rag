@@ -83,6 +83,9 @@ def recipe(cfg, index_meta: dict, stream: bool) -> dict:
         # 기준(repeat_min_chars)도 근거를 바꾸므로 같이 남긴다
         **({} if check_mode(cfg.speakers.mode) == "off"
            else {"speakers": OmegaConf.to_container(cfg.speakers)}),
+        # 근거 확장(EXP-021). 끄면 키를 넣지 않아 지난 생성 기록의 레시피와 같다
+        **({"context_expand": OmegaConf.to_container(g.context_expand)}
+           if g.context_expand.top else {}),
     }
 
 
@@ -125,6 +128,10 @@ class Pipeline:
         # 조건 색인·추출기가 읽은 코퍼스를 같이 쓴다(S17)
         self.doc_meta = {d["doc_id"]: {k: d[k] for k in CONTEXT_META} for d in corpus_meta(cfg)}
         # 발언자 표시(S29): 문서 화자 목록과 원천 라벨의 발언 구간. 구간은 시작할 때 만든다(약 7초)
+        self.expand = cfg.generator.context_expand
+        if bool(self.expand.top) != bool(self.expand.chunks):
+            raise SystemExit("generator.context_expand는 top과 chunks를 함께 켜거나 끈다: "
+                             f"{self.expand}")
         self.speakers = check_mode(cfg.speakers.mode)
         if self.speakers != "off":
             self.doc_speakers = {d["doc_id"]: d for d in corpus_meta(cfg)}
@@ -186,7 +193,8 @@ class Pipeline:
                 return None
             docs, stages = swapped
         picked = best_chunks(scores, self.doc_chunks, docs[:k])
-        rows = [self.store.get(i) for i in picked]
+        rows = [self.store.window(i, self.expand.chunks if n < self.expand.top else 0)
+                for n, i in enumerate(picked)]
         out = []
         for n, (i, r, st) in enumerate(zip(picked, rows, stages[:k], strict=True), 1):
             dense = float(scores[i])
