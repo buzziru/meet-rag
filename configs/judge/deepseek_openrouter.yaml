@@ -15,5 +15,7 @@ params:
 extra_body: null
 timeout: 120  # deepseek_go.yaml과 같다
 max_retries: 1
+retry_passes: 1  # deepseek_go.yaml과 같다(D-64)
+stop_after_failures: 8
 concurrency: 4
 rep: 0  # judge 반복 번호(S24). deepseek_go.yaml과 같다

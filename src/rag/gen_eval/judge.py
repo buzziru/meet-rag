@@ -20,7 +20,7 @@ import os
 import sys
 import threading
 import time
-from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
 from langsmith import traceable
 from langsmith.run_trees import get_cached_client
@@ -428,30 +428,53 @@ def check_item_steps(cfg) -> None:
                          "gen_eval.item_eval=false로 실행한다")
 
 
-def run_all(fn, items: list, concurrency: int, name) -> list:
-    """items를 동시에 처리해 입력 순서대로 돌려준다. 하나라도 실패하면 아직 시작하지 않은 항목을
-    취소하고, 실행 중인 항목이 끝나면 실패한 항목과 원인을 모두 적고 멈춘다. Ctrl+C도 시작하지
-    않은 항목을 취소하고 그대로 올린다. 성공한 응답은 judge 캐시에 남아 다시 실행하면 이어진다.
-    입력 순서로 결과를 꺼내는 map은 앞 항목이 늦으면 뒤 항목의 실패를 늦게 알아 그동안 남은
-    항목을 계속 채점했다(이슈 #156)."""
+def run_pass(fn, items: list, concurrency: int, stop_after: int) -> tuple[list, bool]:
+    """items를 동시에 처리한다. 연속 실패가 stop_after건에 이르면 시작하지 않은 항목을 취소한다.
+    Future 목록과 그렇게 멈췄는지를 돌려준다. Ctrl+C도 시작하지 않은 항목을 취소하고 올린다."""
     ex = ThreadPoolExecutor(concurrency)
     futures = [ex.submit(fn, x) for x in items]
+    pending, streak = set(futures), 0
     try:
         # Windows에서는 timeout 없는 대기가 Ctrl+C로 깨지 않아 1초마다 깨어난다
-        while True:
-            done, pending = wait(futures, timeout=1, return_when=FIRST_EXCEPTION)
-            if not pending or any(f.exception() for f in done):
-                break
+        while pending and streak < stop_after:
+            done, pending = wait(pending, timeout=1, return_when=FIRST_COMPLETED)
+            for f in done:
+                streak = streak + 1 if f.exception() else 0
     finally:
         ex.shutdown(cancel_futures=True)
-    failed = [f"{name(x)}: {type(f.exception()).__name__}: {f.exception()}"
-              for x, f in zip(items, futures, strict=True)
-              if not f.cancelled() and f.exception()]
-    if failed:
-        skipped = sum(f.cancelled() for f in futures)
-        raise SystemExit(f"judge 실패 {len(failed)}건, 시작하지 않고 취소 {skipped}건"
-                         "(다시 실행하면 저장된 응답으로 이어진다):\n" + "\n".join(failed))
-    return [f.result() for f in futures]
+    return futures, streak >= stop_after
+
+
+def run_all(fn, items: list, concurrency: int, name, retry_passes: int, stop_after: int) -> list:
+    """items를 동시에 처리해 입력 순서대로 돌려준다. 실패한 항목은 전체를 마친 뒤 그것만
+    retry_passes번까지 다시 처리한다. 그래도 남으면 실패한 항목과 원인을 모두 적고 멈춘다. 결과에
+    빠진 항목이 생기지 않게 하려는 것이다(D-57 이유 2, D-64). 연속 실패가 stop_after건이면 서버
+    장애·인증·코드 오류로 보고 바로 멈춘다. 성공한 응답은 judge 캐시에 남아 다시 처리할 때 다시
+    부르지 않고, 다시 실행해도 이어진다."""
+    results, todo = {}, list(range(len(items)))
+    for left in range(retry_passes, -1, -1):
+        futures, stopped = run_pass(fn, [items[i] for i in todo], concurrency, stop_after)
+        failed = []
+        for i, f in zip(todo, futures, strict=True):
+            if f.cancelled():
+                continue
+            if e := f.exception():
+                failed.append((i, f"{name(items[i])}: {type(e).__name__}: {e}"))
+            else:
+                results[i] = f.result()
+        causes = "\n".join(m for _, m in failed)
+        if stopped:
+            skipped = sum(f.cancelled() for f in futures)
+            raise SystemExit(f"judge 연속 실패 {stop_after}건으로 멈춤. 실패 {len(failed)}건, "
+                             f"시작하지 않고 취소 {skipped}건(다시 실행하면 저장된 응답으로 "
+                             f"이어진다):\n{causes}")
+        if not failed:
+            return [results[i] for i in range(len(items))]
+        if left:
+            print(f"judge 실패 {len(failed)}건, 실패한 항목만 다시 처리한다", flush=True)
+        todo = [i for i, _ in failed]
+    raise SystemExit(f"judge 실패 {len(failed)}건(다시 처리한 뒤에도 실패, 다시 실행하면 저장된 "
+                     f"응답으로 이어진다):\n{causes}")
 
 
 def judge_cases(cfg) -> None:
@@ -468,7 +491,7 @@ def judge_cases(cfg) -> None:
     try:
         rows = run_all(lambda c: {"case": c["case"], **item_eval(
             judge, c["query"], c["answer"], c["contexts"])}, cases, cfg.judge.concurrency,
-            lambda c: c["case"])
+            lambda c: c["case"], cfg.judge.retry_passes, cfg.judge.stop_after_failures)
     finally:  # 재시도를 다 쓰고 멈춘 실행에서도 오류 수를 남긴다
         print(judge.http.summary(judge.calls))
     get_cached_client().flush()
@@ -502,7 +525,8 @@ def main() -> None:
                             langsmith_extra={"metadata": {"qid": qid, **rec}})
 
     try:
-        rows = run_all(one, qids, cfg.judge.concurrency, str)
+        rows = run_all(one, qids, cfg.judge.concurrency, str, cfg.judge.retry_passes,
+                       cfg.judge.stop_after_failures)
     finally:  # 재시도를 다 쓰고 멈춘 실행에서도 오류 수를 남긴다
         print(judge.http.summary(judge.calls))
     get_cached_client().flush()
