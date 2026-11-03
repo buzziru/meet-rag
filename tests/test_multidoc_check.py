@@ -193,7 +193,7 @@ def test_check_input_has_only_instruction_query_and_pool_docs():
 def test_wrap_lines_splits_long_lines_at_sentence_ends_keeping_quotes():
     text = "짧은 줄.\n가나다라. 마바사아? 자차카타! 파하."
     wrapped = wrap_lines(text, 12)
-    assert wrapped.split("\n") ==["짧은 줄.", "가나다라. 마바사아?", "자차카타! 파하."]
+    assert wrapped.split("\n") == ["짧은 줄.", "가나다라. 마바사아?", "자차카타! 파하."]
     assert quoted("마바사아? 자차카타!", wrapped)
     assert wrap_lines(text, 100) == text
 

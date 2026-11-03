@@ -69,11 +69,17 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# 편집에서 생긴 `=` 공백 오류(E225)를 잡는다. preview 규칙은 여기 이름을 적은 것만 켠다(ADR-0080)
+preview = true
+explicit-preview-rules = true
+extend-select = ["E225"]
 
 # 노트북은 결정 근거와 사람의 리뷰·회고용 기록이라 기계적 줄 나눔을 하지 않는다.
 # 가독성은 노트북 규약(.claude/rules/notebook.md §2.3)이 맡는다(ADR-0063)
 [tool.ruff.lint.per-file-ignores]
 "notebooks/**/*.ipynb" = ["E501"]
+# 노트북은 `ruff check --fix`로 실행 전에 고치므로(nb_kernel) E225를 켜면 포맷이 된다(ADR-0063)
+"*.ipynb" = ["E225"]
 
 [tool.ruff.format]
 exclude = ["notebooks/**/*.ipynb"]
