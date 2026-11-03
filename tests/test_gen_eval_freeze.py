@@ -68,6 +68,12 @@ def test_j_v11_prompt_is_frozen():
     assert sha(OmegaConf.to_container(prompt, resolve=True)) == FROZEN_J_V11_SHA256
 
 
+def test_j_v12_prompt_is_frozen():
+    prompt = load_cfg(["index.scope=full", "judge/prompt=j_v12"]).judge.prompt
+    assert prompt.version == "j_v12"
+    assert sha(OmegaConf.to_container(prompt, resolve=True)) == "6ca148f522e7097f28e8ee3c2d5a3ba4e922cead9614e13a9a95895b3e554617"
+
+
 def test_outcome_table_is_frozen():
     assert OUTCOMES == FROZEN_OUTCOMES
     # 판정표 전체(5 상태 × 5 처리, 기준 문서 I8): 모호·회피는 상황 전달·미전달, 있음·일부·없음의
