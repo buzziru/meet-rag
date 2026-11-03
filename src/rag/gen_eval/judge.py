@@ -93,7 +93,7 @@ def check_speakers(cfg, gen_recipe: dict) -> None:
     if gen_recipe.get("speakers") and not cfg.judge.prompt.get("speaker_marks"):
         raise SystemExit(f"생성 기록에 발언자 표시({gen_recipe['speakers']})가 있는데 judge "
                          f"지시 {cfg.judge.prompt.version}는 표지를 읽지 않는다. "
-                         "judge/prompt=j_v9로 채점한다")
+                         "표지를 읽는 지시(speaker_marks: true)로 채점한다")
 
 
 def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
