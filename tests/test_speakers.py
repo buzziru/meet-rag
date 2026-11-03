@@ -114,6 +114,27 @@ def test_fill_counts():
     assert (c["answerers.position"], c["answerers.affiliation"], c["answerers.multi"]) == (1, 1, 1)
 
 
+def test_j_v10_differs_from_j_v9_only_in_statements_and_verdicts():
+    """j_v10은 진술에 발언자를 남기고 지목한 화자를 판정하는 두 단계만 바꾼다(D-63)."""
+    d = ROOT / "configs/judge/prompt"
+    v9, v10 = (yaml.safe_load((d / f"{v}.yaml").read_text(encoding="utf-8"))
+               for v in ("j_v9", "j_v10"))
+    assert (v9.pop("version"), v10.pop("version")) == ("j_v9", "j_v10")
+    assert {k for k in v9 if v9[k] != v10[k]} == {"statements", "verdicts"}
+    assert all(v9[k]["user"] == v10[k]["user"] for k in ("statements", "verdicts"))
+    assert "발언자 불일치" in v10["verdicts"]["system"]
+
+
+def test_j_v11_differs_from_j_v10_only_in_verdicts():
+    """j_v11은 verdicts만 고쳐 나머지 단계의 저장 응답을 그대로 쓴다(D-63)."""
+    d = ROOT / "configs/judge/prompt"
+    v10, v11 = (yaml.safe_load((d / f"{v}.yaml").read_text(encoding="utf-8"))
+                for v in ("j_v10", "j_v11"))
+    assert (v10.pop("version"), v11.pop("version")) == ("j_v10", "j_v11")
+    assert {k for k in v10 if v10[k] != v11[k]} == {"verdicts"}
+    assert v10["verdicts"]["user"] == v11["verdicts"]["user"]
+
+
 def test_j_v9_differs_from_j_v8_only_in_speaker_sentence():
     """j_v9는 verdicts 규칙 5와 items 규칙 3의 첫 문장만 바꾼다(S29 결정 사항 1)."""
     d = ROOT / "configs/judge/prompt"
