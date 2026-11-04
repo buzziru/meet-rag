@@ -13,7 +13,13 @@ from rag.eval.metrics import load_gold, sha256
 from rag.eval.score import OVERWRITE_HINT
 from rag.gen_eval.common import eval_qids, read_jsonl
 from rag.gen_eval.judge import sha
-from rag.gen_eval.report import criterion, per_query, require_s22
+from rag.gen_eval.report import (
+    SPEAKER_JUDGE_MIN,
+    criterion,
+    judges_speaker,
+    per_query,
+    require_s22,
+)
 from rag.index import load_cfg, write_guarded
 
 # judge_recipe 중 평가자(judge 모델·지시·채점 규칙)를 정하는 값. 다르면 차이가 생성이 아니라
@@ -27,7 +33,6 @@ JUDGE_KEYS = ("name", "model", "base_url", "params", "extra_body", "step_params"
 CHECK_KEYS = ("refusal", "filler_phrases", "check_patterns")
 METRICS = ("faithfulness", "relevance", "composite", "inclusion", "over_refusal",
            "speaker_mismatch")
-SPEAKER_JUDGE_MIN = 10  # 지목한 화자를 판정하는 첫 지시 j_v10(D-63 결정 7)
 
 
 def gen_verdict(ci: dict[str, tuple[float, float, float]], spec) -> tuple[str, list[str]]:
@@ -80,10 +85,9 @@ def check_inputs(runs: dict[str, Path], rows: dict[str, list[dict]], qids: list[
 def check_speaker_judge(rows: list[dict], path: Path) -> None:
     """발언자를 판정하지 않는 지시로 채점한 결과는 불일치가 언제나 0이라 안전 조건을 조용히
     통과한다. 그런 결과는 비교하지 않는다(D-68)."""
-    version = rows[0]["judge_recipe"].get("prompt_version") or ""
-    number = int(version.removeprefix("j_v")) if version.startswith("j_v") else -1
-    if number < SPEAKER_JUDGE_MIN:
-        raise SystemExit(f"{path}: 지시 {version or '기록 없음'}은 발언자를 판정하지 않아 "
+    if not judges_speaker(rows):
+        version = rows[0]["judge_recipe"].get("prompt_version") or "기록 없음"
+        raise SystemExit(f"{path}: 지시 {version}은 발언자를 판정하지 않아 "
                          f"잘못 귀속 안전 조건을 잴 수 없다(j_v{SPEAKER_JUDGE_MIN} 이후만 비교)")
 
 

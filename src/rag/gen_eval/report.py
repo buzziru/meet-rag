@@ -24,6 +24,7 @@ from rag.gen_eval.judge import sha
 from rag.index import ROOT, load_cfg
 
 SPEAKER_MISMATCH = "발언자 불일치"  # judge가 이유 첫머리에 쓰는 말(`verdicts` 규칙 2, G3)
+SPEAKER_JUDGE_MIN = 10  # 지목한 화자를 판정하는 첫 지시 j_v10(D-63 결정 7)
 CITE = re.compile(r"\[(\d+)\]")
 
 
@@ -63,6 +64,13 @@ def speaker_mismatch(r: dict) -> float:
     if f.get("score") is None or not verdicts:
         return np.nan
     return sum(v["reason"].startswith(SPEAKER_MISMATCH) for v in verdicts) / len(verdicts)
+
+
+def judges_speaker(rows: list[dict]) -> bool:
+    """발언자를 판정하는 지시로 채점했는지. 그 전 지시의 결과는 불일치가 언제나 0이다(D-68)."""
+    version = rows[0]["judge_recipe"].get("prompt_version") or ""
+    number = int(version.removeprefix("j_v")) if version.startswith("j_v") else -1
+    return number >= SPEAKER_JUDGE_MIN
 
 
 def speaker_names(run: dict) -> set[str]:
@@ -296,9 +304,13 @@ def main() -> None:
     print(f"\n충실성 판정에서 발언자를 구분할 수 없는 진술 {sum(unclear)}개, 그런 진술이 든 질의 "
           f"{sum(1 for k in unclear if k)}개(기준 문서 F7)")
 
-    mismatch = per_query(rows)["speaker_mismatch"].dropna()
-    print(f"발언자 불일치 비율(질의 평균, D-68 안전 조건의 정의) {mean(list(mismatch))} "
-          f"({len(mismatch)}질의, 불일치가 있는 질의 {int((mismatch > 0).sum())}개)")
+    if judges_speaker(rows):
+        mismatch = per_query(rows)["speaker_mismatch"].dropna()
+        print(f"발언자 불일치 비율(질의 평균, D-68 안전 조건의 정의) {mean(list(mismatch))} "
+              f"({len(mismatch)}질의, 불일치가 있는 질의 {int((mismatch > 0).sum())}개)")
+    else:
+        version = rows[0]["judge_recipe"].get("prompt_version") or "기록 없음"
+        print(f"발언자 불일치 비율: 해당 없음(지시 {version}은 발언자를 판정하지 않는다, D-68)")
     gens = matching_gens(cfg, rows)
     if isinstance(gens, str):
         print(f"인용 근거의 화자 이름이 나온 답변: {gens}")

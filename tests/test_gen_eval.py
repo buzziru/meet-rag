@@ -1143,6 +1143,28 @@ def test_gen_compare_main_stops_on_judge_without_speaker_check(tmp_path, monkeyp
         _compare_main(tmp_path, monkeypatch, capsys, rows, rows)
 
 
+@pytest.mark.parametrize(("version", "expected"), [
+    ("j_v9", "발언자 불일치 비율: 해당 없음(지시 j_v9"),
+    (None, "발언자 불일치 비율: 해당 없음(지시 기록 없음"),
+    ("j_v10", "D-68 안전 조건의 정의) 0.250 (1질의, 불일치가 있는 질의 1개)"),
+])
+def test_report_main_prints_speaker_mismatch_only_for_speaker_judge(monkeypatch, capsys, version,
+                                                                    expected):
+    """발언자를 판정하지 않는 지시의 결과는 불일치 0으로 내지 않는다(D-68, 이슈 #201)."""
+    row = _judged("a", 0.5, mismatch=1, recipe={"prompt_version": version})
+    monkeypatch.setattr("rag.gen_eval.report.read_jsonl", lambda path: [row])
+    monkeypatch.setattr("rag.gen_eval.report.check_qids", lambda cfg, rows: None)
+
+    def stop(cfg, rows):  # 이 줄 다음 작업. 뒤 표에 필요한 생성 기록 항목은 이 테스트와 무관하다
+        raise _PassedConfigCheck
+
+    monkeypatch.setattr("rag.gen_eval.report.matching_gens", stop)
+    monkeypatch.setattr(sys, "argv", ["report", "+exp=current"])
+    with pytest.raises(_PassedConfigCheck):
+        report_main()
+    assert expected in capsys.readouterr().out
+
+
 def test_speaker_mismatch_counts_prefix_and_skips_uncomputed():
     import math
 
