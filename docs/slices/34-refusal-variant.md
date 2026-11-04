@@ -57,7 +57,7 @@ LANGSMITH_TRACING=false doppler run -- uv run python -m rag.gen_eval.judge +exp=
 
 ## 수정 허용 파일
 
-`src/rag/gen_eval/checks.py`, `src/rag/gen_eval/judge.py`, `src/rag/gen_eval/compare.py`, `src/rag/gen_eval/report.py`, `configs/config.yaml`(`gen_eval.unlisted_refusal` 주석), `tests/test_gen_eval.py`와 compare 테스트 파일, 이 문서, `docs/DECISIONS.md`, `docs/gen-eval-criteria.md`, `docs/SPEC.md`(143줄), `docs/experiments/EXP-021.md`(표시), `docs/PLAN.md`, `docs/PLAN-done.md`, `CLAUDE.md`(바뀌는 명령이 있으면)
+`src/rag/gen_eval/checks.py`, `src/rag/gen_eval/judge.py`, `src/rag/gen_eval/compare.py`, `src/rag/gen_eval/report.py`, `configs/config.yaml`(`gen_eval.unlisted_refusal` 주석), `tests/test_gen_eval.py`와 compare 테스트 파일, 이 문서, `docs/DECISIONS.md`, `docs/gen-eval-criteria.md`, `docs/SPEC.md`(127·143줄, 127줄은 감사 지적으로 더해 사용자 승인 2026-11-04), `docs/experiments/EXP-021.md`(표시), `docs/slices/14b-partial-refusal.md`(표시, 감사 지적), `docs/PLAN.md`, `docs/PLAN-done.md`, `CLAUDE.md`(바뀌는 명령이 있으면)
 
 ## 범위 밖
 
