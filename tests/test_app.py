@@ -11,6 +11,7 @@ from rag.index import load_cfg
 
 CTX = {"n": 1, "date": "2020-01-02", "committee_name": "법제사법위원회",
        "original": "http://example/1", "text": "본문 <b>굵게</b>"}
+ASKED = ("질의", [{"role": "user", "content": "질의"}])
 
 
 def chunk(content=None, finish=None, usage=None):
@@ -73,16 +74,24 @@ def test_stream_ends_with_contexts():
 def test_history_does_not_change_search_query(cfg):
     seen = []
     pipe = fake_pipe(["답"], seen)
-    list(app.respond(pipe, cfg, {}, "질의", []))
+    list(app.respond(pipe, cfg, {}, *ASKED))
     past = [{"role": "user", "content": "앞 질문"}, {"role": "assistant", "content": "앞 답변"}]
-    last = list(app.respond(pipe, cfg, {}, "질의", past))[-1]
+    history, _, message = app.ask("질의", past)
+    last = list(app.respond(pipe, cfg, {}, message, history))[-1]
     assert seen == ["질의", "질의"]
-    assert last[:2] == past
+    assert last[:3] == history
 
 
-def test_respond_streams_then_appends_contexts(cfg):
-    chats = list(app.respond(fake_pipe(["답", "변"]), cfg, {}, "질의", []))
-    assert [c[1]["content"] for c in chats[:3]] == ["", "답", "답변"]
+def test_ask_shows_question_and_clears_input():
+    history, box, message = app.ask("질의", [])
+    assert history == [{"role": "user", "content": "질의"}]
+    assert box == "" and message == "질의"
+
+
+def test_respond_waits_for_first_token_then_appends_contexts(cfg):
+    """첫 조각 전에 내보내면 화면의 대기 표시가 사라진다."""
+    chats = list(app.respond(fake_pipe(["답", "변"]), cfg, {}, *ASKED))
+    assert [c[1]["content"] for c in chats[:2]] == ["답", "답변"]
     last = chats[-1]
     assert last[1]["content"] == "답변"
     assert last[2]["metadata"] == {"title": cfg.app.contexts_title}
@@ -91,13 +100,15 @@ def test_respond_streams_then_appends_contexts(cfg):
 
 
 def test_respond_shows_notice_when_answer_is_empty(cfg):
-    last = list(app.respond(fake_pipe([]), cfg, {}, "질의", []))[-1]
+    last = list(app.respond(fake_pipe([]), cfg, {}, *ASKED))[-1]
     assert last[1]["content"] == cfg.app.no_answer
 
 
-def test_respond_keeps_history_on_blank_message(cfg):
+def test_blank_message_keeps_history_and_skips_search(cfg):
     seen = []
-    assert list(app.respond(fake_pipe(["답"], seen), cfg, {}, "  ", [])) == [[]]
+    history, box, message = app.ask("  ", [])
+    assert (history, box, message) == ([], "", "")
+    assert list(app.respond(fake_pipe(["답"], seen), cfg, {}, message, history)) == [[]]
     assert seen == []
 
 

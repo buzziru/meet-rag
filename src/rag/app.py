@@ -14,6 +14,11 @@ from rag.generate import Pipeline, recipe
 from rag.index import load_cfg
 from rag.speakers import render
 
+SCROLL_TO_QUESTION = """() => { setTimeout(() => {
+  const rows = document.querySelectorAll("#chat .user-row");
+  rows[rows.length - 1]?.scrollIntoView({block: "start"});
+}, 200); }"""
+
 
 def search_query(message: str, history: list[dict]) -> str:
     """검색에 쓸 질의. 지금은 싱글턴이라 이력을 쓰지 않는다. 멀티턴은 여기서 이력으로 재작성한다."""
@@ -29,15 +34,22 @@ def format_contexts(contexts: list[dict]) -> str:
         for c in contexts)
 
 
-def respond(pipe, cfg, rec: dict, message: str, history: list[dict]) -> Iterator[list[dict]]:
-    """화면에 보일 대화를 조각이 올 때마다 내보낸다. 빈 입력은 대화를 그대로 둔다."""
+def ask(message: str, history: list[dict]) -> tuple[list[dict], str, str]:
+    """질문을 대화에 바로 보이고 입력창을 비운다. 답변은 respond가 만든다. 빈 입력은 무시한다."""
     if not message.strip():
+        return history, "", ""
+    return [*history, {"role": "user", "content": message}], "", message
+
+
+def respond(pipe, cfg, rec: dict, message: str, history: list[dict]) -> Iterator[list[dict]]:
+    """history는 ask가 질문을 더한 대화다. 첫 조각이 오기 전에는 아무것도 내보내지 않는다. 내보내면
+    화면의 대기 표시가 사라진다."""
+    if not message:
         yield history
         return
-    query = search_query(message, history)
+    query = search_query(message, history[:-1])
     answer = {"role": "assistant", "content": ""}
-    chat = [*history, {"role": "user", "content": message}, answer]
-    yield [dict(m) for m in chat]
+    chat = [*history, answer]
     for item in pipe.stream(query, pipe.embed(query), langsmith_extra={"metadata": rec}):
         if isinstance(item, dict):
             answer["content"] = item["answer"] or cfg.app.no_answer
@@ -55,15 +67,19 @@ def build(cfg, pipe):
 
     rec = recipe(cfg, pipe.index_meta, True)
 
-    def submit(message: str, history: list[dict]) -> Iterator[tuple[list[dict], str]]:
-        for chat in respond(pipe, cfg, rec, message, history):
-            yield chat, ""
+    def answer(message: str, history: list[dict]) -> Iterator[list[dict]]:
+        yield from respond(pipe, cfg, rec, message, history)
 
     with gr.Blocks(title=cfg.app.title) as demo:
         gr.Markdown(f"# {cfg.app.title}\n\n{cfg.app.notice}")
-        chatbot = gr.Chatbot(show_label=False, height="70vh")
+        # 답변을 처음부터 읽도록 맨 아래로 따라가지 않고, 새 질문을 위로 올린다
+        chatbot = gr.Chatbot(show_label=False, height="70vh", autoscroll=False, elem_id="chat")
         box = gr.Textbox(placeholder=cfg.app.placeholder, show_label=False, submit_btn=True)
-        box.submit(submit, [box, chatbot], [chatbot, box], api_name=False)
+        question = gr.State("")
+        asked = box.submit(ask, [box, chatbot], [chatbot, box, question], queue=False,
+                           api_name=False)
+        asked.then(None, js=SCROLL_TO_QUESTION, api_name=False)
+        asked.then(answer, [question, chatbot], chatbot, api_name=False)
     return demo
 
 
