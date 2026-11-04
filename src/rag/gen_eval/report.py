@@ -1,7 +1,7 @@
 """judge 결과(paths.gen_judge)를 집계해 표로 낸다(S14).
 
 기준별 평균과 계산한 질의 수, 뺀 질의 수(전체 거부 포함 이유별), 충실성 판정의 발언자 구분 불가
-진술 수(S22), 전체·부분 거부(S14b), 지정 거부 문구를 쓰지 않은 거부(이슈 #156), 거부 교차 집계,
+진술 수(S22), 전체·부분 거부(S14b), 지정 거부 문구를 변형한 거부(이슈 #156, S34), 거부 교차 집계,
 인용·메타데이터 오류, 토큰·비용, 첫 토큰 시간, 끝나지 않은 생성 수를 낸다. 항목 평가 결과가 있으면
 정보 상태 × 처리 표, 거부 정확도, 틀린 처리 유형, 과잉 거부율(질의 평균, D-53)을 낸다(S14c).
 judge 단계 표에는 형식 재요청 수(D-58)를 함께 낸다. 종합 지표와 두 실행의 판정은
@@ -126,19 +126,26 @@ def matching_gens(cfg, rows: list[dict]) -> dict[str, dict] | str:
 
 
 def unlisted_table(cfg, rows: list[dict]) -> list[tuple[str, int]] | str:
-    """(구분, 답변 수). 지정 거부 문구 없이 거부한 답변을 충실성 '진술 없음'과 교차해 센다.
-    거부 판별과 지표는 바꾸지 않는다. 답변은 judge 결과를 만든 생성 기록(paths.gen_runs)에서
-    읽는다. 생성 기록이 없거나 맞지 않으면 이 표만 내지 않도록 이유를 돌려준다(이슈 #156)."""
+    """(구분, 답변 수). 지정 거부 문구를 변형해 거부한 답변을 judge 결과의 거부 종류로 나눠 세고,
+    변형 거부가 아닌데 충실성 진술이 없는 답변을 함께 센다(S34). 답변은 judge 결과를 만든 생성
+    기록(paths.gen_runs)에서 읽는다. 생성 기록이 없거나 맞지 않으면 이 표만 내지 않도록 이유를
+    돌려준다(이슈 #156)."""
     gens = matching_gens(cfg, rows)
     if isinstance(gens, str):
         return gens
     rec = rows[0]["judge_recipe"]
-    parts = list(cfg.gen_eval.unlisted_refusal)
-    pairs = Counter((unlisted_refusal(gens[r["qid"]]["answer"], rec["refusal"], parts),
-                     (r.get("faithfulness") or {}).get("error") == "진술 없음") for r in rows)
-    return [("지정 문구 없는 거부, 충실성 진술 없음으로 빠짐", pairs[True, True]),
-            ("지정 문구 없는 거부, 그 밖(기준을 채점함)", pairs[True, False]),
-            ("진술 없음, 지정 문구 없는 거부 아님", pairs[False, True])]
+    # 그 결과를 만든 판별로 센다. 키가 없으면 판별 전 결과라 변형 문장을 거부로 세지 않았다
+    judged = "unlisted_refusal" in rec
+    parts = rec["unlisted_refusal"] if judged else list(cfg.gen_eval.unlisted_refusal)
+    variant = {r["qid"]: unlisted_refusal(gens[r["qid"]]["answer"], rec["refusal"], parts)
+               for r in rows}
+    kinds = Counter(r["refusal"] if judged else None for r in rows if variant[r["qid"]])
+    silent = sum(not variant[r["qid"]]
+                 and (r.get("faithfulness") or {}).get("error") == "진술 없음" for r in rows)
+    return [("변형 거부, 전체 거부로 셈", kinds["full"]),
+            ("변형 거부, 부분 거부로 셈", kinds["partial"]),
+            ("변형 거부, 거부로 세지 않음(S34 전 judge 결과)", kinds[None]),
+            ("진술 없음, 변형 거부 아님", silent)]
 
 
 def refusal_table(rows: list[dict]) -> list[tuple[str, int, int]]:
@@ -318,7 +325,7 @@ def main() -> None:
         named = sum(bool(speaker_names(gens[r["qid"]])) for r in rows)
         print(f"인용 근거의 화자 이름이 나온 답변 {rate(named, n)}(판정과 함께 보고한다, D-68)")
 
-    print("\n생성 답변 형식: 지정 거부 문구를 쓰지 않은 거부(거부로 세지 않고 지표도 그대로)\n")
+    print("\n생성 답변 형식: 지정 거부 문구를 변형한 거부(S34)\n")
     table = unlisted_table(cfg, rows)
     if isinstance(table, str):
         print(table)
