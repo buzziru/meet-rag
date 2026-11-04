@@ -56,7 +56,7 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 
 ## 수정 허용 파일
 
-`deploy/space/`, `src/rag/generate.py`, `src/rag/speakers.py`, `configs/config.yaml`(`deploy`, `paths`, `speakers` 키), `tests/`의 구간 파일 테스트, `CLAUDE.md`(허용 처리처 줄, 명령 한 줄), `docs/SPEC.md`(자원 제약, 결정 표시), `docs/DECISIONS.md`, 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/slices/35-chat-app.md`, `docs/slices/36-doc-browser.md`(조각 번호 표시)
+`deploy/space/`, `src/rag/app.py`, `src/rag/generate.py`, `src/rag/speakers.py`, `configs/config.yaml`(`deploy`, `paths`, `speakers` 키), `tests/`의 구간 파일 테스트, `CLAUDE.md`(허용 처리처 줄, 명령 한 줄), `docs/SPEC.md`(자원 제약, 결정 표시), `docs/DECISIONS.md`, 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/slices/35-chat-app.md`, `docs/slices/36-doc-browser.md`(조각 번호 표시)
 
 ## 범위 밖
 
@@ -65,3 +65,38 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 - 추천 질의, 첫 구동 안내, 데모 키 크레딧 한도, 3초 판정, Space와 앱의 공개(S41). 이 조각에서는 지금 생성 API 키를 비공개 Space에 넣는다
 - 디자인, 답변 형식
 - Dataset 저장소의 공개. 공개로 바꾸려면 다시 묻는다
+
+## 결과 (2026-11-04)
+
+커밋: 구현 069c9df. Space 코드 커밋은 Hub의 0654da5 이후, Dataset 마지막 커밋은 `968be89c7ee6bfb1fb2bb8847805bda03190ed8f`(파일 180개, 저장 약 2.32GB, 비공개)
+
+- 완료 기준 1: 비공개 Dataset과 비공개 ZeroGPU Space를 무료 계정에서 만들었다. 컨테이너 메모리 한도 104GB(`memory.max`), 16GB 할당 성공, CPU 16코어 분량(`cpu.max`), `/tmp` 10GB 쓰기 성공(디스크 한도는 호스트 값만 보여 확인하지 못함), Python 3.12.12, torch 2.13.0+cu130. `@spaces.GPU` 함수가 없으면 `No @spaces.GPU function detected during startup`으로 멈추고, 부르지 않는 함수 하나를 두면 돌며 할당량이 줄지 않는다. 비공개 Dataset 볼륨은 토큰 없이 읽혔고 `/home/user/app/data`로 지정해 `/app/data`에 붙었다
+- 완료 기준 2: `tests/test_speakers.py` 통과. 실제 라벨로 만든 구간 파일이 문서 38,516개 모두 `doc_spans` 결과와 같다(구간이 빈 문서 6개 포함, 구간 80,292개). 파일 약 10MB, 키는 역할, 위치, 이름, 직책, 소속뿐이다
+- 완료 기준 3: 올리기 전과 뒤 모두 비공개다. 목록에 표 밖 파일, `queries`, `LAB_`, 시험 파일이 없다
+- 완료 기준 4: 지어낸 질의 3개의 근거 화면이 로컬과 글자까지 같다. 문서 탭은 문서 2개가 같다. 근거 탭은 25개 링크를 대조했고 6개만 끝의 빈 줄 2글자가 달라 화면에 영향이 없다(원인 확인하지 않음). 익명 접속은 404, 공개 API 목록은 비어 있고, 다운로드 버튼이 없고, 본문에 `splits`, `n_qa`, `summary_`가 없다. LangSmith에 호출이 남고 메타데이터 `git_commit`은 Space 저장소의 커밋이다
+- 완료 기준 5: 아래 표(재정렬을 끈 구성). OpenRouter 26번, 비용은 재지 않았다(1,000질의당 약 $0.37로 어림해 약 $0.01)
+- 완료 기준 6: 사용자가 화면에서 작동을 확인했고, ZeroGPU 유지와 벡터스토어 미도입을 정했다(D-80)
+
+| 항목 | 값 |
+| --- | --- |
+| 첫 토큰 시간(지어낸 질의 20개, 한국에서 큐 요청) | 중앙값 1.58초, 최소 1.34초, 최대 4.24초 |
+| 답변 전체 시간 | 중앙값 9.7초, 최대 33.0초 |
+| 재시작부터 실행 상태까지 | 109초 |
+| 재시작부터 첫 토큰까지 | 111초 |
+| 인덱스·코퍼스 읽기(볼륨) | 71.0초 |
+| 임베딩 모델 받기와 불러오기 | 12.4초 |
+| 메모리 최고(`memory.peak`, 파일 캐시 포함 가능) | 8.43GB |
+
+### 지시서와 다르게 하거나 더한 것
+
+- 수정 허용 파일에 `src/rag/app.py`를 더했다. 시작 시간을 나눠 잰 출력 한 줄이다
+- 구간 파일 설정은 `speakers`가 아니라 `deploy.speakers_from_file`에 뒀다. 생성 레시피가 `speakers` 전체를 기록해, 키를 더하면 지난 기록과 레시피가 달라진다
+- 구간 파일에 만든 설정 지문을 함께 뒀다(`src/CLAUDE.md`, `check_basis`)
+- Space 변수 `HF_HOME=/tmp/hf-home`, `PYTHONUNBUFFERED=1`, `LANGSMITH_TRACING=true`를 뒀다. `HF_HOME`이 없으면 임베딩 모델을 불러오는 단계에서 멈춘다(`rag.index.pinned`)
+- `deploy/space/requirements.txt`는 잠금 파일에서 내보내되 torch, CUDA 묶음을 빼고 `pydantic`을 2.12.5로 낮췄다. Space 빌드가 함께 설치하는 `gradio[mcp]`가 2.12.5 이하를 요구한다. 앱 동작은 완료 기준 4로 확인했고 평가 환경은 바뀌지 않는다
+- 첫 콜드 스타트 측정은 재시작이 적용되기 전 옛 컨테이너가 응답한 값(3초)이라 버리고, 실행 상태가 바뀌는 것을 본 값을 적었다
+
+### 관찰
+
+- 채팅 칸의 `share` 버튼이 켜져 있다. S41 항목에 이미 있다
+- `import spaces` 뒤 프로세스가 비정상으로 끝나면 로그에 남지 않는다. 시작 오류를 찾을 때 자식 프로세스로 앱을 띄워 출력을 받아 원인을 봤다

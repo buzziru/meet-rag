@@ -28,6 +28,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - Hugging Face: `hf …` (pyenv shim에 가려 멈추면 `~/.local/bin/hf`로 부른다. 스킬·규칙: meet-rag 스킬 "Hugging Face 작업" 절, ADR-0087)
 - 화면 검증: `aside` (`%LOCALAPPDATA%\Aside\CLI\current\aside.exe`. 규칙: meet-rag 스킬 "화면 검증" 절, ADR-0089)
 - 채팅 앱(S35): `LANGSMITH_TRACING=true doppler run -- uv run --extra cpu --extra app python -m rag.app +exp=current retriever.rerank.enabled=false` (시작 약 2분, slices/35-chat-app.md)
+- Space 배포(S38): `deploy/space/`와 `src/`, `configs/`를 `ingyoun/meet-rag`에 `hf upload`. 구간 파일 `uv run python -m rag.speakers --export-spans`. Dataset 볼륨은 커밋 금지(D-79), slices/38-hf-space.md
 
 한글 출력이 깨지면 `PYTHONUTF8=1`로 실행한다. 파일은 `encoding="utf-8"`로 연다.
 
