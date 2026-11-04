@@ -67,7 +67,7 @@ diff에서 찾을 코드 경로:
 
 ### P6. 평가 질의의 외부 전송
 
-`summary_q`(질의 파일의 `query`)와 multi-doc 질의를 외부 API(Google AI Studio, OpenRouter, 생성 평가 judge용 opencode Go(D-38))나 Colab에 보내는 것은 처리 목적이면 허용된다(D-31). 이 항목이 막는 것은 `test` 질의의 전송이다. 평가 프로토콜(누수 방지) 때문이고 데이터 공개와는 별개다. split으로 거르지 않은 질의 파일이나 `test` 질의가 외부 호출·업로드 경로에 들어갈 수 있으면 위반이다. 예외는 P1의 단계별 종료 측정 1회다. 검색 단계 1회(S13)는 2026-10-19에 끝났다(D-39). 생성 단계 1회의 외부 전송(OpenRouter 생성, opencode Go judge)은 허용된다(SPEC 개정 D-53, CLAUDE.md 금지 절 외부 전송 줄). Colab으로 보내려면 업로드 허용을 새 ADR로 다시 둔 뒤에 한다(ADR-0045, PLAN 생성 단계 평가 항목). 질의 전체처럼 많이 보내는 실행이 SLICE·EXP 문서에 호출 수·소요 시간·비용과 사용자 승인 기록 없이 들어 있으면 보고한다. `context`만 보내는 생성 경로는 해당하지 않는다.
+`summary_q`(질의 파일의 `query`)와 multi-doc 질의를 외부 API(Google AI Studio, OpenRouter, 생성 평가 judge용 opencode Go(D-38), 추적용 LangSmith(D-72))나 Colab에 보내는 것은 처리 목적이면 허용된다(D-31). 이 항목이 막는 것은 `test` 질의의 전송이다. test 1회 실행 명령이나 절차에 `LANGSMITH_TRACING=false`가 없으면 보고한다(D-72). 평가 프로토콜(누수 방지) 때문이고 데이터 공개와는 별개다. split으로 거르지 않은 질의 파일이나 `test` 질의가 외부 호출·업로드 경로에 들어갈 수 있으면 위반이다. 예외는 P1의 단계별 종료 측정 1회다. 검색 단계 1회(S13)는 2026-10-19에 끝났다(D-39). 생성 단계 1회의 외부 전송(OpenRouter 생성, opencode Go judge)은 허용된다(SPEC 개정 D-53, CLAUDE.md 금지 절 외부 전송 줄). Colab으로 보내려면 업로드 허용을 새 ADR로 다시 둔 뒤에 한다(ADR-0045, PLAN 생성 단계 평가 항목). 질의 전체처럼 많이 보내는 실행이 SLICE·EXP 문서에 호출 수·소요 시간·비용과 사용자 승인 기록 없이 들어 있으면 보고한다. `context`만 보내는 생성 경로는 해당하지 않는다.
 
 ### P7. EXP 범위 밖 변경 (EXP 작업일 때)
 
