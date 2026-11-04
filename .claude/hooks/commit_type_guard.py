@@ -3,8 +3,8 @@
 규약(.claude/rules/git.md 커밋 절)에 없는 타입(`perf`)으로 커밋한 일이 두 번 있었다(사용자 지적
 2026-10-21). 규약 문서만으로는 커밋할 때 대조하지 않아, `-m`/`--message`로 준 첫 줄의
 `<타입>:`을 허용 목록과 대조한다. 메시지를 명령에서 찾지 못하면(`-F 파일`, `-F -`,
-`--amend --no-edit`, 편집기) 보지 않는다. `git commit`은 명령 자리에 있어야 하고 `-m`은 그 명령
-안에서만 찾는다. 뒤 명령의 `python -m`이나 heredoc 본문 글자를 메시지로 읽어 막았다(ADR-0088).
+`--amend --no-edit`, 편집기) 보지 않는다. `-m`은 `git commit`과 같은 명령 안, `-F` 앞에서만
+찾는다. 뒤 명령의 `python -m`이나 heredoc 본문 글자를 메시지로 읽어 막았다(ADR-0088).
 """
 
 import json
@@ -12,9 +12,9 @@ import re
 import sys
 
 TYPES = ("feat", "fix", "exp", "docs", "test", "refactor", "chore")
-# 명령 자리: 시작, 구분자 뒤, `$(`·`{` 안. 앞에 환경 변수 대입이 올 수 있다
-COMMIT = re.compile(r"(?:^|[;&|({\n])\s*(?:\w+=\S*\s+)*git\s+commit\b")
-COMMAND_END = re.compile(r"[;&|]|(?<!\\)\n")  # `\` 줄 잇기는 같은 명령이다
+COMMIT = re.compile(r"\bgit\s+commit\b")
+# `-m` 앞에 있으면 그 `-m`은 이 커밋의 메시지가 아니다: 명령 끝(`\`·백틱 줄 잇기는 제외)과 `-F`
+NOT_MESSAGE = re.compile(r"[;&|]|(?<![\\`])(?<![\\`]\r)\n|\s(?:-[a-zA-Z]*F|--file)(?:=|\s)")
 # -m "…", -m '…', -m "$(cat <<'EOF' …", PowerShell -m @'…'@, --message=…, -qm "…" 다음의 메시지 시작
 MESSAGE = re.compile(r"(?:\s-[a-zA-Z]*m|\s--message)(?:=|\s+)"
                      r"""(?:"\$\(cat\s+<<-?\s*'?\w+'?\s*\n|@["']\r?\n|["']?)""")
@@ -30,8 +30,7 @@ def commit_subject(command: str) -> str | None:
     if not commit:
         return None
     m = MESSAGE.search(command, commit.end())
-    end = COMMAND_END.search(command, commit.end())
-    if not m or (end and end.start() < m.start()):
+    if not m or NOT_MESSAGE.search(command[commit.end():m.start() + 1]):
         return None
     return command[m.end():].split("\n", 1)[0]
 

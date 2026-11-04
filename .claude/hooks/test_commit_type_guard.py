@@ -29,6 +29,11 @@ BAD = [
     ('GIT_AUTHOR_NAME=x git commit -m "perf: 환경 변수 뒤"', "perf"),
     ('git commit -q \\\n  -m "perf: 줄 잇기"', "perf"),
     ('git status && git commit -m "perf: && 뒤"', "perf"),
+    ('git commit -q `\n  -m "perf: 백틱 줄 잇기"', "perf"),
+    ('git commit -q \\\r\n  -m "perf: CRLF 줄 잇기"', "perf"),
+    ('if x; then git commit -m "perf: then 뒤"; fi', "perf"),
+    ('doppler run -- git commit -m "perf: 앞에 명령"', "perf"),
+    ('! git commit -m "perf: 부정"', "perf"),
 ]
 NOT_CHECKED = [
     "git commit --amend --no-edit",
@@ -36,7 +41,7 @@ NOT_CHECKED = [
     "git log --oneline -3",
     'grep -n "git commit" docs/x.md',
 ]
-# 실제로 막혔던 형태(ADR-0088): 뒤 명령의 -m, heredoc 본문의 글자, 다른 명령의 인자에 든 글자
+# 실제로 막혔던 형태(ADR-0088): 뒤 명령의 -m, heredoc 본문의 글자, -F 뒤 문자열의 글자
 FALSE_POSITIVES = [
     "git commit -F - <<'EOF'\nchore: 요약\nEOF\nuv run python -m rag.x",
     "git commit -F msg.txt && uv run python -m rag.x",
