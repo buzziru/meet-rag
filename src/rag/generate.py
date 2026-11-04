@@ -31,7 +31,6 @@ from rag.index import (
     load_model,
     require_env,
 )
-from rag.ingest import iter_labels
 from rag.llm import answer_start, split_thought
 from rag.retrieve import (
     ChunkStore,
@@ -41,7 +40,7 @@ from rag.retrieve import (
     read_query_emb,
     read_rerank_scores,
 )
-from rag.speakers import check_mode, chunk_speakers, doc_spans, render
+from rag.speakers import check_mode, chunk_speakers, load_spans, render
 
 CONTEXT_META = ["date", "committee_name", "meeting_number", "session_number", "original"]
 
@@ -137,8 +136,7 @@ class Pipeline:
         self.speakers = check_mode(cfg.speakers.mode)
         if self.speakers != "off":
             self.doc_speakers = {d["doc_id"]: d for d in corpus_meta(cfg)}
-            self.spans = doc_spans(iter_labels(ROOT / cfg.paths.raw_dir),
-                                   tuple(cfg.ingest.name_titles), cfg.speakers.repeat_min_chars)
+            self.spans = load_spans(cfg)
         # 대기·재시도는 SDK 기본값(600초, 2회) 대신 generator 설정 값(D-57 결정 1, 리뷰 G3-1)
         self.client = wrap_openai(OpenAI(base_url=cfg.generator.base_url,
                                          api_key=require_env(cfg.generator.api_key_env),

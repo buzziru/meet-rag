@@ -51,6 +51,8 @@ paths:
   queries: data/processed/queries_summary_q.jsonl
   # 질의 조건 추출용 값 사전. 코퍼스 문서 필드에서만 만든다(S10, rag.meta_dict)
   meta_dict: data/processed/meta_dict.json
+  # 발언 구간만 내보낸 파일. 배포에 라벨 대신 올린다(S38, rag.speakers --export-spans)
+  speaker_spans: data/processed/speaker_spans.json
   # 질의 조건 추출 결과(S11, rag.conditions). 세트마다 파일 하나
   conditions: data/conditions/${search.queries}.jsonl
   # dev 질의만 내보낸 파일. Colab 질의 임베딩에 올린다(D-07)
@@ -204,6 +206,12 @@ app:
   sidebar_width: 400
   # 동시에 처리하는 질의 수. 검색 단계가 여러 스레드에서 안전한지 재지 않아 1로 둔다
   concurrency: 1
+
+# Space 배포(S38). 진입점 deploy/space/app.py가 speakers_from_file만 켠다
+deploy:
+  space: ingyoun/meet-rag
+  dataset: ingyoun/meet-rag-data
+  speakers_from_file: false
 
 # 청크 크기 비교. overlap은 크기의 1/8
 chunk_sweep:
