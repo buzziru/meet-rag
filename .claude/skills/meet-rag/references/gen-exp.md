@@ -19,7 +19,7 @@ B 흐름에서 EXP 문서 판정 기준이 SPEC "생성 단계 평가 > 판정"(
 
 ## B3 실행
 
-`rag.*`는 `doppler run -- uv run python -m …`로 부르고, 대량 실행이라 `LANGSMITH_TRACING=false`를 붙인다(D-50).
+`rag.*`는 `doppler run -- uv run python -m …`로 부른다. LangSmith 추적은 `doppler run` 앞에 붙인 값으로 정한다. gen-small은 `LANGSMITH_TRACING=true`(디버깅), gen-full과 반복 측정은 `false`(대량 실행, 무료 계정 월 한도)다. 쓰다가 월 한도 초과가 다시 나면 gen-small도 끈다(D-71).
 
 1. gen-small 작동 확인: `rag.gen_eval.generate +exp=expNNN gen_eval.queries=dev-small gen_eval.n=20` → `rag.gen_eval.judge`(같은 override) → `rag.gen_eval.report`(같은 override). 생성·judge 오류가 없는지, 바꾼 설정이 생성 기록에 들어갔는지(프롬프트 버전, 근거), report의 judge 형식 오류·끝나지 않은 응답 수를 본다. 점수는 판정에 쓰지 않는다
    - 실행 오류나 설정 누락이 있으면 gen-full로 넘어가지 않고, 고치면서 사용자에게 보고하고 같은 확인을 다시 한 뒤 gen-full로 간다. 다시 승인받지는 않는다

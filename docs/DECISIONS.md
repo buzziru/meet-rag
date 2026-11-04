@@ -797,6 +797,6 @@
 
 - 결정(사용자 결정 2026-11-04, 이슈 #201): 생성 평가 전체와 반복 측정 같은 대량 실행은 11월 이후에도 `LANGSMITH_TRACING=false`로 끈다. gen-small, 단건 실행(`rag.generate` 등), 배포에서는 켠다. 쓰다가 월 한도 초과가 다시 나면 다시 끈다
 - 이유: LangSmith 무료 계정에는 월 한도가 있고, 2026-10-26에 한도를 넘긴 것이 대량 실행이었다(D-50 결정 3). 추적은 디버깅에 쓰고, 디버깅에 쓰는 단건·gen-small·배포 실행은 호출이 적어 켜 둘 수 있다(사용자). 2026-11-02·03 실행 중 gen-full과 재채점을 끈 것은 이 규칙과 맞고, 같은 기간 gen-small도 껐지만 이 결정부터 켠다
-- 바뀌는 것: D-50 결정 3. 코드와 config는 바뀌지 않는다. `.claude/skills/meet-rag/references/gen-exp.md:22`는 gen-small까지 끄게 적혀 있어 다음 하네스 수정에서 고친다(PLAN)
+- 바뀌는 것: D-50 결정 3. 코드와 config는 바뀌지 않는다. `.claude/skills/meet-rag/references/gen-exp.md:22`는 gen-small까지 끄게 적혀 있어 다음 하네스 수정에서 고친다(PLAN) → ADR-0083
 - 감수하는 것: 대량 실행에는 호출별 추적이 없어, 특정 질의의 지연·토큰은 실행 기록(`data/gen_eval/runs/`, judge 기록)으로만 본다
 - 날짜: 2026-11-04
