@@ -28,6 +28,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - Hugging Face: `hf …` (pyenv shim에 가려 멈추면 `~/.local/bin/hf`로 부른다. 스킬·규칙: meet-rag 스킬 "Hugging Face 작업" 절, ADR-0087)
 - 화면 검증: `aside` (`%LOCALAPPDATA%\Aside\CLI\current\aside.exe`. 규칙: meet-rag 스킬 "화면 검증" 절, ADR-0089)
 - 채팅 앱(S35): `LANGSMITH_TRACING=true doppler run -- uv run --extra cpu --extra app python -m rag.app +exp=current retriever.rerank.enabled=false` (시작 약 2분, slices/35-chat-app.md)
+- Space 배포(S38): `deploy/space/`와 `src/`, `configs/`를 `ingyoun/meet-rag`에 `hf upload`. 구간 파일 `uv run python -m rag.speakers --export-spans`. Dataset 볼륨은 커밋 금지(D-79), slices/38-hf-space.md
 
 한글 출력이 깨지면 `PYTHONUTF8=1`로 실행한다. 파일은 `encoding="utf-8"`로 연다.
 
@@ -38,7 +39,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - `docs/SPEC.md`의 평가 프로토콜은 사용자 승인 없이 바꾸지 않는다
 - 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다. 채택마다 바뀌는 값(지금 기준 EXP, 프롬프트 버전, 기준 결과 경로)도 명령·테스트 기대값·하네스 절차 문서에 적지 않는다. 지금 기준은 별칭 `configs/exp/current.yaml`과 DECISIONS 머리 줄 두 곳에만 두고, 명령은 `+exp=current`, 테스트는 config에서 값을 읽고, 문서는 머리 줄을 가리킨다(PR #180 리뷰, ADR-0076)
 - HF에서 받는 모델·토크나이저(임베딩, 리랭커 등)는 `configs/`에 revision(커밋 해시)을 고정하고, 불러오는 코드는 revision을 `rag.index.pinned(...)`로만 넘긴다(커밋 해시가 아니면 받기 전에 멈춤). 고정하지 않으면 같은 설정이 다른 가중치를 받아 재현되지 않는다. `tests/test_revisions.py`가 점검한다. API로 부르는 생성·judge 모델은 고정할 수 없어 모델 이름과 제공자를 기록한다(D-46)
-- AI Hub 데이터(코퍼스·질의·라벨·분할)는 처리 목적으로 외부 API(Google AI Studio, OpenRouter, 생성 평가 judge용 opencode Go(D-38), 추적용 LangSmith(D-72), 화면 검증용 Aside(D-77, 평가 질의 제외))와 Colab에 보낼 수 있다. 허용 처리처 목록은 이 줄에만 두고(`docs/SPEC.md` 자원 제약과 `protocol-guard` P6은 이 줄을 가리킨다), 더하거나 바꾸려면 사용자 승인 후 DECISIONS에 기록한다(D-72). 금지하는 것은 공개다: 저장소 커밋, 노트북·로그·문서처럼 저장소에 남는 곳에 질의 원문을 대량으로 남기기, 외부에서 내려받을 수 있게 두기(D-31). 앱 화면에서 코퍼스 문서와 근거 원문(발언자 표시 포함)을 읽는 것은 이 금지 밖이고, 생성 요약 라벨(`summary_q`, `summary_a`)과 평가 질의는 화면에 보이지 않는다(D-74). `test` 질의는 평가 프로토콜에 따라 단계(검색·생성)마다 종료 시 사용자 지시 1회 실행에서만 읽고 보낸다. test 1회 실행은 `LANGSMITH_TRACING=false`로 한다(D-72). 질의 전체처럼 많이 보내는 실행은 호출 수·소요 시간·비용을 보고하고 사용자 승인 후에 한다
+- AI Hub 데이터(코퍼스·질의·라벨·분할)는 처리 목적으로 외부 API(Google AI Studio, OpenRouter, 생성 평가 judge용 opencode Go(D-38), 추적용 LangSmith(D-72), 화면 검증용 Aside(D-77, 평가 질의 제외), 배포용 Hugging Face 비공개 저장소(D-79, 라벨·질의 제외))와 Colab에 보낼 수 있다. 허용 처리처 목록은 이 줄에만 두고(`docs/SPEC.md` 자원 제약과 `protocol-guard` P6은 이 줄을 가리킨다), 더하거나 바꾸려면 사용자 승인 후 DECISIONS에 기록한다(D-72). 금지하는 것은 공개다: 저장소 커밋, 노트북·로그·문서처럼 저장소에 남는 곳에 질의 원문을 대량으로 남기기, 외부에서 내려받을 수 있게 두기(D-31). 앱 화면에서 코퍼스 문서와 근거 원문(발언자 표시 포함)을 읽는 것은 이 금지 밖이고, 생성 요약 라벨(`summary_q`, `summary_a`)과 평가 질의는 화면에 보이지 않는다(D-74). `test` 질의는 평가 프로토콜에 따라 단계(검색·생성)마다 종료 시 사용자 지시 1회 실행에서만 읽고 보낸다. test 1회 실행은 `LANGSMITH_TRACING=false`로 한다(D-72). 질의 전체처럼 많이 보내는 실행은 호출 수·소요 시간·비용을 보고하고 사용자 승인 후에 한다
 - 외부 GPU(Colab) 실행과 유료 API(OpenRouter) 호출은 예상 시간·비용을 보고하고 사용자 승인 후에만 한다. dev-small은 Jupyter 노트북(`notebooks/`)에서 자유롭게 실행하되, GPU가 필요한 dev-small 임베딩도 Colab 승인 대상이다
 - `data/`와 `.env`는 어떤 형태로도 커밋하지 않는다 (AI Hub 재배포 제한)
 - `owner/`는 사용자가 의도를 전달하는 메모다. 읽고 의도를 파악하되 어떤 문서·코드에서도 참조하지 않고, 사용자 요청 없이 수정하지 않는다
@@ -49,7 +50,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 베이스라인 조각·실험 백로그: `docs/PLAN.md`(진행 중·대기 항목과 최신 순서), 완료 기록: `docs/PLAN-done.md`
 - 조각 지시서: `docs/slices/NN-이름.md`
 - 실험 지시서: `docs/experiments/EXP-NNN.md` (config는 `configs/exp/expNNN.yaml`)
-- 실험 결과 요약: `docs/EXPERIMENTS.md`
+- 실험별 판정 목록: `docs/EXPERIMENTS.md`(EXP 초안, 다음 실험 결정, 단계 종료 점검 때 읽는다)
 - 채택 설정·방향 결정: `docs/DECISIONS.md`
 - docs 기록 규약(문서 종류별 목적·필수 절·고치는 방식, 결정 작성과 바뀐 앞 결정 표시, 당시 기록 보강, 단계 종료 정합 점검): `docs/CLAUDE.md`. `docs/` 문서를 고치거나 DECISIONS에 적힌 대상(config 값, 코드 동작, 명령)을 바꾸기 전에 읽는다. 하위 폴더 CLAUDE.md는 Read·Write·Edit로 그 폴더 파일을 다룰 때만 불러와지고, 셸로 고치거나 docs를 열지 않는 작업에는 불러와지지 않을 수 있다
 - 구현·테스트 규약: `src/CLAUDE.md`, `tests/CLAUDE.md`. `src/`·`tests/`를 고치기 전에 읽는다(셸로 고치면 불러와지지 않을 수 있다)
@@ -61,7 +62,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 작업 PR을 올리기 전에 작업 브랜치에서 한다.
 
 1. 끝난 실행이 있으면 평가하고 EXP 문서의 결과·결론을 채운다
-2. 판정한 실험을 EXPERIMENTS.md에 한 줄 추가하고, 채택이면 DECISIONS.md를 갱신한다
+2. 판정한 실험과 답변 생성 설정을 바꾼 기준 EXP config(판정 실험이 아니어도)를 EXPERIMENTS.md에 한 줄 추가하고, 채택이면 DECISIONS.md를 갱신한다
 3. PLAN.md 백로그 상태를 갱신하고 우선순위를 다시 정한다. 끝난 항목이 PLAN에 남지 않았는지 확인한다(옮기는 방식: `docs/CLAUDE.md` PLAN 절)
 
 핸드오프는 사용자가 요청할 때 한다.

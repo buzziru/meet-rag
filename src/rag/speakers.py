@@ -7,6 +7,7 @@
 
 uv run python -m rag.speakers [--gen <생성 기록.jsonl>]: 채움 비율과 발언 일치 수, 생성 기록을 주면
 그 근거에 붙는 겹침 표지 수를 출력한다. 파일은 쓰지 않는다.
+uv run python -m rag.speakers --export-spans: 배포에 올릴 구간 파일을 쓴다(S38).
 """
 
 import argparse
@@ -14,7 +15,7 @@ import json
 from collections import Counter
 from collections.abc import Iterable
 
-from rag.index import ROOT, corpus_meta, load_cfg
+from rag.index import ROOT, check_basis, corpus_meta, load_cfg, write_guarded
 from rag.ingest import SPEAKER_KEYS, iter_labels, make_doc_id, speaker
 
 ROLES = {"question": "questioner", "answer": "answerer"}  # 라벨 발언 키 → 화자 키 접두사
@@ -85,6 +86,35 @@ def doc_spans(records: Iterable[tuple[str, dict]], titles: tuple[str, ...],
     return out
 
 
+def span_basis(cfg) -> dict:
+    """구간 파일을 만든 설정. 읽을 때 대조한다(S38)."""
+    return {"name_titles": list(cfg.ingest.name_titles),
+            "repeat_min_chars": cfg.speakers.repeat_min_chars}
+
+
+def label_spans(cfg) -> dict[str, list[dict]]:
+    return doc_spans(iter_labels(ROOT / cfg.paths.raw_dir), tuple(cfg.ingest.name_titles),
+                     cfg.speakers.repeat_min_chars)
+
+
+def load_spans(cfg) -> dict[str, list[dict]]:
+    """문서별 발언 구간. 배포는 라벨(test 질의 포함) 대신 내보낸 구간 파일을 읽는다(S38)."""
+    if not cfg.deploy.speakers_from_file:
+        return label_spans(cfg)
+    path = ROOT / cfg.paths.speaker_spans
+    check_basis(path.with_name(path.name + ".basis.json"), span_basis(cfg))
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def export_spans(cfg) -> None:
+    """구간과 만든 설정을 파일로 쓴다. 발언 원문과 라벨의 질의·요약은 담지 않는다(S38)."""
+    path = ROOT / cfg.paths.speaker_spans
+    state = write_guarded(path, json.dumps(label_spans(cfg), ensure_ascii=False), False)
+    write_guarded(path.with_name(path.name + ".basis.json"),
+                  json.dumps(span_basis(cfg), ensure_ascii=False), False)
+    print(f"-> {cfg.paths.speaker_spans} ({state})")
+
+
 def chunk_speakers(doc: dict, spans: list[dict], start: int, end: int, mode: str) -> dict:
     """청크 [start, end)의 speakers 필드. head는 문서 화자 목록만, marks는 청크 안 발언 구간도 둔다.
 
@@ -123,8 +153,12 @@ def count_found(found: Counter, role: str, comment: str, context: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="발언자 정보 채움 비율과 겹침 표지 수")
     ap.add_argument("--gen", help="생성 기록(jsonl). 근거마다 겹침 표지가 붙는지 센다")
+    ap.add_argument("--export-spans", action="store_true", help="구간 파일을 쓰고 끝낸다(S38)")
     args = ap.parse_args()
     cfg = load_cfg()
+    if args.export_spans:
+        export_spans(cfg)
+        return
     docs = corpus_meta(cfg)
     n = len(docs)
     for k, v in sorted(fill_counts(docs).items()):

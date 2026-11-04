@@ -5,6 +5,7 @@
 """
 
 import sys
+import time
 from collections.abc import Iterator
 
 from langsmith.run_trees import get_cached_client
@@ -177,8 +178,12 @@ def main() -> None:
     if cfg.retriever.get("rerank") and cfg.retriever.rerank.enabled:
         raise SystemExit("앱에는 실시간 재정렬이 없다(S39). retriever.rerank.enabled=false로 "
                          "실행한다")
+    start = time.perf_counter()
     pipe = Pipeline(cfg)
+    loaded = time.perf_counter()
     pipe.embed(cfg.app.title)  # 임베딩 모델을 먼저 불러 첫 질의가 기다리지 않게 한다
+    print(f"시작: 인덱스·코퍼스 {loaded - start:.1f}초, 임베딩 모델 "
+          f"{time.perf_counter() - loaded:.1f}초", flush=True)
     demo = build(cfg, pipe, Corpus(cfg))
     demo.queue(default_concurrency_limit=cfg.app.concurrency).launch(css=CSS)
 
