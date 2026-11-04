@@ -82,11 +82,14 @@ def test_refusal_split_counts_variant_as_refusal():
     assert split("다음과 같습니다.\n" + VARIANT)[0] == "full"
     kind, refused, rest = split("A입니다[1]. " + VARIANT)
     assert kind == "partial" and refused == [VARIANT] and rest == "A입니다[1]."
-    # 조각 하나만 든 문장, 발언을 전하는 문장은 거부가 아니다
-    ans = "자료를 찾지 못했다고 답했습니다[1]."
-    assert split(ans) == (None, [], ans)
+    # 조각 하나만 든 문장, 인용을 붙여 근거를 전하는 문장은 거부가 아니다
+    for ans in ["자료를 찾지 못했다고 답했습니다[1].",
+                "제공된 회의록에서 김 위원은 대체 재원을 찾지 못했다고 답했습니다[1].",
+                "찾지 못했던 자료를 제공된 회의록에서 확인했습니다[1]."]:
+        assert split(ans) == (None, [], ans)
     # 조각을 비우면 지정 문구만 거부로 본다(빈 조건이 모든 문장을 거부로 만들지 않는다)
     assert refusal_split(VARIANT, REFUSAL, FILLERS, []) == (None, [], VARIANT)
+    assert refusal_split(VARIANT, REFUSAL, FILLERS, [""]) == (None, [], VARIANT)
 
 
 def test_unlisted_refusal_only_without_phrase():
@@ -108,7 +111,7 @@ def test_unlisted_table_counts_variant_by_refusal_kind(tmp_path):
                                        ensure_ascii=False) + "\n" for q, a in answers.items()),
                     encoding="utf-8")
     cfg = load_cfg([f"paths.gen_runs={path}"])
-    rec = {"refusal": REFUSAL, "gen_recipe_sha256": sha({"a": 1})}
+    rec = {"refusal": REFUSAL, "gen_recipe_sha256": sha({"a": 1}), "unlisted_refusal": UNLISTED}
     none = {"score": None, "error": "진술 없음"}
     rows = [{"qid": "q1", "refusal": "full", "judge_recipe": rec},
             {"qid": "q2", "refusal": "partial", "faithfulness": {"score": 1.0},
@@ -117,6 +120,13 @@ def test_unlisted_table_counts_variant_by_refusal_kind(tmp_path):
             # S34 전 결과: 변형 문장을 거부로 세지 않았다
             {"qid": "q4", "refusal": None, "faithfulness": none, "judge_recipe": rec}]
     assert [k for _, k in unlisted_table(cfg, rows)] == [1, 1, 1, 1]
+    # 판별 전 결과(레시피에 키 없음)는 변형 문장이 든 답변을 모두 거부로 세지 않음에 둔다
+    old = {k: v for k, v in rec.items() if k != "unlisted_refusal"}
+    assert [k for _, k in unlisted_table(cfg, [{**r, "judge_recipe": old} for r in rows])] == [
+        0, 0, 3, 1]
+    # 조각은 지금 config가 아니라 그 결과의 레시피에서 읽는다
+    moved = load_cfg([f"paths.gen_runs={path}", "gen_eval.unlisted_refusal=[absent]"])
+    assert [k for _, k in unlisted_table(moved, rows)] == [1, 1, 1, 1]
     # 진술 없음은 judge 형식 오류가 아니라 뺀 이유로 센다
     assert criterion(rows[1:], "faithfulness") == ([1.0], {"no_statements": 2}, 0)
     # 다른 생성 기록이거나 없으면 이 표만 내지 않는다(report의 나머지는 judge 결과만으로 낸다)
@@ -595,6 +605,8 @@ def test_judge_recipe_records_code_checks_and_ignores_gen_commit():
     a = {"git_commit": "A", "git_dirty": False, "model": "m"}
     rec = judge_recipe(cfg, [a, {**a, "git_commit": "B"}])
     assert rec["chunk_key_min"] == cfg.gen_eval.chunk_key_min and rec["refusal"]
+    # 이 키가 없으면 compare가 판별이 다른 결과를 멈추지 않는다(S34)
+    assert rec["unlisted_refusal"] == list(cfg.gen_eval.unlisted_refusal)
     assert rec["gen_commits"] == ["A", "B"] and rec["git_commit"]
     # 커밋만 다른 생성 기록은 같은 레시피로 본다(이어 쓰기 done_qids와 같은 규칙, S15 결정 사항 2)
     assert rec["gen_recipe_sha256"] == judge_recipe(cfg, [{**a, "git_commit": "C"}])[

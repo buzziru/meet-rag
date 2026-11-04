@@ -134,10 +134,12 @@ def unlisted_table(cfg, rows: list[dict]) -> list[tuple[str, int]] | str:
     if isinstance(gens, str):
         return gens
     rec = rows[0]["judge_recipe"]
-    parts = list(cfg.gen_eval.unlisted_refusal)
+    # 그 결과를 만든 판별로 센다. 키가 없으면 판별 전 결과라 변형 문장을 거부로 세지 않았다
+    judged = "unlisted_refusal" in rec
+    parts = rec["unlisted_refusal"] if judged else list(cfg.gen_eval.unlisted_refusal)
     variant = {r["qid"]: unlisted_refusal(gens[r["qid"]]["answer"], rec["refusal"], parts)
                for r in rows}
-    kinds = Counter(r["refusal"] for r in rows if variant[r["qid"]])
+    kinds = Counter(r["refusal"] if judged else None for r in rows if variant[r["qid"]])
     silent = sum(not variant[r["qid"]]
                  and (r.get("faithfulness") or {}).get("error") == "진술 없음" for r in rows)
     return [("변형 거부, 전체 거부로 셈", kinds["full"]),
