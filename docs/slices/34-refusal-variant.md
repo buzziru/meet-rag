@@ -68,13 +68,13 @@ LANGSMITH_TRACING=false doppler run -- uv run python -m rag.gen_eval.judge +exp=
 
 ## 결과 (2026-11-04)
 
-커밋: 구현 1e3cdf7
+커밋: 구현 1e3cdf7, self-review 반영 12de73a. 기준 재채점은 1e3cdf7로 했다
 
 결정 사항: 1은 부분 거부까지, 2와 3은 승인(사용자 2026-11-04). D-73에 적었다.
 
 - 완료 기준 1: `uv run pytest -q` 420개 통과, `uv run ruff check .` 통과
 - 완료 기준 2\~4: `test_refusal_split_counts_variant_as_refusal`, `test_variant_refusal_is_scored_like_listed_refusal`, `test_gen_compare_main_stops_on_different_refusal_rule`
-- 완료 기준 5: `refusal_split`이 조각을 무시하는 사본에서 앞 두 테스트가, `JUDGE_KEYS`에서 키를 뺀 사본에서 compare 테스트가 실패했다
+- 완료 기준 5: `refusal_split`이 조각을 무시하는 사본에서 앞 두 테스트가, `JUDGE_KEYS`에서 키를 뺀 사본에서 compare 테스트가 실패했다. self-review 반영 뒤 `judge_recipe`에서 키를 뺀 사본과 인용 조건을 없앤 사본에서도 해당 테스트가 실패했다
 - 기준 재계산: 330개 채점, 새 judge 호출 11회, 저장 응답 2,484회. 연결 오류 1건은 실패 항목 재처리로 끝났다
 - 새 기준 결과: `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v8-dev-full-spk-marks-deepseek_go_mixed-j_v13-s34.jsonl`, SHA-256 `81c6f0da06adc9baaf1bd363604ab384cc05282240b56da4b88e5225497a9087`. 옛 결과 파일은 그대로 둔다
 - 완료 기준 7: report 형식 관찰 표는 전체 거부로 셈 3, 부분 거부로 셈 5, 거부로 세지 않음 0, 진술 없음·변형 거부 아님 0이다. 전체 거부 6, 부분 거부 23이다
