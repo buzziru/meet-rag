@@ -29,4 +29,4 @@
 - `deploy`: S38에서 코퍼스와 인덱스를 올리기 전에 HF를 허용 처리처에 더하는 승인(D-72 절차). 비공개 Dataset 저장소 권고, 약 1.8GB
 - `deploy`: Space 작업 전에 PowerShell에서 `& "$HOME\.local\bin\hf.exe" auth login`(쓰기 권한 토큰)
 - LangSmith 프로젝트가 비공개인지 화면에서 확인한다. 추적에 질의와 근거가 들어가므로 공개면 D-31 위반이다(D-72 감수하는 것). 저장소에서 확인할 수 없다
-- `main`: 디스크 여유 14.58G. `uv cache prune`은 81M만 줄었다. 3.66\~5.55G를 줄이려면 `uv cache clean`이고 다음 설치 때 패키지를 다시 받는다(다른 프로젝트 포함). 할지 정한다. `data/index/kure-v1-fixed-512-64/full`(0.73G)은 재구축에 Colab 비용이 들어 그대로 뒀다
+- `main`: 디스크 여유 18.09G(옛 KURE-v1 스냅샷, 전역 HF hub, uv 캐시를 지움). `data/index/kure-v1-fixed-512-64/full`(0.73G)은 재구축에 Colab 비용이 들어 그대로 뒀다. 더 필요하면 프로젝트 밖 약 190G를 점검한다
