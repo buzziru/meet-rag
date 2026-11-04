@@ -4,7 +4,15 @@ import yaml
 from rag.gen_eval.judge import check_speakers
 from rag.index import ROOT, load_cfg
 from rag.ingest import make_doc_id
-from rag.speakers import check_mode, chunk_speakers, doc_spans, fill_counts, render
+from rag.speakers import (
+    check_mode,
+    chunk_speakers,
+    doc_spans,
+    export_spans,
+    fill_counts,
+    load_spans,
+    render,
+)
 
 TITLES = ("위원", "장관")
 
@@ -15,6 +23,46 @@ def label(context, q, a, qn="홍길동 위원", an="김철수", ap="장관", aa=
         "question": {"comment": q}, "answer": {"comment": a},
         "questioner_name": qn, "questioner_position": "위원", "questioner_affiliation": "",
         "answerer_name": an, "answerer_position": ap, "answerer_affiliation": aa})
+
+
+def spans_cfg(tmp_path, monkeypatch):
+    """합성 라벨을 읽는 설정. 구간 파일은 tmp_path에 쓴다."""
+    ctx = "가나다 질문입니다. 라마 답변입니다."
+    rec = label(ctx, "질문입니다.", "답변입니다.")
+    rec[1]["context_summary"] = {"summary_q": "요약질의", "summary_a": "요약답변"}
+    empty = label("발언이 본문에 없다", "다른 문장", "또 다른 문장")
+    monkeypatch.setattr("rag.speakers.iter_labels", lambda _: [rec, empty])
+    cfg = load_cfg()
+    cfg.paths.speaker_spans = str(tmp_path / "spans.json")
+    return cfg, ctx
+
+
+def test_exported_spans_equal_label_spans_without_text(tmp_path, monkeypatch):
+    cfg, _ = spans_cfg(tmp_path, monkeypatch)
+    export_spans(cfg)
+    cfg.deploy.speakers_from_file = True
+    got = load_spans(cfg)
+    cfg.deploy.speakers_from_file = False
+    assert got == load_spans(cfg)
+    assert [] in got.values()  # 구간이 빈 문서도 남는다
+    text = (tmp_path / "spans.json").read_text(encoding="utf-8")
+    for leaked in ("질문입니다", "답변입니다", "요약질의", "요약답변", "summary"):
+        assert leaked not in text
+
+
+def test_labels_are_read_unless_deploy_asks_for_file(tmp_path, monkeypatch):
+    cfg, ctx = spans_cfg(tmp_path, monkeypatch)
+    assert not (tmp_path / "spans.json").exists()
+    assert load_spans(cfg)[make_doc_id("000001", ctx)][0]["role"] == "question"
+
+
+def test_span_file_from_other_settings_stops(tmp_path, monkeypatch):
+    cfg, _ = spans_cfg(tmp_path, monkeypatch)
+    export_spans(cfg)
+    cfg.deploy.speakers_from_file = True
+    cfg.speakers.repeat_min_chars += 1
+    with pytest.raises(SystemExit, match="지문"):
+        load_spans(cfg)
 
 
 def test_doc_spans_finds_every_position_with_qa_speaker():
