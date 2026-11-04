@@ -169,6 +169,45 @@ def test_metadata_ignores_partial_dates_and_bases_committee():
     assert metadata_mismatches("3월 5일 국방위원회 답변입니다[1].", contexts, {"국방위원회"}) == []
 
 
+def test_metadata_reads_spaced_doc_date():
+    contexts = [ctx(1, date="2001年 9月 18日(火)", committee="재정경제위원회-제2반")]
+    assert metadata_mismatches("2001년 9월 18일 재정경제위원회 회의입니다[1].", contexts,
+                               {"재정경제위원회"}) == []
+
+
+def test_metadata_accepts_committee_abbreviation_in_cited_name():
+    contexts = [ctx(1, committee="감사원장(전윤철)임명동의에관한인사청문특별위원회")]
+    names = {"인사청문특별위원회", "국방위원회"}
+    assert metadata_mismatches("인사청문특별위원회 회의입니다[1].", contexts, names) == []
+    got = metadata_mismatches("국방위원회 회의입니다[1].", contexts, names)
+    assert [(m["field"], m["value"]) for m in got] == [("committee", "국방위원회")]
+
+
+def test_metadata_counts_other_date_only_without_meeting_date_or_body():
+    meeting = "2018년10월16일(화)"
+    # 회의 일자를 함께 쓴 문장의 다른 날짜는 내용이다
+    ans = "2018년 10월 16일 회의에서 2019년 1월 1일 자로 전환된다고 답했습니다[1]."
+    assert metadata_mismatches(ans, [ctx(1, date=meeting)], set()) == []
+    # 근거 본문에 있는 날짜는 근거에서 옮긴 것이다
+    ans = "2003년 1월 13일 규칙이 공표되었습니다[1]."
+    cited = [ctx(1, date=meeting, text="2003년 1월 13일 공표")]
+    assert metadata_mismatches(ans, cited, set()) == []
+    # 둘 다 아니면 불일치다
+    got = metadata_mismatches(ans, [ctx(1, date=meeting)], set())
+    assert [(m["field"], m["value"]) for m in got] == [("date", "2003-01-13")]
+
+
+def test_judge_record_reports_metadata_with_s37_rules():
+    replies = {"statements": {"statements": ["s1"]}, "verdicts": verdicts_reply(["s1"], [1]),
+               "relevance": {"label": "답함"}}
+    answer = ("2001년 9월 18일 회의에서 2019년 1월 1일 시행을 말했습니다[1]. "
+              "2003년 1월 13일 회의였습니다[1].")
+    contexts = [ctx(1, date="2001年 9月 18日(火)")]
+    out = judge_record.__wrapped__(RecordingJudge(replies), gen(answer, contexts),
+                                   {"doc_id": "none", "answer_comment": "발언"}, judge_cfg(), set())
+    assert [(m["field"], m["value"]) for m in out["metadata"]] == [("date", "2003-01-13")]
+
+
 def test_gold_position():
     contexts = [ctx(1, "a"), ctx(2, "b")]
     assert gold_position(contexts, "b") == 2 and gold_position(contexts, "z") is None
