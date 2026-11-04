@@ -2,7 +2,7 @@
 
 import re
 
-from rag.conditions import DATE, DOC_DATE, committee_base, full_year
+from rag.conditions import DATE, DOC_DATE, full_year
 
 CITE = re.compile(r"\[(\d+)\]")
 SENT_END = re.compile(r"(?<=[.!?])\s+|\n+")
@@ -74,13 +74,21 @@ def citation_check(answer: str, k: int, fillers: list[str]) -> dict:
 
 
 def doc_date(date: str) -> str | None:
-    m = DOC_DATE.match(date or "")
+    m = DOC_DATE.match(SPACE.sub("", date or ""))  # 옛 회의록은 "2001年 9月 18日"처럼 띄어 쓴다
     return f"{m[1]}-{int(m[2]):02d}-{int(m[3]):02d}" if m else None
+
+
+def full_dates(text: str) -> list[str]:
+    """글에 나온 날짜 중 연·월·일을 모두 쓴 것."""
+    return [f"{full_year(y4, y2)}-{int(mo):02d}-{int(d):02d}"
+            for y4, y2, mo, d in DATE.findall(text) if mo and d]
 
 
 def metadata_mismatches(answer: str, contexts: list[dict], committees: set[str]) -> list[dict]:
     """인용 문장에 나온 회의 일자(연·월·일을 모두 쓴 것)와 위원회 이름이 그 문장이 인용한 근거의
-    date·committee_name과 맞지 않는 경우(S14 결정 3). 인용이 없거나 근거 번호 밖이면 보지 않는다."""
+    date·committee_name과 맞지 않는 경우(S14 결정 3). 인용이 없거나 근거 번호 밖이면 보지 않는다.
+    회의 일자를 함께 쓴 문장의 다른 날짜와 인용 근거 본문에 있는 날짜는 내용으로 보고, 위원회는
+    근거 이름 안에 들어 있으면 약칭으로 본다(S37)."""
     by_n = {c["n"]: c for c in contexts}
     names = sorted(committees, key=len, reverse=True)
     out = []
@@ -89,17 +97,16 @@ def metadata_mismatches(answer: str, contexts: list[dict], committees: set[str])
         if not cited:
             continue
         dates = {doc_date(c["date"]) for c in cited}
-        for y4, y2, mo, d in DATE.findall(s):
-            if mo and d:
-                got = f"{full_year(y4, y2)}-{int(mo):02d}-{int(d):02d}"
-                if got not in dates:
-                    out.append({"field": "date", "value": got, "sentence": s})
-        bases = {committee_base(c["committee_name"]) for c in cited}
+        written = full_dates(s)
+        if not dates.intersection(written):
+            body = {d for c in cited for d in full_dates(c["text"])}
+            out += [{"field": "date", "value": got, "sentence": s}
+                    for got in written if got not in body]
         rest = s
         for name in names:  # 긴 이름부터 찾고 찾은 자리는 지워 짧은 이름이 겹쳐 잡히지 않게 한다
             if name in rest:
                 rest = rest.replace(name, " ")
-                if name not in bases:
+                if not any(name in c["committee_name"] for c in cited):
                     out.append({"field": "committee", "value": name, "sentence": s})
     return out
 
