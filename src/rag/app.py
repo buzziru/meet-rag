@@ -1,6 +1,6 @@
 """채팅 화면. 자유 질의를 검색해 답변을 스트리밍으로 보여 주고 끝나면 근거를 붙인다.
 
-명세는 docs/slices/35-chat-app.md. 실시간 재정렬이 없어 재정렬을 끈 구성으로만 시작한다(S38에서
+명세는 docs/slices/35-chat-app.md. 실시간 재정렬이 없어 재정렬을 끈 구성으로만 시작한다(S39에서
 만든다). 방문자 질의는 data/에 저장하지 않고 LangSmith 추적으로만 남는다.
 """
 
@@ -174,7 +174,7 @@ def build(cfg, pipe, corpus):
 def main() -> None:
     cfg = load_cfg(["index.scope=full", *sys.argv[1:]])
     if cfg.retriever.get("rerank") and cfg.retriever.rerank.enabled:
-        raise SystemExit("앱에는 실시간 재정렬이 없다(S38). retriever.rerank.enabled=false로 "
+        raise SystemExit("앱에는 실시간 재정렬이 없다(S39). retriever.rerank.enabled=false로 "
                          "실행한다")
     pipe = Pipeline(cfg)
     pipe.embed(cfg.app.title)  # 임베딩 모델을 먼저 불러 첫 질의가 기다리지 않게 한다
