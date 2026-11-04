@@ -27,7 +27,9 @@ from rag.index import load_cfg, write_guarded
 JUDGE_KEYS = ("name", "model", "base_url", "params", "extra_body", "step_params",
               "prompt_version", "prompt_sha256", "chunk_key_min", "item_eval",
               # 형식 재요청 절차(D-58 결정 2). 재요청 전 결과에는 없어 재요청 뒤 결과와 다르다
-              "format_retry_version", "format_retry_sha256", "format_retry_limit")
+              "format_retry_version", "format_retry_sha256", "format_retry_limit",
+              # 변형 거부 판별 조각(S34). 판별 전 결과에는 없어 판별 뒤 결과와 다르다
+              "unlisted_refusal")
 # 생성 프롬프트(거부 문구, 도입 문구)나 검색 조건(날짜 정규식)에서 오는 값. 실험이 바꾸는 것이라
 # 멈추지 않고 차이만 낸다(PR #167 리뷰)
 CHECK_KEYS = ("refusal", "filler_phrases", "check_patterns")

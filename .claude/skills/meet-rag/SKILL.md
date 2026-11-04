@@ -41,6 +41,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
    - 세션 마무리, 핸드오프 → C
    - 하네스(`.claude/`의 스킬·에이전트·규약·보조 스크립트) 수정, 하네스 피드백 반영 → F
    - 전체 코퍼스 임베딩·인덱스 구축 등 GPU 작업 → 해당 A·B 단계 안에서 E
+   - HF Space·저장소·버킷·Jobs·Inference Endpoints를 다루는 작업 → 해당 A·B 단계 안에서 "Hugging Face 작업" 절
 
 ## 작업 기록 (`_workspace/`)
 
@@ -130,6 +131,15 @@ PR 본문의 질문과 STATUS "사용자 확인 필요"는 사용자만 정할 �
 4. **변경마다 검증**: 변경을 하나씩 적용하고, 그때마다 frontmatter·참조 경로를 확인한다. description을 바꾸면 should-trigger·near-miss 요청 각 3개 이상으로 트리거를 검증한다. 검증은 작성 맥락과 분리하려고 서브에이전트에 맡긴다
 5. **기록**: evolve Phase 4의 CLAUDE.md 변경 이력 표 대신 `docs/harness/adr/`에 ADR을 추가하고 목록을 갱신한다(ADR-0014). 앞 ADR을 바꾸면 그 상태를 고친다
 6. **감사·PR**: `protocol-auditor`를 작업 종류 하네스로 부르고, 수정안을 사용자에게 보인 뒤 PR을 올린다("결정과 PR의 순서")
+
+## Hugging Face 작업
+
+Space·저장소·버킷을 만들거나 고칠 때, 파일을 올릴 때, 시크릿·하드웨어·Jobs·Inference Endpoints를 다룰 때는 전역 `hf-cli` 스킬을 Skill 도구로 먼저 불러온다. 이 스킬은 명령 사용법만 담고 이 저장소의 규칙을 모르므로 아래는 메인이 지킨다.
+
+- **처리처**: `data/` 아래 파일이나 거기서 만든 산출물(인덱스, 청크 등)을 HF로 보내기 전에 `CLAUDE.md` 금지 절의 허용 처리처 목록에 HF가 있는지 본다. 없으면 사용자 승인을 받아 DECISIONS에 기록하고 그 목록에 더한 뒤 보낸다(D-72). 폴더째 올리지 않고 필요한 파일만 고른다. `queries-*.npz`는 올리지 않는다. `data/index/<임베딩>/`에 test 질의 임베딩 `queries-test.npz`가 있어 `data/index/`를 통째로 올리면 함께 나가고, 평가 프로토콜상 test 질의는 단계 종료 1회 외에 보내지 않는다. `hf upload`에는 이를 막는 검사가 없다
+- **비공개**: 데이터를 담는 저장소·버킷은 `--private`로 먼저 만들고 비공개인지 확인한 뒤 올린다. 없는 저장소를 `hf upload`가 만들게 두지 않는다. 공개로 만들어지면 외부에서 내려받을 수 있어 D-31 위반이고, 올린 뒤 지워도 그사이 받아 갔는지 알 수 없다. 공개 Space 저장소에도 같은 이유로 데이터를 두지 않는다
+- **과금**: Jobs, Space 유료 하드웨어, Inference Endpoints는 예상 시간·비용을 보고하고 사용자 승인 후에 쓴다(`CLAUDE.md` 금지 절의 외부 GPU·유료 API 승인과 같은 이유)
+- **토큰**: 로그인은 사용자가 한다(`! hf auth login`). `hf auth token`처럼 값을 출력하는 명령을 쓰지 않고, Space 시크릿은 `--secrets KEY=값`으로 값을 명령에 적지 않는다. 대화와 로그에 남는다
 
 ## 오류 처리
 
