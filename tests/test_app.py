@@ -129,7 +129,7 @@ def test_main_requires_rerank_off_before_loading(monkeypatch, args, match):
         app.main()
 
 
-def test_format_contexts_shows_same_speaker_rendering_as_model():
+def test_format_contexts_shows_speakers_as_readable_paragraphs():
     speakers = {"questioners": [{"name": "홍길동", "position": "위원", "affiliation": ""}],
                 "answerers": [{"name": "김철수", "position": "장관", "affiliation": "국토부"}],
                 "spans": [{"role": "question", "start": 0, "end": 2, "name": "홍길동",
