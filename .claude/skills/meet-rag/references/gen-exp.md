@@ -22,6 +22,7 @@ B 흐름에서 EXP 문서 판정 기준이 SPEC "생성 단계 평가 > 판정"(
 `rag.*`는 `doppler run -- uv run python -m …`로 부른다. LangSmith 추적은 `doppler run` 앞에 붙인 값으로 정한다. gen-small은 `LANGSMITH_TRACING=true`(디버깅), gen-full과 반복 측정은 `false`(대량 실행, 무료 계정 월 한도)다. 쓰다가 월 한도 초과가 다시 나면 gen-small도 끈다(D-71).
 
 1. gen-small 작동 확인: `rag.gen_eval.generate +exp=expNNN gen_eval.queries=dev-small gen_eval.n=20` → `rag.gen_eval.judge`(같은 override) → `rag.gen_eval.report`(같은 override). 생성·judge 오류가 없는지, 바꾼 설정이 생성 기록에 들어갔는지(프롬프트 버전, 근거), report의 judge 형식 오류·끝나지 않은 응답 수를 본다. 점수는 판정에 쓰지 않는다
+   - 근거·답변을 읽는 확인(표지·지시 판독 등)도 gen-small 기록으로 한다. 판정 전에 gen-full 근거·답변을 표본으로 읽지 않는다. 읽고 나면 그 내용에 맞춰 지시를 고칠 수 있어 판정 세트의 개선 폭이 낙관적이 된다. 코드로 세는 기계 대조는 내용을 읽지 않으므로 해당하지 않는다. EXP-021에서 표지 판독에 gen-full 근거 30개를 넣어 지적받았다(사용자 2026-11-03, D-70 결정 2)
    - 실행 오류나 설정 누락이 있으면 gen-full로 넘어가지 않고, 고치면서 사용자에게 보고하고 같은 확인을 다시 한 뒤 gen-full로 간다. 다시 승인받지는 않는다
    - 바꾼 설정이 의도대로 작동하지 않으면(예: 새 거부 문구 지시를 넣었는데 답변이 옛 문구를 씀) gen-small에서 고쳐 가며 시험한다. 채택은 gen-full로만 판정하므로 gen-small에 맞춰 고쳐도 판정이 낙관적으로 치우치지 않는다(사용자 판단 2026-10-28). 고친 내용은 EXP 문서 실행 절에 적는다
    - judge 형식 오류는 다시 확인 대상이 아니다. 아래 "형식 오류율"대로 기록한다
