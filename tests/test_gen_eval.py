@@ -201,11 +201,15 @@ def test_judge_record_reports_metadata_with_s37_rules():
     replies = {"statements": {"statements": ["s1"]}, "verdicts": verdicts_reply(["s1"], [1]),
                "relevance": {"label": "답함"}}
     answer = ("2001년 9월 18일 회의에서 2019년 1월 1일 시행을 말했습니다[1]. "
-              "2003년 1월 13일 회의였습니다[1].")
-    contexts = [ctx(1, date="2001年 9月 18日(火)")]
+              "2003년 1월 13일 회의였습니다[1]. 2005년 3월 2일 공표되었습니다[1]. "
+              "인사청문특별위원회였습니다[1]. 국방위원회였습니다[1].")
+    contexts = [ctx(1, date="2001年 9月 18日(火)", text="2005년 3월 2일 공표",
+                    committee="감사원장(전윤철)임명동의에관한인사청문특별위원회")]
     out = judge_record.__wrapped__(RecordingJudge(replies), gen(answer, contexts),
-                                   {"doc_id": "none", "answer_comment": "발언"}, judge_cfg(), set())
-    assert [(m["field"], m["value"]) for m in out["metadata"]] == [("date", "2003-01-13")]
+                                   {"doc_id": "none", "answer_comment": "발언"}, judge_cfg(),
+                                   {"인사청문특별위원회", "국방위원회"})
+    assert [(m["field"], m["value"]) for m in out["metadata"]] == [("date", "2003-01-13"),
+                                                                    ("committee", "국방위원회")]
 
 
 def test_gold_position():
