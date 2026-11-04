@@ -107,11 +107,11 @@ def build(cfg, pipe, corpus):
         yield from respond(pipe, cfg, rec, corpus, message, history)
 
     def pick_year(year: int):
-        return (gr.Dropdown(choices=corpus.meetings(year), value=None),
-                gr.Dropdown(choices=[], value=None))
+        return (gr.Dropdown(choices=corpus.meetings(year), value=None, interactive=True),
+                gr.Dropdown(choices=[], value=None, interactive=False))
 
     def pick_meeting(conf: str):
-        return gr.Dropdown(choices=corpus.documents(conf), value=None)
+        return gr.Dropdown(choices=corpus.documents(conf), value=None, interactive=True)
 
     def show_doc(doc_id: str, chunk: tuple[int, int] | None = None) -> str:
         spans = pipe.spans.get(doc_id, []) if pipe.speakers != "off" else []
@@ -125,17 +125,19 @@ def build(cfg, pipe, corpus):
         return show_doc(*parse_evidence(value)), gr.Tabs(selected="evidence")
 
     def reset():
-        return (gr.Dropdown(value=None), gr.Dropdown(choices=[], value=None),
-                gr.Dropdown(choices=[], value=None))
+        return (gr.Dropdown(value=None),
+                gr.Dropdown(choices=[], value=None, interactive=False),
+                gr.Dropdown(choices=[], value=None, interactive=False))
 
     with gr.Blocks(title=cfg.app.title) as demo:
         with gr.Sidebar(width=cfg.app.sidebar_width):
             gr.Markdown(cfg.app.browse_notice)
             year = gr.Dropdown(corpus.years(), value=None, label=labels.year,
                                elem_classes="browse")
-            meeting = gr.Dropdown([], label=labels.meeting, filterable=True,
+            # 앞 칸을 고르기 전에는 선택지가 없어 입력하면 오류가 나므로 막아 둔다
+            meeting = gr.Dropdown([], label=labels.meeting, filterable=True, interactive=False,
                                   elem_classes="browse")
-            documents = gr.Dropdown([], label=labels.document, filterable=True,
+            documents = gr.Dropdown([], label=labels.document, filterable=True, interactive=False,
                                     elem_classes="browse")
             clear = gr.Button(labels.reset)
         gr.Markdown(f"# {cfg.app.title}\n\n{cfg.app.notice}")
