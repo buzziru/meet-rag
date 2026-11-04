@@ -22,7 +22,7 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 | `processed/corpus_context.jsonl` | 약 275MB |
 | `index/snowflake-ko-fixed-512-64/full/`의 `basis.json`, `chunks.jsonl`, `emb/`, `bm25-kiwi-v1/` | 약 635MB |
 | `index/snowflake-ko-fixed-256-32/full/`의 `basis.json`, `chunks.jsonl`, `emb/` | 약 906MB |
-| 발언 구간 파일 | 만들 때 잰다 |
+| `processed/speaker_spans.json`, `processed/speaker_spans.json.basis.json` | 약 10MB |
 
 - **Space 저장소**: `deploy/space/`에 진입점 `app.py`, Space 카드 `README.md`, `requirements.txt`를 두고, `src/`, `configs/`와 함께 올린다. 데이터 파일은 넣지 않는다(D-74). 진입점은 `rag.app`과 같은 구성(`+exp=current`, `retriever.rerank.enabled=false`)으로 시작하고, 시작 시간과 최고 메모리를 로그에 남긴다
 - **시크릿과 추적**: 생성 API 키와 LangSmith 값을 `doppler run -- hf …`와 `--secrets NAME`으로 넣어 값을 명령에 적지 않는다. 비공개 볼륨에 토큰이 따로 필요하면 Dataset 읽기 토큰도 같게 넣는다(문서에 적혀 있지 않아 완료 기준 1에서 본다). `LANGSMITH_TRACING=true`는 Space 변수로 둔다(D-71)
