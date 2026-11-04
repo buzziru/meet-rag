@@ -17,18 +17,36 @@ OK = [
     "git commit -qm 'fix: 프롬프트 대조'",
     "git commit -m @'\nchore: PowerShell here-string\n\n본문\n'@",
     'git commit -m @"\r\ndocs: CRLF here-string\r\n"@',
+    'git add x; if ($?) { git commit -q -m "chore: PowerShell 블록" }',
+    'git commit -m "chore: 뒤에 다른 명령" && uv run python -m rag.x',
 ]
 BAD = [
     ("git commit -m @'\nperf: PowerShell here-string\n'@", "perf"),
     ("git commit -qm 'fix(judge): 프롬프트 대조'", "fix(judge):"),  # 범위 표기는 규약에 없다
     ('git commit -q -m "perf: BM25 검색기가 Kiwi 하나를 공유"', "perf"),
     ('git commit -m "Update readme"', "Update"),
+    ('git add x; git commit -m "perf: 구분자 뒤"', "perf"),
+    ('GIT_AUTHOR_NAME=x git commit -m "perf: 환경 변수 뒤"', "perf"),
+    ('git commit -q \\\n  -m "perf: 줄 잇기"', "perf"),
+    ('git status && git commit -m "perf: && 뒤"', "perf"),
+    ('git commit -q `\n  -m "perf: 백틱 줄 잇기"', "perf"),
+    ('git commit -q \\\r\n  -m "perf: CRLF 줄 잇기"', "perf"),
+    ('if x; then git commit -m "perf: then 뒤"; fi', "perf"),
+    ('doppler run -- git commit -m "perf: 앞에 명령"', "perf"),
+    ('! git commit -m "perf: 부정"', "perf"),
 ]
 NOT_CHECKED = [
     "git commit --amend --no-edit",
     "git commit -F msg.txt",
     "git log --oneline -3",
     'grep -n "git commit" docs/x.md',
+]
+# 실제로 막혔던 형태(ADR-0088): 뒤 명령의 -m, heredoc 본문의 글자, -F 뒤 문자열의 글자
+FALSE_POSITIVES = [
+    "git commit -F - <<'EOF'\nchore: 요약\nEOF\nuv run python -m rag.x",
+    "git commit -F msg.txt && uv run python -m rag.x",
+    "git commit -F - <<'EOF'\nchore: 요약\n\n본문에 python -m 글자\nEOF",
+    'echo "git commit -F - 와 python -m rag 오탐" >> note.md',
 ]
 
 
@@ -52,6 +70,11 @@ def run_hook(command):
     out = subprocess.run([sys.executable, str(HOOK)], input=payload.encode("utf-8"),
                          capture_output=True, check=True).stdout.decode("utf-8")
     return json.loads(out) if out else None
+
+
+@pytest.mark.parametrize("command", FALSE_POSITIVES)
+def test_hook_does_not_read_other_text_as_message(command):
+    assert run_hook(command) is None
 
 
 def test_hook_denies_only_bad_type():
