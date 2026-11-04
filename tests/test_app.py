@@ -1,0 +1,115 @@
+"""채팅 앱(S35). API·인덱스·gradio 없이 합성 스트림과 합성 Pipeline으로 본다."""
+
+import sys
+from types import SimpleNamespace
+
+import pytest
+
+from rag import app
+from rag.generate import Pipeline
+from rag.index import load_cfg
+
+CTX = {"n": 1, "date": "2020-01-02", "committee_name": "법제사법위원회",
+       "original": "http://example/1", "text": "본문 <b>굵게</b>"}
+
+
+def chunk(content=None, finish=None, usage=None):
+    choices = [] if usage else [SimpleNamespace(delta=SimpleNamespace(content=content),
+                                                finish_reason=finish)]
+    return SimpleNamespace(choices=choices, usage=usage, provider="p")
+
+
+def stream_pipe(parts):
+    pipe = object.__new__(Pipeline)
+    pipe.cfg = load_cfg(["index.scope=full"])
+    pipe.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kw: iter([chunk(p) for p in parts] + [chunk(finish="stop")]))))
+    return pipe
+
+
+def fake_pipe(parts, seen=None):
+    def stream(query, q_emb, langsmith_extra=None):
+        if seen is not None:
+            seen.append(query)
+        yield from parts
+        yield {"answer": "".join(parts), "contexts": [CTX]}
+
+    return SimpleNamespace(embed=lambda q: q, stream=stream)
+
+
+@pytest.fixture
+def cfg():
+    return load_cfg(["index.scope=full"])
+
+
+@pytest.fixture(autouse=True)
+def no_flush(monkeypatch):
+    monkeypatch.setattr(app, "get_cached_client", lambda: SimpleNamespace(flush=lambda: None))
+
+
+def test_tokens_join_to_generate_answer_and_hide_thought():
+    parts = ["<thought>", "생각", "</thought>", "\n답변", "이다"]
+    items = list(stream_pipe(parts).tokens([]))
+    assert items[:-1] == ["답변", "이다"]
+    out = Pipeline.generate.__wrapped__(stream_pipe(parts), [], True, False)
+    assert "".join(items[:-1]) == out["answer"] == items[-1]["answer"] == "답변이다"
+    assert out["thought"] == "생각" and out["finish_reason"] == "stop"
+
+
+def test_generate_echo_prints_only_answer(capsys):
+    Pipeline.generate.__wrapped__(stream_pipe(["<thought>생각</thought>", "답변"]), [], True, True)
+    assert capsys.readouterr().out == "답변\n"
+
+
+def test_stream_ends_with_contexts():
+    pipe = stream_pipe(["답", "변"])
+    pipe.retrieve = lambda query, q_emb, k: [CTX]
+    pipe.messages = lambda contexts, query: []
+    items = list(Pipeline.stream.__wrapped__(pipe, "질의", None))
+    assert items[:-1] == ["답", "변"]
+    assert items[-1]["contexts"] == [CTX] and items[-1]["answer"] == "답변"
+
+
+def test_history_does_not_change_search_query(cfg):
+    seen = []
+    pipe = fake_pipe(["답"], seen)
+    list(app.respond(pipe, cfg, {}, "질의", []))
+    past = [{"role": "user", "content": "앞 질문"}, {"role": "assistant", "content": "앞 답변"}]
+    last = list(app.respond(pipe, cfg, {}, "질의", past))[-1]
+    assert seen == ["질의", "질의"]
+    assert last[:2] == past
+
+
+def test_respond_streams_then_appends_contexts(cfg):
+    chats = list(app.respond(fake_pipe(["답", "변"]), cfg, {}, "질의", []))
+    assert [c[1]["content"] for c in chats[:3]] == ["", "답", "답변"]
+    last = chats[-1]
+    assert last[1]["content"] == "답변"
+    assert last[2]["metadata"] == {"title": cfg.app.contexts_title}
+    assert "&lt;b&gt;" in last[2]["content"] and "<b>" not in last[2]["content"]
+    assert "(http://example/1)" in last[2]["content"]
+
+
+def test_respond_shows_notice_when_answer_is_empty(cfg):
+    last = list(app.respond(fake_pipe([]), cfg, {}, "질의", []))[-1]
+    assert last[1]["content"] == cfg.app.no_answer
+
+
+def test_respond_keeps_history_on_blank_message(cfg):
+    seen = []
+    assert list(app.respond(fake_pipe(["답"], seen), cfg, {}, "  ", [])) == [[]]
+    assert seen == []
+
+
+@pytest.mark.parametrize("args, match", [
+    (["+exp=current"], "재정렬"),
+    (["+exp=current", "retriever.rerank.enabled=false"], "인덱스 읽음"),
+])
+def test_main_requires_rerank_off_before_loading(monkeypatch, args, match):
+    def loaded(cfg):
+        raise SystemExit("인덱스 읽음")
+
+    monkeypatch.setattr(app, "Pipeline", loaded)
+    monkeypatch.setattr(sys, "argv", ["rag.app", *args])
+    with pytest.raises(SystemExit, match=match):
+        app.main()
