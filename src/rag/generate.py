@@ -10,6 +10,7 @@ import json
 import sys
 import time
 import uuid
+from collections.abc import Iterator
 from datetime import datetime
 
 import numpy as np
@@ -218,43 +219,68 @@ class Pipeline:
         """답변 생성. 스트리밍이면 답변 첫 토큰까지의 시간(first_token_s)을 잰다(D-30·D-37).
         provider는 응답이 알려 준 실제 제공자다(OpenRouter, 제공자 고정 확인용). finish_reason이
         stop이 아니면 답변이 잘렸을 수 있다(리뷰 G3-3)."""
+        if stream:
+            for item in self.tokens(messages):
+                if isinstance(item, dict):
+                    result = item
+                elif echo:
+                    print(item, end="", flush=True)
+            if echo:
+                print()
+            return result
+        g = self.cfg.generator
+        t0 = time.perf_counter()
+        r = self.client.chat.completions.create(
+            model=g.model, messages=messages,
+            extra_body=OmegaConf.to_container(g.extra_body) if g.get("extra_body") else None,
+            **OmegaConf.to_container(g.params))
+        return self._result(r.choices[0].message.content, r.usage.model_dump(),
+                            getattr(r, "provider", None), r.choices[0].finish_reason, None, t0)
+
+    def tokens(self, messages: list[dict]) -> Iterator[str | dict]:
+        """답변 조각을 받는 대로 내보내고 마지막에 generate와 같은 결과 dict를 내보낸다(S35).
+        사고 과정은 내보내지 않는다."""
         g = self.cfg.generator
         params = OmegaConf.to_container(g.params)
         extra = OmegaConf.to_container(g.extra_body) if g.get("extra_body") else None
         t0, first = time.perf_counter(), None
-        if not stream:
-            r = self.client.chat.completions.create(model=g.model, messages=messages,
-                                                    extra_body=extra, **params)
-            text, usage = r.choices[0].message.content, r.usage.model_dump()
-            provider = getattr(r, "provider", None)
-            finish = r.choices[0].finish_reason
-        else:
-            text, usage, provider, printed, finish = "", None, None, 0, None
-            for chunk in self.client.chat.completions.create(
-                    model=g.model, messages=messages, stream=True, extra_body=extra,
-                    stream_options={"include_usage": True}, **params):
-                provider = provider or getattr(chunk, "provider", None)
-                if chunk.choices and chunk.choices[0].finish_reason:
-                    finish = chunk.choices[0].finish_reason
-                if chunk.choices and chunk.choices[0].delta.content:
-                    text += chunk.choices[0].delta.content
-                    start = answer_start(text)
-                    if start is not None:  # 사고 과정은 출력하지 않고 답변만 흘려보낸다
-                        if first is None and text[start:].strip():
-                            first = time.perf_counter() - t0
-                        if echo:
-                            piece = text[max(printed, start):]
-                            print(piece.lstrip() if printed <= start else piece, end="",
-                                  flush=True)
-                        printed = len(text)
-                if chunk.usage:
-                    usage = chunk.usage.model_dump()
-            if echo:
-                print()
+        text, usage, provider, printed, finish = "", None, None, 0, None
+        for chunk in self.client.chat.completions.create(
+                model=g.model, messages=messages, stream=True, extra_body=extra,
+                stream_options={"include_usage": True}, **params):
+            provider = provider or getattr(chunk, "provider", None)
+            if chunk.choices and chunk.choices[0].finish_reason:
+                finish = chunk.choices[0].finish_reason
+            if chunk.choices and chunk.choices[0].delta.content:
+                text += chunk.choices[0].delta.content
+                start = answer_start(text)
+                if start is not None:  # 사고 과정은 내보내지 않고 답변만 흘려보낸다
+                    if first is None and text[start:].strip():
+                        first = time.perf_counter() - t0
+                    piece = text[max(printed, start):]
+                    piece = piece.lstrip() if printed <= start else piece
+                    if piece:
+                        yield piece
+                    printed = len(text)
+            if chunk.usage:
+                usage = chunk.usage.model_dump()
+        yield self._result(text, usage, provider, finish, first, t0)
+
+    @staticmethod
+    def _result(text: str, usage, provider, finish, first: float | None, t0: float) -> dict:
         thought, answer = split_thought(text)
         return {"answer": answer, "thought": thought, "usage": usage, "provider": provider,
                 "finish_reason": finish, "first_token_s": first,
                 "total_s": time.perf_counter() - t0}
+
+    @traceable(name="rag", process_inputs=lambda i: {"query": i["query"]},
+               reduce_fn=lambda items: items[-1])
+    def stream(self, query: str, q_emb: np.ndarray) -> Iterator[str | dict]:
+        """자유 질의의 검색 → 프롬프트 → 생성. 답변 조각을 내보내고 마지막에 근거를 더한 결과
+        dict를 내보낸다(S35). 재정렬 점수 파일이 있는 구성에서는 rank가 멈춘다."""
+        contexts = self.retrieve(query, q_emb, self.cfg.generator.context_docs)
+        for item in self.tokens(self.messages(contexts, query)):
+            yield {"contexts": contexts, **item} if isinstance(item, dict) else item
 
     def run(self, query: str, q_emb: np.ndarray, qid: str | None = None,
             stream: bool | None = None, echo: bool = True) -> dict:

@@ -28,6 +28,9 @@ dependencies = [
 [project.optional-dependencies]
 cpu = ["torch>=2.6"]
 cu126 = ["torch>=2.6"]
+app = [
+    "gradio>=6",
+]
 
 [dependency-groups]
 dev = [
