@@ -12,6 +12,7 @@ from langsmith.run_trees import get_cached_client
 
 from rag.generate import Pipeline, recipe
 from rag.index import load_cfg
+from rag.speakers import render
 
 
 def search_query(message: str, history: list[dict]) -> str:
@@ -20,10 +21,11 @@ def search_query(message: str, history: list[dict]) -> str:
 
 
 def format_contexts(contexts: list[dict]) -> str:
-    """근거를 번호, 회의 정보, 원문 링크, 본문으로 보여 준다. 본문은 HTML로 해석되지 않게 한다."""
+    """근거를 번호, 회의 정보, 원문 링크, 본문으로 보여 준다. 본문은 생성·judge가 받는 것과 같은
+    렌더링(발언자 머리 줄과 표지)이고, HTML로 해석되지 않게 한다. 빈 줄을 넣어 줄을 나눈다."""
     return "\n\n---\n\n".join(
         f"**[{c['n']}] {c['date']} {c['committee_name']}** ([회의록]({c['original']}))\n\n"
-        f"{html.escape(c['text'])}"
+        + html.escape(render(c)).replace("\n", "\n\n")
         for c in contexts)
 
 

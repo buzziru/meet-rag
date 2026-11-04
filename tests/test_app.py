@@ -113,3 +113,14 @@ def test_main_requires_rerank_off_before_loading(monkeypatch, args, match):
     monkeypatch.setattr(sys, "argv", ["rag.app", *args])
     with pytest.raises(SystemExit, match=match):
         app.main()
+
+
+def test_format_contexts_shows_same_speaker_rendering_as_model():
+    speakers = {"questioners": [{"name": "홍길동", "position": "위원", "affiliation": ""}],
+                "answerers": [{"name": "김철수", "position": "장관", "affiliation": "국토부"}],
+                "spans": [{"role": "question", "start": 0, "end": 2, "name": "홍길동",
+                           "position": "위원", "affiliation": ""}]}
+    out = app.format_contexts([{**CTX, "speakers": speakers}])
+    assert "질의자: 홍길동 위원 / 답변자: 김철수 국토부 장관\n\n" in out
+    assert "〈질의 홍길동 위원〉본문〈/질의〉 &lt;b&gt;" in out
+    assert "<b>" not in out
