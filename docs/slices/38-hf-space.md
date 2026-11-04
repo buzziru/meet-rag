@@ -26,7 +26,7 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 
 - **Space 저장소**: `deploy/space/`에 진입점 `app.py`, Space 카드 `README.md`, `requirements.txt`를 두고, `src/`, `configs/`와 함께 올린다. 데이터 파일은 넣지 않는다(D-74). 진입점은 `rag.app`과 같은 구성(`+exp=current`, `retriever.rerank.enabled=false`)으로 시작하고, 시작 시간과 최고 메모리를 로그에 남긴다
 - **시크릿과 추적**: 생성 API 키와 LangSmith 값을 `doppler run -- hf …`와 `--secrets NAME`으로 넣어 값을 명령에 적지 않는다. 비공개 볼륨에 토큰이 따로 필요하면 Dataset 읽기 토큰도 같게 넣는다(문서에 적혀 있지 않아 완료 기준 1에서 본다). `LANGSMITH_TRACING=true`는 Space 변수로 둔다(D-71)
-- **설정**: 저장소 이름과 볼륨 위치는 `configs/config.yaml`의 `deploy` 키에, 구간 파일 경로는 `paths`에 둔다. 코드에 직접 쓰지 않는다
+- **설정**: 저장소 이름은 `configs/config.yaml`의 `deploy` 키에, 구간 파일 경로는 `paths`에 둔다. 코드에 직접 쓰지 않는다
 - **결정 기록**: 잰 값으로 호스팅과 벡터스토어(전수 검색 유지 여부)를 정해 DECISIONS에 적고, `docs/SPEC.md` 자원 제약의 "HF Spaces 무료 CPU"를 고친다
 
 ## 결정 사항
@@ -68,7 +68,7 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 
 ## 결과 (2026-11-04)
 
-커밋: 구현 069c9df. Space 코드 커밋은 Hub의 0654da5 이후, Dataset 마지막 커밋은 `968be89c7ee6bfb1fb2bb8847805bda03190ed8f`(파일 180개, 저장 약 2.32GB, 비공개)
+커밋: 구현 069c9df. Space 코드 커밋은 Hub의 0654da5, Dataset 마지막 커밋은 `968be89c7ee6bfb1fb2bb8847805bda03190ed8f`(파일 180개, 저장 약 2.32GB, 비공개)
 
 - 완료 기준 1: 비공개 Dataset과 비공개 ZeroGPU Space를 무료 계정에서 만들었다. 컨테이너 메모리 한도 104GB(`memory.max`), 16GB 할당 성공, CPU 16코어 분량(`cpu.max`), `/tmp` 10GB 쓰기 성공(디스크 한도는 호스트 값만 보여 확인하지 못함), Python 3.12.12, torch 2.13.0+cu130. `@spaces.GPU` 함수가 없으면 `No @spaces.GPU function detected during startup`으로 멈추고, 부르지 않는 함수 하나를 두면 돌며 할당량이 줄지 않는다. 비공개 Dataset 볼륨은 토큰 없이 읽혔고 `/home/user/app/data`로 지정해 `/app/data`에 붙었다
 - 완료 기준 2: `tests/test_speakers.py` 통과. 실제 라벨로 만든 구간 파일이 문서 38,516개 모두 `doc_spans` 결과와 같다(구간이 빈 문서 6개 포함, 구간 80,292개). 파일 약 10MB, 키는 역할, 위치, 이름, 직책, 소속뿐이다
@@ -94,9 +94,13 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 - 구간 파일에 만든 설정 지문을 함께 뒀다(`src/CLAUDE.md`, `check_basis`)
 - Space 변수 `HF_HOME=/tmp/hf-home`, `PYTHONUNBUFFERED=1`, `LANGSMITH_TRACING=true`를 뒀다. `HF_HOME`이 없으면 임베딩 모델을 불러오는 단계에서 멈춘다(`rag.index.pinned`)
 - `deploy/space/requirements.txt`는 잠금 파일에서 내보내되 torch, CUDA 묶음을 빼고 `pydantic`을 2.12.5로 낮췄다. Space 빌드가 함께 설치하는 `gradio[mcp]`가 2.12.5 이하를 요구한다. 앱 동작은 완료 기준 4로 확인했고 평가 환경은 바뀌지 않는다
+- 볼륨 위치는 config가 아니라 Space 설정에 있다(`hf spaces volumes`). `deploy.space`, `deploy.dataset`은 이름 기록이고 코드가 읽지 않는다
 - 첫 콜드 스타트 측정은 재시작이 적용되기 전 옛 컨테이너가 응답한 값(3초)이라 버리고, 실행 상태가 바뀌는 것을 본 값을 적었다
 
 ### 관찰
 
+- 위 측정 때 Space의 `HF_HOME`은 Git Bash가 `/tmp/hf-home`을 Windows 경로로 바꿔 넣은 값이었다(모델이 `/app` 아래에 받아짐). 검증에서 찾아 `MSYS_NO_PATHCONV=1`로 고쳤고, 고친 뒤 한 번의 시작은 인덱스·코퍼스 81.0초, 모델 15.3초다
+- `deploy/space/requirements.txt`를 잠금 파일에서 다시 내보내면 `pydantic` 고정이 돌아가 빌드가 깨진다. 내보낸 뒤 이 고정과 `pydantic-core` 삭제를 다시 적용한다
+- `rag.speakers --export-spans`와 `--gen`을 함께 주면 `--gen`을 무시한다. 산출물은 틀어지지 않아 두었다(감사 P13)
 - 채팅 칸의 `share` 버튼이 켜져 있다. S41 항목에 이미 있다
 - `import spaces` 뒤 프로세스가 비정상으로 끝나면 로그에 남지 않는다. 시작 오류를 찾을 때 자식 프로세스로 앱을 띄워 출력을 받아 원인을 봤다
