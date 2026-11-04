@@ -1,7 +1,7 @@
 # @package _global_
-# S42 답변 형식 통일: 형식 지시를 더한 프롬프트 v11(docs/slices/42-answer-format.md, D-75 결정 6).
+# S42 답변 형식 통일: 형식 지시를 더한 프롬프트 v12(docs/slices/42-answer-format.md, D-75 결정 6).
 # 판정 실험이 아니라 EXP 문서는 없다. 기준 EXP-023을 직접 상속하고 프롬프트만 바꾼다
 defaults:
   - exp023
-  - override /prompt: v11
+  - override /prompt: v12
   - _self_
