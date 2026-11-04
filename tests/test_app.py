@@ -11,7 +11,8 @@ from rag.index import load_cfg
 
 CTX = {"n": 1, "doc_id": "a1", "date": "2020-01-02", "committee_name": "법제사법위원회",
        "original": "http://example/1", "text": "본문 <b>굵게</b>"}
-ASKED = ("질의", [{"role": "user", "content": "질의"}])
+CORPUS = SimpleNamespace(chunk_span=lambda doc_id, text: (3, 3 + len(text)))
+ASKED = (CORPUS, "질의", [{"role": "user", "content": "질의"}])
 
 
 def chunk(content=None, finish=None, usage=None):
@@ -77,7 +78,7 @@ def test_history_does_not_change_search_query(cfg):
     list(app.respond(pipe, cfg, {}, *ASKED))
     past = [{"role": "user", "content": "앞 질문"}, {"role": "assistant", "content": "앞 답변"}]
     history, _, message = app.ask("질의", past)
-    last = list(app.respond(pipe, cfg, {}, message, history))[-1]
+    last = list(app.respond(pipe, cfg, {}, CORPUS, message, history))[-1]
     assert seen == ["질의", "질의"]
     assert last[:3] == history
 
@@ -97,7 +98,7 @@ def test_respond_waits_for_first_token_then_appends_contexts(cfg):
     assert last[2]["metadata"] == {"title": cfg.app.contexts_title}
     assert "&lt;b&gt;" in last[2]["content"] and "<b>" not in last[2]["content"]
     assert "(http://example/1)" in last[2]["content"]
-    assert '<a href="?doc=a1" target="_blank">' in last[2]["content"]
+    assert f'<a href="#evidence:a1:3:{3 + len(CTX["text"])}">' in last[2]["content"]
 
 
 def test_respond_shows_notice_when_answer_is_empty(cfg):
@@ -109,7 +110,8 @@ def test_blank_message_keeps_history_and_skips_search(cfg):
     seen = []
     history, box, message = app.ask("  ", [])
     assert (history, box, message) == ([], "", "")
-    assert list(app.respond(fake_pipe(["답"], seen), cfg, {}, message, history)) == [[]]
+    chats = list(app.respond(fake_pipe(["답"], seen), cfg, {}, CORPUS, message, history))
+    assert chats == [[]]
     assert seen == []
 
 
@@ -132,7 +134,16 @@ def test_format_contexts_shows_same_speaker_rendering_as_model():
                 "answerers": [{"name": "김철수", "position": "장관", "affiliation": "국토부"}],
                 "spans": [{"role": "question", "start": 0, "end": 2, "name": "홍길동",
                            "position": "위원", "affiliation": ""}]}
-    out = app.format_contexts([{**CTX, "speakers": speakers}])
+    out = app.format_contexts([{**CTX, "speakers": speakers}], CORPUS)
     assert "질의자: 홍길동 위원 / 답변자: 김철수 국토부 장관\n\n" in out
-    assert "**〈질의 홍길동 위원〉**\n\n본문\n\n**〈/질의〉**\n\n &lt;b&gt;" in out
-    assert "<b>" not in out
+    assert "**〈질의 홍길동 위원〉**\n\n본문\n\n &lt;b&gt;" in out
+    assert "<b>" not in out and "〈/" not in out
+
+
+def test_evidence_link_round_trips_and_handles_missing_chunk():
+    link = app.evidence_link(CTX, CORPUS)
+    assert app.parse_evidence(link.removeprefix(app.EVIDENCE_PREFIX)) == (
+        "a1", (3, 3 + len(CTX["text"])))
+    missing = SimpleNamespace(chunk_span=lambda doc_id, text: None)
+    value = app.evidence_link(CTX, missing).removeprefix(app.EVIDENCE_PREFIX)
+    assert app.parse_evidence(value) == ("a1", None)

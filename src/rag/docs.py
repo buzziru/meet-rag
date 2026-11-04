@@ -11,6 +11,9 @@ from collections import defaultdict
 from rag.index import ROOT, corpus_meta
 from rag.speakers import chunk_speakers, render
 
+# 근거 청크 자리를 본문에 잠시 표시하는 사용자 영역 문자. 회의록 본문에는 나오지 않는다
+CHUNK_START, CHUNK_END = "", ""
+
 
 def doc_name(d: dict) -> str:
     return f"{d['date']} {d['committee_name']} {d['meeting_number']} {d['session_number']}"
@@ -24,8 +27,8 @@ def date_key(d: dict) -> tuple[int, ...]:
 def readable(rendered: str) -> str:
     """render 결과를 화면용 문단으로 나눈다. 본문에 줄바꿈과 화자 구분이 없어, 발언 표지와 원천의
     연속 공백에서만 나눌 수 있다. HTML로 해석되지 않게 한다. 모델 입력은 render 그대로다."""
-    text = html.escape(rendered)
-    text = re.sub(r"〈/?(?:질의|답변)[^〉]*〉", lambda m: f"\n\n**{m.group(0)}**\n\n", text)
+    text = re.sub(r"〈/(?:질의|답변)〉", "\n\n", html.escape(rendered))
+    text = re.sub(r"〈(?:질의|답변)[^〉]*〉", lambda m: f"\n\n**{m.group(0)}**\n\n", text)
     text = re.sub(r" {2,}", "\n\n", text).replace("\n", "\n\n")
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
@@ -40,7 +43,6 @@ class Corpus:
                 offsets.append(f.tell())
         self.offset = {d["doc_id"]: o for d, o in zip(meta, offsets, strict=False)}
         self.docs: dict[str, list[dict]] = defaultdict(list)
-        self.meta = {d["doc_id"]: d for d in meta}
         for d in meta:
             self.docs[d["conference_number"]].append(d)
         by_year = defaultdict(list)
@@ -66,10 +68,10 @@ class Corpus:
         return [(doc_name(d) if len(docs) == 1 else f"{doc_name(d)} #{i}", d["doc_id"])
                 for i, d in enumerate(docs, 1)]
 
-    def locate(self, doc_id: str) -> tuple[int, str] | None:
-        """(연도, 회의 번호). 근거 링크로 연 문서를 목록에 맞춘다. 주소의 값이라 없을 수 있다."""
-        d = self.meta.get(doc_id)
-        return (date_key(d)[0], d["conference_number"]) if d else None
+    def chunk_span(self, doc_id: str, text: str) -> tuple[int, int] | None:
+        """근거 청크의 문서 안 위치. 근거 탭에서 그 자리를 표시한다. 찾지 못하면 None."""
+        start = self.read(doc_id)["context"].find(text)
+        return (start, start + len(text)) if start >= 0 else None
 
     def read(self, doc_id: str) -> dict:
         with self.path.open("rb") as f:
@@ -77,10 +79,20 @@ class Corpus:
             return json.loads(f.readline())
 
 
-def format_doc(doc: dict, spans: list[dict], mode: str) -> str:
-    """문서 화면. 근거와 같은 렌더링으로 발언자 표시를 붙인다. 라벨과 분할 정보는 넣지 않는다."""
-    c = {"text": doc["context"]}
+def format_doc(doc: dict, spans: list[dict], mode: str,
+               chunk: tuple[int, int] | None = None, marks: tuple[str, str] = ("", "")) -> str:
+    """문서 화면. 근거와 같은 렌더링으로 발언자 표시를 붙인다. 라벨과 분할 정보는 넣지 않는다.
+    chunk를 주면 그 구간의 앞뒤에 marks를 보인다(근거 탭). 발언 구간도 그만큼 밀어 위치를 맞춘다."""
+    text = doc["context"]
+    if chunk:
+        start, end = chunk
+        text = f"{text[:start]}{CHUNK_START}{text[start:end]}{CHUNK_END}{text[end:]}"
+        shift = lambda at: at + (at >= start) + (at >= end)  # noqa: E731
+        spans = [{**s, "start": shift(s["start"]), "end": shift(s["end"])} for s in spans]
+    c = {"text": text}
     if mode != "off":
-        c["speakers"] = chunk_speakers(doc, spans, 0, len(doc["context"]), mode)
+        c["speakers"] = chunk_speakers(doc, spans, 0, len(text), mode)
+    body = readable(render(c)).replace(CHUNK_START, f"\n\n**{marks[0]}**\n\n")
+    body = body.replace(CHUNK_END, f"\n\n**{marks[1]}**\n\n")
     return (f"## {html.escape(doc_name(doc))}\n\n{html.escape(doc['agenda'])}\n\n"
-            f"[회의록]({doc['original']})\n\n---\n\n{readable(render(c))}")
+            f"[회의록]({doc['original']})\n\n---\n\n{body}")

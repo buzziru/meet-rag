@@ -19,18 +19,49 @@ SCROLL_TO_QUESTION = """() => { setTimeout(() => {
   rows[rows.length - 1]?.scrollIntoView({block: "start"});
 }, 200); }"""
 
+EVIDENCE_PREFIX = "#evidence:"
+# 근거 머리를 누르면 페이지를 다시 불러오지 않고 숨긴 버튼으로 서버에 알린다. 다시 불러오면 대화가
+# 지워진다. 스크립트로 칸에 넣은 값은 Gradio 이벤트를 일으키지 않아 값은 READ_EVIDENCE로 넘긴다
+BIND_EVIDENCE_LINKS = f"""() => {{ document.addEventListener("click", (e) => {{
+  const a = e.target.closest('a[href^="{EVIDENCE_PREFIX}"]');
+  if (!a) return;
+  e.preventDefault();
+  e.stopPropagation();
+  window.evidenceKey = a.getAttribute("href").slice({len(EVIDENCE_PREFIX)});
+  document.getElementById("evidence-open").click();
+}}, true); }}"""
+READ_EVIDENCE = "() => [window.evidenceKey]"
+SCROLL_TO_CHUNK = """() => { setTimeout(() => {
+  const all = document.querySelectorAll("#evidence-view strong");
+  [...all].find((s) => s.textContent === "MARK")?.scrollIntoView({block: "start"});
+}, 200); }"""
+# 선택 칸의 긴 이름이 화살표와 겹치지 않게 오른쪽을 비운다
+CSS = ".browse input { padding-right: 2rem !important; text-overflow: ellipsis; }"
+
 
 def search_query(message: str, history: list[dict]) -> str:
     """검색에 쓸 질의. 지금은 싱글턴이라 이력을 쓰지 않는다. 멀티턴은 여기서 이력으로 재작성한다."""
     return message
 
 
-def format_contexts(contexts: list[dict]) -> str:
+def evidence_link(c: dict, corpus) -> str:
+    """근거 머리 링크. 페이지를 다시 불러오지 않도록 BIND_EVIDENCE_LINKS가 눌림을 받는다."""
+    span = corpus.chunk_span(c["doc_id"], c["text"])
+    start, end = span if span else (-1, -1)
+    return f"{EVIDENCE_PREFIX}{c['doc_id']}:{start}:{end}"
+
+
+def parse_evidence(value: str) -> tuple[str, tuple[int, int] | None]:
+    """링크 값(문서 번호:시작:끝)을 (문서 번호, 청크 위치)로 읽는다."""
+    doc_id, start, end = value.split(":")
+    return doc_id, (int(start), int(end)) if int(start) >= 0 else None
+
+
+def format_contexts(contexts: list[dict], corpus) -> str:
     """근거를 번호, 회의 정보, 원문 링크, 본문으로 보여 준다. 본문은 생성·judge가 받는 것과 같은
-    렌더링(발언자 머리 줄과 표지)이다. 머리를 누르면 새 탭에서 그 문서를 연다. 같은 탭으로 열면
-    대화가 지워진다."""
+    렌더링(발언자 머리 줄과 표지)이다. 머리를 누르면 근거 탭에서 그 문서를 연다."""
     return "\n\n---\n\n".join(
-        f'<a href="?doc={c["doc_id"]}" target="_blank"><strong>[{c["n"]}] {c["date"]} '
+        f'<a href="{evidence_link(c, corpus)}"><strong>[{c["n"]}] {c["date"]} '
         f'{c["committee_name"]}</strong></a> ([회의록]({c["original"]}))\n\n'
         + readable(render(c))
         for c in contexts)
@@ -43,7 +74,8 @@ def ask(message: str, history: list[dict]) -> tuple[list[dict], str, str]:
     return [*history, {"role": "user", "content": message}], "", message
 
 
-def respond(pipe, cfg, rec: dict, message: str, history: list[dict]) -> Iterator[list[dict]]:
+def respond(pipe, cfg, rec: dict, corpus, message: str,
+            history: list[dict]) -> Iterator[list[dict]]:
     """history는 ask가 질문을 더한 대화다. 첫 조각이 오기 전에는 아무것도 내보내지 않는다. 내보내면
     화면의 대기 표시가 사라진다."""
     if not message:
@@ -55,7 +87,8 @@ def respond(pipe, cfg, rec: dict, message: str, history: list[dict]) -> Iterator
     for item in pipe.stream(query, pipe.embed(query), langsmith_extra={"metadata": rec}):
         if isinstance(item, dict):
             answer["content"] = item["answer"] or cfg.app.no_answer
-            chat.append({"role": "assistant", "content": format_contexts(item["contexts"]),
+            chat.append({"role": "assistant",
+                         "content": format_contexts(item["contexts"], corpus),
                          "metadata": {"title": cfg.app.contexts_title}})
         else:
             answer["content"] += item
@@ -71,7 +104,7 @@ def build(cfg, pipe, corpus):
     labels = cfg.app.labels
 
     def answer(message: str, history: list[dict]) -> Iterator[list[dict]]:
-        yield from respond(pipe, cfg, rec, message, history)
+        yield from respond(pipe, cfg, rec, corpus, message, history)
 
     def pick_year(year: int):
         return (gr.Dropdown(choices=corpus.meetings(year), value=None),
@@ -80,34 +113,30 @@ def build(cfg, pipe, corpus):
     def pick_meeting(conf: str):
         return gr.Dropdown(choices=corpus.documents(conf), value=None)
 
-    def show_doc(doc_id: str) -> str:
+    def show_doc(doc_id: str, chunk: tuple[int, int] | None = None) -> str:
         spans = pipe.spans.get(doc_id, []) if pipe.speakers != "off" else []
-        return format_doc(corpus.read(doc_id), spans, pipe.speakers)
+        return format_doc(corpus.read(doc_id), spans, pipe.speakers, chunk,
+                          (labels.chunk_start, labels.chunk_end))
 
     def pick_doc(doc_id: str):
         return show_doc(doc_id), gr.Tabs(selected="doc")
+
+    def pick_evidence(value: str):
+        return show_doc(*parse_evidence(value)), gr.Tabs(selected="evidence")
 
     def reset():
         return (gr.Dropdown(value=None), gr.Dropdown(choices=[], value=None),
                 gr.Dropdown(choices=[], value=None))
 
-    def open_linked(request: gr.Request):
-        """주소의 ?doc=로 연 문서를 보여 주고 목록을 맞춘다. 없거나 모르는 번호면 그대로 둔다."""
-        doc_id = request.query_params.get("doc")
-        found = corpus.locate(doc_id) if doc_id else None
-        if found is None:
-            return gr.skip()
-        y, conf = found
-        return (gr.Dropdown(value=y), gr.Dropdown(choices=corpus.meetings(y), value=conf),
-                gr.Dropdown(choices=corpus.documents(conf), value=doc_id), show_doc(doc_id),
-                gr.Tabs(selected="doc"))
-
     with gr.Blocks(title=cfg.app.title) as demo:
-        with gr.Sidebar():
+        with gr.Sidebar(width=cfg.app.sidebar_width):
             gr.Markdown(cfg.app.browse_notice)
-            year = gr.Dropdown(corpus.years(), value=None, label=labels.year)
-            meeting = gr.Dropdown([], label=labels.meeting, filterable=True)
-            documents = gr.Dropdown([], label=labels.document, filterable=True)
+            year = gr.Dropdown(corpus.years(), value=None, label=labels.year,
+                               elem_classes="browse")
+            meeting = gr.Dropdown([], label=labels.meeting, filterable=True,
+                                  elem_classes="browse")
+            documents = gr.Dropdown([], label=labels.document, filterable=True,
+                                    elem_classes="browse")
             clear = gr.Button(labels.reset)
         gr.Markdown(f"# {cfg.app.title}\n\n{cfg.app.notice}")
         with gr.Tabs() as tabs:
@@ -119,6 +148,10 @@ def build(cfg, pipe, corpus):
                                  submit_btn=True)
             with gr.Tab(labels.doc_tab, id="doc"):
                 viewer = gr.Markdown(cfg.app.doc_placeholder)
+            with gr.Tab(labels.evidence_tab, id="evidence"):
+                evidence = gr.Markdown(cfg.app.evidence_placeholder, elem_id="evidence-view")
+        evidence_key = gr.Textbox(visible="hidden")
+        evidence_open = gr.Button(visible="hidden", elem_id="evidence-open")
         question = gr.State("")
         asked = box.submit(ask, [box, chatbot], [chatbot, box, question], queue=False,
                            api_name=False)
@@ -129,8 +162,10 @@ def build(cfg, pipe, corpus):
         meeting.input(pick_meeting, meeting, documents, queue=False, api_name=False)
         documents.input(pick_doc, documents, [viewer, tabs], queue=False, api_name=False)
         clear.click(reset, None, [year, meeting, documents], queue=False, api_name=False)
-        demo.load(open_linked, None, [year, meeting, documents, viewer, tabs], queue=False,
-                  api_name=False)
+        opened = evidence_open.click(pick_evidence, evidence_key, [evidence, tabs], queue=False,
+                                     js=READ_EVIDENCE, api_name=False)
+        opened.then(None, js=SCROLL_TO_CHUNK.replace("MARK", labels.chunk_start), api_name=False)
+        demo.load(None, js=BIND_EVIDENCE_LINKS, api_name=False)
     return demo
 
 
@@ -142,7 +177,7 @@ def main() -> None:
     pipe = Pipeline(cfg)
     pipe.embed(cfg.app.title)  # 임베딩 모델을 먼저 불러 첫 질의가 기다리지 않게 한다
     demo = build(cfg, pipe, Corpus(cfg))
-    demo.queue(default_concurrency_limit=cfg.app.concurrency).launch()
+    demo.queue(default_concurrency_limit=cfg.app.concurrency).launch(css=CSS)
 
 
 if __name__ == "__main__":
