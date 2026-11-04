@@ -35,7 +35,7 @@
 
 ## 수정 허용 파일
 
-`src/rag/app.py`, `src/rag/generate.py`, `configs/config.yaml`(`app` 키), `pyproject.toml`, `uv.lock`, `tests/test_app.py`, `CLAUDE.md`(명령 한 줄), `docs/DECISIONS.md`, 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`
+`src/rag/app.py`, `src/rag/generate.py`, `configs/config.yaml`(`app` 키), `pyproject.toml`, `uv.lock`, `tests/test_app.py`, `CLAUDE.md`(명령 한 줄, D-74 표시), `docs/SPEC.md`(D-74 표시), `docs/DECISIONS.md`, 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`
 
 ## 범위 밖
 
@@ -50,7 +50,7 @@
 
 커밋: 구현 c995476
 
-- 완료 기준 1: `uv run pytest -q` 426 통과, `uv run ruff check .` 통과
+- 완료 기준 1: `uv run pytest -q` 429 통과(main 병합 뒤, slice-verifier), `uv run ruff check .` 통과
 - 완료 기준 2: 앱을 띄워 지어낸 질의 2개를 브라우저가 쓰는 큐 요청(`/gradio_api/queue/join`)으로 보냈다. 첫 질의에서 스트리밍 이벤트가 64번 왔고, 끝난 대화에 근거 5개와 `metadata.title`이 있었다. 앞 대화를 넘긴 둘째 질의도 근거 5개로 끝났다. 공개 API 목록은 비어 있다. OpenRouter 호출은 약 3번이다
 - 완료 기준 3: `+exp=current`로 시작하면 "앱에는 실시간 재정렬이 없다"로 인덱스를 읽기 전에 멈춘다
 - 완료 기준 4·5: `tests/test_app.py`, `tests/test_generate.py` 통과
@@ -60,6 +60,7 @@
 - 화면을 브라우저로 직접 보지 못했다. Chrome 확장이 연결되어 있지 않아 위 큐 요청으로 확인했다. 사용자가 보는 화면 모양은 사용자 확인이 남아 있다
 - 동시 처리 수를 1로 뒀다(`app.concurrency`). 검색 단계가 여러 스레드에서 안전한지 재지 않았다. 입력→동작: 방문자 둘이 같이 물으면 뒤 사람은 앞 답변이 끝날 때까지 기다린다
 - 빈 답변이면 `app.no_answer` 문구를 보인다
+- 수정 허용 파일에 `docs/SPEC.md`와 `CLAUDE.md` 금지 절의 표시를 더했다. 감사에서 두 곳만 읽는 세션이 D-74를 볼 수 없다는 지적이 나왔다. 처음 지시는 SPEC을 바꾸지 않는 것이었다
 
 ### 관찰
 
