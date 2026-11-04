@@ -4,13 +4,12 @@
 만든다). 방문자 질의는 data/에 저장하지 않고 LangSmith 추적으로만 남는다.
 """
 
-import html
 import sys
 from collections.abc import Iterator
 
 from langsmith.run_trees import get_cached_client
 
-from rag.docs import Corpus, format_doc
+from rag.docs import Corpus, format_doc, readable
 from rag.generate import Pipeline, recipe
 from rag.index import load_cfg
 from rag.speakers import render
@@ -28,10 +27,12 @@ def search_query(message: str, history: list[dict]) -> str:
 
 def format_contexts(contexts: list[dict]) -> str:
     """근거를 번호, 회의 정보, 원문 링크, 본문으로 보여 준다. 본문은 생성·judge가 받는 것과 같은
-    렌더링(발언자 머리 줄과 표지)이고, HTML로 해석되지 않게 한다. 빈 줄을 넣어 줄을 나눈다."""
+    렌더링(발언자 머리 줄과 표지)이다. 머리를 누르면 새 탭에서 그 문서를 연다. 같은 탭으로 열면
+    대화가 지워진다."""
     return "\n\n---\n\n".join(
-        f"**[{c['n']}] {c['date']} {c['committee_name']}** ([회의록]({c['original']}))\n\n"
-        + html.escape(render(c)).replace("\n", "\n\n")
+        f'<a href="?doc={c["doc_id"]}" target="_blank"><strong>[{c["n"]}] {c["date"]} '
+        f'{c["committee_name"]}</strong></a> ([회의록]({c["original"]}))\n\n'
+        + readable(render(c))
         for c in contexts)
 
 
@@ -73,23 +74,41 @@ def build(cfg, pipe, corpus):
         yield from respond(pipe, cfg, rec, message, history)
 
     def pick_year(year: int):
-        return gr.Dropdown(choices=corpus.meetings(year), value=None), gr.Radio(choices=[],
-                                                                                value=None)
+        return (gr.Dropdown(choices=corpus.meetings(year), value=None),
+                gr.Dropdown(choices=[], value=None))
 
     def pick_meeting(conf: str):
-        return gr.Radio(choices=corpus.documents(conf), value=None)
+        return gr.Dropdown(choices=corpus.documents(conf), value=None)
+
+    def show_doc(doc_id: str) -> str:
+        spans = pipe.spans.get(doc_id, []) if pipe.speakers != "off" else []
+        return format_doc(corpus.read(doc_id), spans, pipe.speakers)
 
     def pick_doc(doc_id: str):
-        doc = corpus.read(doc_id)
-        spans = pipe.spans.get(doc_id, []) if pipe.speakers != "off" else []
-        return format_doc(doc, spans, pipe.speakers), gr.Tabs(selected="doc")
+        return show_doc(doc_id), gr.Tabs(selected="doc")
+
+    def reset():
+        return (gr.Dropdown(value=None), gr.Dropdown(choices=[], value=None),
+                gr.Dropdown(choices=[], value=None))
+
+    def open_linked(request: gr.Request):
+        """주소의 ?doc=로 연 문서를 보여 주고 목록을 맞춘다. 없거나 모르는 번호면 그대로 둔다."""
+        doc_id = request.query_params.get("doc")
+        found = corpus.locate(doc_id) if doc_id else None
+        if found is None:
+            return gr.skip()
+        y, conf = found
+        return (gr.Dropdown(value=y), gr.Dropdown(choices=corpus.meetings(y), value=conf),
+                gr.Dropdown(choices=corpus.documents(conf), value=doc_id), show_doc(doc_id),
+                gr.Tabs(selected="doc"))
 
     with gr.Blocks(title=cfg.app.title) as demo:
         with gr.Sidebar():
             gr.Markdown(cfg.app.browse_notice)
             year = gr.Dropdown(corpus.years(), value=None, label=labels.year)
             meeting = gr.Dropdown([], label=labels.meeting, filterable=True)
-            documents = gr.Radio([], label=labels.document)
+            documents = gr.Dropdown([], label=labels.document, filterable=True)
+            clear = gr.Button(labels.reset)
         gr.Markdown(f"# {cfg.app.title}\n\n{cfg.app.notice}")
         with gr.Tabs() as tabs:
             with gr.Tab(labels.chat_tab, id="chat"):
@@ -109,6 +128,9 @@ def build(cfg, pipe, corpus):
         year.input(pick_year, year, [meeting, documents], queue=False, api_name=False)
         meeting.input(pick_meeting, meeting, documents, queue=False, api_name=False)
         documents.input(pick_doc, documents, [viewer, tabs], queue=False, api_name=False)
+        clear.click(reset, None, [year, meeting, documents], queue=False, api_name=False)
+        demo.load(open_linked, None, [year, meeting, documents, viewer, tabs], queue=False,
+                  api_name=False)
     return demo
 
 

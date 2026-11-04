@@ -196,6 +196,7 @@ app:
     document: 문서
     chat_tab: 대화
     doc_tab: 문서
+    reset: 선택 초기화
   # 동시에 처리하는 질의 수. 검색 단계가 여러 스레드에서 안전한지 재지 않아 1로 둔다
   concurrency: 1
 

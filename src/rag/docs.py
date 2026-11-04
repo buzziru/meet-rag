@@ -21,6 +21,15 @@ def date_key(d: dict) -> tuple[int, ...]:
     return tuple(map(int, re.match(r"(\d{4})\D+(\d+)\D+(\d+)", d["date"]).groups()))
 
 
+def readable(rendered: str) -> str:
+    """render 결과를 화면용 문단으로 나눈다. 본문에 줄바꿈과 화자 구분이 없어, 발언 표지와 원천의
+    연속 공백에서만 나눌 수 있다. HTML로 해석되지 않게 한다. 모델 입력은 render 그대로다."""
+    text = html.escape(rendered)
+    text = re.sub(r"〈/?(?:질의|답변)[^〉]*〉", lambda m: f"\n\n**{m.group(0)}**\n\n", text)
+    text = re.sub(r" {2,}", "\n\n", text).replace("\n", "\n\n")
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
 class Corpus:
     def __init__(self, cfg):
         self.path = ROOT / cfg.paths.corpus
@@ -31,6 +40,7 @@ class Corpus:
                 offsets.append(f.tell())
         self.offset = {d["doc_id"]: o for d, o in zip(meta, offsets, strict=False)}
         self.docs: dict[str, list[dict]] = defaultdict(list)
+        self.meta = {d["doc_id"]: d for d in meta}
         for d in meta:
             self.docs[d["conference_number"]].append(d)
         by_year = defaultdict(list)
@@ -56,6 +66,11 @@ class Corpus:
         return [(doc_name(d) if len(docs) == 1 else f"{doc_name(d)} #{i}", d["doc_id"])
                 for i, d in enumerate(docs, 1)]
 
+    def locate(self, doc_id: str) -> tuple[int, str] | None:
+        """(연도, 회의 번호). 근거 링크로 연 문서를 목록에 맞춘다. 주소의 값이라 없을 수 있다."""
+        d = self.meta.get(doc_id)
+        return (date_key(d)[0], d["conference_number"]) if d else None
+
     def read(self, doc_id: str) -> dict:
         with self.path.open("rb") as f:
             f.seek(self.offset[doc_id])
@@ -67,6 +82,5 @@ def format_doc(doc: dict, spans: list[dict], mode: str) -> str:
     c = {"text": doc["context"]}
     if mode != "off":
         c["speakers"] = chunk_speakers(doc, spans, 0, len(doc["context"]), mode)
-    body = html.escape(render(c)).replace("\n", "\n\n")
     return (f"## {html.escape(doc_name(doc))}\n\n{html.escape(doc['agenda'])}\n\n"
-            f"[회의록]({doc['original']})\n\n---\n\n{body}")
+            f"[회의록]({doc['original']})\n\n---\n\n{readable(render(c))}")

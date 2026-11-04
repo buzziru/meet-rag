@@ -5,7 +5,7 @@ import json
 import pytest
 from omegaconf import OmegaConf
 
-from rag.docs import Corpus, format_doc
+from rag.docs import Corpus, format_doc, readable
 from rag.index import _read_corpus_meta
 
 
@@ -66,11 +66,23 @@ def test_format_doc_hides_split_info_and_escapes_html(corpus):
     assert "질의자" not in out
 
 
+def test_readable_breaks_at_marks_and_double_spaces_only():
+    text = "질의자: 갑 / 답변자: 을\n〈질의 갑〉물음.  다음 말〈/질의〉예, 그렇습니다. <b>끝</b>"
+    out = readable(text)
+    assert out.split("\n\n") == ["질의자: 갑 / 답변자: 을", "**〈질의 갑〉**", "물음.", "다음 말",
+                                 "**〈/질의〉**", "예, 그렇습니다. &lt;b&gt;끝&lt;/b&gt;"]
+
+
+def test_locate_finds_year_and_meeting_or_nothing(corpus):
+    assert corpus.locate("a2") == (2018, "A")
+    assert corpus.locate("없는 번호") is None
+
+
 def test_format_doc_adds_speakers_when_on(corpus):
     spans = [{"role": "answer", "start": 0, "end": 2, "name": "김철수", "position": "장관",
               "affiliation": "국토부"}]
     out = format_doc(corpus.read("a2"), spans, "marks")
     assert "질의자: 홍길동 위원 / 답변자: 김철수 국토부 장관" in out
-    assert "〈답변 김철수 장관〉둘째〈/답변〉 문서" in out
+    assert "**〈답변 김철수 장관〉**\n\n둘째\n\n**〈/답변〉**\n\n 문서" in out
     head = format_doc(corpus.read("a2"), spans, "head")
     assert "질의자: 홍길동 위원" in head and "〈답변" not in head

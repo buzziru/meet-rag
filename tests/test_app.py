@@ -9,7 +9,7 @@ from rag import app
 from rag.generate import Pipeline
 from rag.index import load_cfg
 
-CTX = {"n": 1, "date": "2020-01-02", "committee_name": "법제사법위원회",
+CTX = {"n": 1, "doc_id": "a1", "date": "2020-01-02", "committee_name": "법제사법위원회",
        "original": "http://example/1", "text": "본문 <b>굵게</b>"}
 ASKED = ("질의", [{"role": "user", "content": "질의"}])
 
@@ -97,6 +97,7 @@ def test_respond_waits_for_first_token_then_appends_contexts(cfg):
     assert last[2]["metadata"] == {"title": cfg.app.contexts_title}
     assert "&lt;b&gt;" in last[2]["content"] and "<b>" not in last[2]["content"]
     assert "(http://example/1)" in last[2]["content"]
+    assert '<a href="?doc=a1" target="_blank">' in last[2]["content"]
 
 
 def test_respond_shows_notice_when_answer_is_empty(cfg):
@@ -133,5 +134,5 @@ def test_format_contexts_shows_same_speaker_rendering_as_model():
                            "position": "위원", "affiliation": ""}]}
     out = app.format_contexts([{**CTX, "speakers": speakers}])
     assert "질의자: 홍길동 위원 / 답변자: 김철수 국토부 장관\n\n" in out
-    assert "〈질의 홍길동 위원〉본문〈/질의〉 &lt;b&gt;" in out
+    assert "**〈질의 홍길동 위원〉**\n\n본문\n\n**〈/질의〉**\n\n &lt;b&gt;" in out
     assert "<b>" not in out
