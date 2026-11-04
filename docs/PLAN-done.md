@@ -108,6 +108,7 @@ S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를
 - [x] 다음 judge 지시 버전을 시험할 때: `configs/exp/exp019.yaml`이 지시 파일을 합쳐, `+exp=exp019 judge/prompt=j_v8`을 줘도 j_v11로 조립된다(2026-11-03 실행으로 확인, 오류 없이 무시됨). 새 버전은 EXP config에서 지시 파일을 바꾸고 조립 결과의 버전을 확인한다. 기본값으로 막을지는 그때 정한다(PR #190 관찰) → 커밋 6de0daf(무시되는 override는 원인과 함께 멈춘다)
 - [x] 발언자 구분 불가 표시의 빈도 차이 확인: 같은 S14 표본에서 `verdicts`는 진술 1개, `items`는 항목 6개에 표시했다. 두 단계가 같은 규칙(G2)인데 빈도가 달라 블라인드 확인에서 함께 본다(`docs/slices/22-gen-eval-criteria.md` 결과 절 관찰) → reviews/2026-11-speaker-unclear-frequency.md
 - [x] `src/rag/gen_eval/report.py:208`의 거부 정확도 출력 문구 "블라인드 확인 전 참고값"을 "블라인드 확인을 중단해 참고값"(SPEC, 기준 문서 I11과 같게)으로 고친다. 코드라 SPEC 정리 `docs/` PR에 넣지 않았다(D-65) → 커밋 3d6a3db
+- [x] LangSmith 추적을 다시 켤지 정한다: D-50 결정 3은 11월에 프로젝트가 이어지면 다시 켠다고 했지만 2026-11-02·03 실행은 대량 실행이라 껐다. 정한 뒤 D-50에 표시를 붙인다(SPEC 정리에서 발견) → D-71
 
 ## 보조 관찰: multi-doc 질의
 
