@@ -116,6 +116,7 @@ def judge_recipe(cfg, gen_recipes: list[dict]) -> dict:
             "format_retry_version": retry["version"], "format_retry_sha256": sha(retry),
             "format_retry_limit": retry["limit"],
             "refusal": cfg.prompt.refusal, "filler_phrases": list(g.filler_phrases),
+            "unlisted_refusal": list(g.unlisted_refusal),
             "check_patterns": {"date": DATE.pattern, "doc_date": DOC_DATE.pattern},
             "chunk_key_min": g.chunk_key_min, "item_eval": g.item_eval,
             "rep": j.rep, "git_commit": git_state()[0]}
@@ -373,7 +374,8 @@ def judge_record(judge: Judge, gen: dict, ref: dict, cfg, committees: set[str]) 
     gold_n = gold_position(contexts, ref["doc_id"])
     # 거부 문구는 생성 프롬프트 파일에 있다. 기록 경로에 prompt.version이 들어가 cfg.prompt가
     # 이 기록을 만든 프롬프트다(S16)
-    kind, refused, rest = refusal_split(answer, cfg.prompt.refusal, list(g.filler_phrases))
+    kind, refused, rest = refusal_split(answer, cfg.prompt.refusal, list(g.filler_phrases),
+                                        list(g.unlisted_refusal))
     out = {"qid": gen["qid"], "refusal": kind, "refused_sentences": refused, "gold_n": gold_n,
            "answer_in_chunk": None, "usage": gen["usage"], "provider": gen["provider"],
            "first_token_s": gen["first_token_s"], "total_s": gen["total_s"],

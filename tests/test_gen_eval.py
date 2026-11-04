@@ -58,23 +58,39 @@ FILLERS = ["다음과 같습니다"]
 PARTIAL = "A 위원은 B를 제안했습니다[1]. C의 시행 시기는 제공된 회의록에서 답을 찾지 못했습니다."
 
 
+UNLISTED = ["제공된 회의록에서", "찾지 못했"]
+VARIANT = "제공된 회의록에서 청장의 대응 계획에 대한 답을 찾지 못했습니다."
+
+
+def split(ans):
+    return refusal_split(ans, REFUSAL, FILLERS, UNLISTED)
+
+
 def test_refusal_split_full_partial_none():
-    assert refusal_split("제공된 회의록에서  답을 찾지 못했습니다.", REFUSAL, FILLERS)[0] == "full"
-    assert refusal_split("다음과 같습니다.\n" + REFUSAL + ".", REFUSAL, FILLERS)[0] == "full"
+    assert split("제공된 회의록에서  답을 찾지 못했습니다.")[0] == "full"
+    assert split("다음과 같습니다.\n" + REFUSAL + ".")[0] == "full"
     ans = "집행률이 낮아 줄였습니다[1].\n통합했습니다[2]."
-    assert refusal_split(ans, REFUSAL, FILLERS) == (None, [], ans)
-    kind, refused, rest = refusal_split(PARTIAL, REFUSAL, FILLERS)
+    assert split(ans) == (None, [], ans)
+    kind, refused, rest = split(PARTIAL)
     assert kind == "partial" and rest == "A 위원은 B를 제안했습니다[1]."
     assert refused == ["C의 시행 시기는 제공된 회의록에서 답을 찾지 못했습니다."]
 
 
-UNLISTED = ["제공된 회의록에서", "찾지 못했"]
+def test_refusal_split_counts_variant_as_refusal():
+    # 지정 문구 사이에 대상이 낀 문장도 지정 문구 문장과 같게 거부 문장이다(S34, D-70 결정 5)
+    assert split(VARIANT) == ("full", [VARIANT], "")
+    assert split("다음과 같습니다.\n" + VARIANT)[0] == "full"
+    kind, refused, rest = split("A입니다[1]. " + VARIANT)
+    assert kind == "partial" and refused == [VARIANT] and rest == "A입니다[1]."
+    # 조각 하나만 든 문장, 발언을 전하는 문장은 거부가 아니다
+    ans = "자료를 찾지 못했다고 답했습니다[1]."
+    assert split(ans) == (None, [], ans)
+    # 조각을 비우면 지정 문구만 거부로 본다(빈 조건이 모든 문장을 거부로 만들지 않는다)
+    assert refusal_split(VARIANT, REFUSAL, FILLERS, []) == (None, [], VARIANT)
 
 
 def test_unlisted_refusal_only_without_phrase():
-    # S25 베이스라인의 형태: 지정 문구 사이에 대상이 끼어 refusal_split이 거부로 보지 않는다
-    ans = "제공된 회의록에서 청장의 대응 계획에 대한 답을 찾지 못했습니다."
-    assert refusal_split(ans, REFUSAL, FILLERS)[0] is None
+    ans = VARIANT
     assert unlisted_refusal(ans, REFUSAL, UNLISTED)
     assert unlisted_refusal("A입니다[1]. 다만, 제공된 회의록에서는 대책을 찾지 못했습니다.",
                             REFUSAL, UNLISTED)
@@ -82,10 +98,11 @@ def test_unlisted_refusal_only_without_phrase():
     assert not unlisted_refusal("자료를 찾지 못했다고 답했습니다[1].", REFUSAL, UNLISTED)
 
 
-def test_unlisted_table_crosses_no_statements(tmp_path):
+def test_unlisted_table_counts_variant_by_refusal_kind(tmp_path):
     answers = {"q1": "제공된 회의록에서 X에 대한 답을 찾지 못했습니다.",
                "q2": "제공된 회의록에서 Y는 찾지 못했습니다. Z입니다[1].",
-               "q3": "아니요, 위원 [1]"}
+               "q3": "아니요, 위원 [1]",
+               "q4": "제공된 회의록에서 W는 찾지 못했습니다."}
     path = tmp_path / "runs.jsonl"
     path.write_text("".join(json.dumps({"qid": q, "answer": a, "recipe": {"a": 1}},
                                        ensure_ascii=False) + "\n" for q, a in answers.items()),
@@ -93,17 +110,20 @@ def test_unlisted_table_crosses_no_statements(tmp_path):
     cfg = load_cfg([f"paths.gen_runs={path}"])
     rec = {"refusal": REFUSAL, "gen_recipe_sha256": sha({"a": 1})}
     none = {"score": None, "error": "진술 없음"}
-    rows = [{"qid": "q1", "faithfulness": none, "judge_recipe": rec},
-            {"qid": "q2", "faithfulness": {"score": 1.0}, "judge_recipe": rec},
-            {"qid": "q3", "faithfulness": none, "judge_recipe": rec}]
-    assert [k for _, k in unlisted_table(cfg, rows)] == [1, 1, 1]
+    rows = [{"qid": "q1", "refusal": "full", "judge_recipe": rec},
+            {"qid": "q2", "refusal": "partial", "faithfulness": {"score": 1.0},
+             "judge_recipe": rec},
+            {"qid": "q3", "refusal": None, "faithfulness": none, "judge_recipe": rec},
+            # S34 전 결과: 변형 문장을 거부로 세지 않았다
+            {"qid": "q4", "refusal": None, "faithfulness": none, "judge_recipe": rec}]
+    assert [k for _, k in unlisted_table(cfg, rows)] == [1, 1, 1, 1]
     # 진술 없음은 judge 형식 오류가 아니라 뺀 이유로 센다
-    assert criterion(rows, "faithfulness") == ([1.0], {"no_statements": 2}, 0)
+    assert criterion(rows[1:], "faithfulness") == ([1.0], {"no_statements": 2}, 0)
     # 다른 생성 기록이거나 없으면 이 표만 내지 않는다(report의 나머지는 judge 결과만으로 낸다)
     other = {**rec, "gen_recipe_sha256": "x"}
     assert "레시피 해시 다름" in unlisted_table(cfg, [{**r, "judge_recipe": other} for r in rows])
     gone = load_cfg([f"paths.gen_runs={tmp_path / 'none.jsonl'}"])
-    assert "없는 qid 3개" in unlisted_table(gone, rows)
+    assert "없는 qid 4개" in unlisted_table(gone, rows)
 
 
 def test_sentences_attach_trailing_citation():
@@ -233,6 +253,7 @@ def judge_cfg(item_eval=False):
     from omegaconf import OmegaConf
     return OmegaConf.create({"prompt": {"refusal": REFUSAL},
                              "gen_eval": {"chunk_key_min": 0.5, "filler_phrases": FILLERS,
+                                          "unlisted_refusal": UNLISTED,
                                           "item_eval": item_eval}})
 
 
@@ -275,6 +296,29 @@ def test_partial_refusal_scores_faithfulness_without_refused_sentence():
     # 관련성은 거부 문장을 넣은 답변 전체로 채점한다(D-47 결정 4, 기준 문서 R6)
     assert stub.seen["relevance"]["answer"] == PARTIAL
     assert stub.seen["key_checks"]["answer"] == PARTIAL
+    assert out["citations"]["n_sentences"] == 1
+
+
+def test_variant_refusal_is_scored_like_listed_refusal():
+    # 전체 거부: 충실성·관련성·포함도를 부르지 않는다(S34)
+    replies = {"key_statements": {"key_statements": ["k1"]},
+               "chunk_checks": checks_reply(["k1"], [1])}
+    stub = RecordingJudge(replies)
+    out = judge_record.__wrapped__(stub, gen(VARIANT, [ctx(1, "gold")]),
+                                   {"doc_id": "gold", "answer_comment": "발언"}, judge_cfg(), set())
+    assert out["refusal"] == "full" and out["refused_sentences"] == [VARIANT]
+    assert not {"faithfulness", "relevance", "inclusion"} & set(out)
+    assert not {"statements", "verdicts", "relevance", "key_checks"} & set(stub.seen)
+    # 부분 거부: 충실성·인용은 거부 문장을 뺀 내용으로, 관련성·포함도는 답변 전체로 본다
+    answer = "A입니다[1]. " + VARIANT
+    stub = RecordingJudge({**replies, "statements": {"statements": ["s1"]},
+                           "verdicts": verdicts_reply(["s1"], [1]),
+                           "relevance": {"label": "답함"}, "key_checks": checks_reply(["k1"], [1])})
+    out = judge_record.__wrapped__(stub, gen(answer, [ctx(1, "gold")]),
+                                   {"doc_id": "gold", "answer_comment": "발언"}, judge_cfg(), set())
+    assert out["refusal"] == "partial" and stub.seen["statements"]["answer"] == "A입니다[1]."
+    assert stub.seen["relevance"]["answer"] == answer
+    assert stub.seen["key_checks"]["answer"] == answer
     assert out["citations"]["n_sentences"] == 1
 
 
@@ -1121,6 +1165,15 @@ def test_gen_compare_main_pairs_and_reports_exclusions(tmp_path, monkeypatch, ca
     assert m["composite"]["n"] == 3 and m["relevance"]["n"] == 4 and m["inclusion"]["n"] == 3
     assert out["exclusions"]["base"]["faithfulness"] == {"excluded": {}, "format_errors": 1}
     assert out["exclusions"]["cand"]["inclusion"]["excluded"] == {"reference_unusable": 1}
+
+
+def test_gen_compare_main_stops_on_different_refusal_rule(tmp_path, monkeypatch, capsys):
+    # 판별 전 기준(키 없음)과 판별 뒤 후보는 채점 규칙이 달라 비교하지 않는다(S34)
+    recipe = {"name": "j", "model": "m", "refusal": "r", "unlisted_refusal": ["x"]}
+    base = [_judged(q, 0.5, 0.5, 0.5) for q in "abcd"]
+    cand = [_judged(q, 0.5, 0.5, 0.5, recipe=dict(recipe)) for q in "abcd"]
+    with pytest.raises(SystemExit, match="judge 설정이 다르다: unlisted_refusal"):
+        _compare_main(tmp_path, monkeypatch, capsys, base, cand)
 
 
 def test_gen_compare_main_fails_on_speaker_mismatch_increase(tmp_path, monkeypatch, capsys):

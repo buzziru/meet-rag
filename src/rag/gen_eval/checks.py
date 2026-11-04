@@ -10,14 +10,21 @@ SPACE = re.compile(r"\s+")
 LIST_MARK = re.compile(r"^(?:\d+[.)]|[-*•·])$")  # 목록 번호·기호만 남은 조각
 
 
-def refusal_split(answer: str, phrase: str,
-                  fillers: list[str]) -> tuple[str | None, list[str], str]:
+def has_parts(sentence: str, parts: list[str]) -> bool:
+    """문장이 조각(parts)을 모두 담는가(공백 차이는 무시). 조각이 없으면 거짓이다."""
+    flat = SPACE.sub("", sentence)
+    return bool(parts) and all(SPACE.sub("", p) in flat for p in parts)
+
+
+def refusal_split(answer: str, phrase: str, fillers: list[str],
+                  parts: list[str]) -> tuple[str | None, list[str], str]:
     """(거부 종류, 거부 문장, 거부 문장을 뺀 답변). 거부 문장은 프롬프트가 지정한 거부 문구를
-    담은 문장이다(공백 차이는 무시). 내용 문장(거부 문장도, fillers 문구가 든 문장도 아닌 문장)이
-    없으면 "full", 있으면 "partial", 거부 문장이 없으면 None이고 답변을 그대로 돌려준다(S14b)."""
+    담은 문장과, 문구를 변형해 조각(parts)을 모두 담은 문장이다(공백 차이는 무시, S34). 내용
+    문장(거부 문장도, fillers 문구가 든 문장도 아닌 문장)이 없으면 "full", 있으면 "partial",
+    거부 문장이 없으면 None이고 답변을 그대로 돌려준다(S14b)."""
     key = SPACE.sub("", phrase)
     sents = sentences(answer)
-    refused = [s for s in sents if key in SPACE.sub("", s)]
+    refused = [s for s in sents if key in SPACE.sub("", s) or has_parts(s, parts)]
     if not refused:
         return None, [], answer
     rest = [s for s in sents if s not in refused]
@@ -26,11 +33,10 @@ def refusal_split(answer: str, phrase: str,
 
 
 def unlisted_refusal(answer: str, phrase: str, parts: list[str]) -> bool:
-    """지정 거부 문구 없이 거부한 문장이 있는가. 조각(parts)이 모두 들고 거부 문구는 없는
-    문장이다(공백 차이는 무시). refusal_split은 이 문장을 내용 문장으로 본다(이슈 #156)."""
-    key, parts = SPACE.sub("", phrase), [SPACE.sub("", p) for p in parts]
-    flat = (SPACE.sub("", s) for s in sentences(answer))
-    return any(key not in s and all(p in s for p in parts) for s in flat)
+    """지정 거부 문구를 변형해 거부한 문장이 있는가. 조각(parts)이 모두 들고 거부 문구는 없는
+    문장이다(공백 차이는 무시, 이슈 #156). refusal_split은 이 문장도 거부 문장으로 본다(S34)."""
+    key = SPACE.sub("", phrase)
+    return any(key not in SPACE.sub("", s) and has_parts(s, parts) for s in sentences(answer))
 
 
 def sentences(answer: str) -> list[str]:
