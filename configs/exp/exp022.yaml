@@ -1,0 +1,7 @@
+# @package _global_
+# EXP-022 H23: 회의가 다른 근거를 나눠 쓰라는 지시만 더한다(docs/experiments/EXP-022.md, D-69 결정 5).
+# 기준 EXP-021을 직접 상속한다. 검색, 근거 구성, 표지, judge는 그대로다
+defaults:
+  - exp021
+  - override /prompt: v9
+  - _self_
