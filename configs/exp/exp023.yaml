@@ -1,0 +1,7 @@
+# @package _global_
+# EXP-023 H23 첫 변형: 근거 번호 지시를 보강한 프롬프트 v10을 시험한다(docs/experiments/EXP-023.md, D-75).
+# 기준 EXP-021을 직접 상속한다. 검색, 근거 구성, 표지, judge는 그대로다
+defaults:
+  - exp021
+  - override /prompt: v10
+  - _self_
