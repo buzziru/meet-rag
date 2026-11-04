@@ -59,7 +59,8 @@ def parse_evidence(value: str) -> tuple[str, tuple[int, int] | None]:
 
 def format_contexts(contexts: list[dict], corpus) -> str:
     """근거를 번호, 회의 정보, 원문 링크, 본문으로 보여 준다. 본문은 생성·judge가 받는 발언자
-    표시(머리 줄과 시작 표지)를 화면용 문단으로 나눈 것이다. 머리를 누르면 근거 탭에서 그 문서를 연다."""
+    표시(머리 줄과 시작 표지)를 화면용 문단으로 나눈 것이다. 머리를 누르면 근거 탭에서
+    그 문서를 연다."""
     return "\n\n---\n\n".join(
         f'<a href="{evidence_link(c, corpus)}"><strong>[{c["n"]}] {c["date"]} '
         f'{c["committee_name"]}</strong></a> ([회의록]({c["original"]}))\n\n'
