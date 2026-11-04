@@ -26,6 +26,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 블라인드 확인(S25): 1질의 검수 뒤 중단(D-51). 표본·집계 도구 `uv run python -m rag.gen_eval.blind +exp=exp017 [--score]` (S25 기록, slices/25-blind-baseline.md)
 - multi-doc 질의(S8·G3): 생성을 마치고 동결했다(D-15). 다시 만들 때의 절차는 slices/08-multidoc-queries.md, 하네스 ADR-0017\~0024, 작업자 정의·실행 순서는 ADR-0049 이전 git 이력
 - Hugging Face: `hf …` (pyenv shim에 가려 멈추면 `~/.local/bin/hf`로 부른다. 스킬·규칙: meet-rag 스킬 "Hugging Face 작업" 절, ADR-0087)
+- 채팅 앱(S35): `LANGSMITH_TRACING=true doppler run -- uv run --extra cpu --extra app python -m rag.app +exp=current retriever.rerank.enabled=false` (시작 약 2분, slices/35-chat-app.md)
 
 한글 출력이 깨지면 `PYTHONUTF8=1`로 실행한다. 파일은 `encoding="utf-8"`로 연다.
 
@@ -36,7 +37,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - `docs/SPEC.md`의 평가 프로토콜은 사용자 승인 없이 바꾸지 않는다
 - 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다. 채택마다 바뀌는 값(지금 기준 EXP, 프롬프트 버전, 기준 결과 경로)도 명령·테스트 기대값·하네스 절차 문서에 적지 않는다. 지금 기준은 별칭 `configs/exp/current.yaml`과 DECISIONS 머리 줄 두 곳에만 두고, 명령은 `+exp=current`, 테스트는 config에서 값을 읽고, 문서는 머리 줄을 가리킨다(PR #180 리뷰, ADR-0076)
 - HF에서 받는 모델·토크나이저(임베딩, 리랭커 등)는 `configs/`에 revision(커밋 해시)을 고정하고, 불러오는 코드는 revision을 `rag.index.pinned(...)`로만 넘긴다(커밋 해시가 아니면 받기 전에 멈춤). 고정하지 않으면 같은 설정이 다른 가중치를 받아 재현되지 않는다. `tests/test_revisions.py`가 점검한다. API로 부르는 생성·judge 모델은 고정할 수 없어 모델 이름과 제공자를 기록한다(D-46)
-- AI Hub 데이터(코퍼스·질의·라벨·분할)는 처리 목적으로 외부 API(Google AI Studio, OpenRouter, 생성 평가 judge용 opencode Go(D-38), 추적용 LangSmith(D-72))와 Colab에 보낼 수 있다. 허용 처리처 목록은 이 줄에만 두고(`docs/SPEC.md` 자원 제약과 `protocol-guard` P6은 이 줄을 가리킨다), 더하거나 바꾸려면 사용자 승인 후 DECISIONS에 기록한다(D-72). 금지하는 것은 공개다: 저장소 커밋, 노트북·로그·문서처럼 저장소에 남는 곳에 질의 원문을 대량으로 남기기, 외부에서 내려받을 수 있게 두기(D-31). `test` 질의는 평가 프로토콜에 따라 단계(검색·생성)마다 종료 시 사용자 지시 1회 실행에서만 읽고 보낸다. test 1회 실행은 `LANGSMITH_TRACING=false`로 한다(D-72). 질의 전체처럼 많이 보내는 실행은 호출 수·소요 시간·비용을 보고하고 사용자 승인 후에 한다
+- AI Hub 데이터(코퍼스·질의·라벨·분할)는 처리 목적으로 외부 API(Google AI Studio, OpenRouter, 생성 평가 judge용 opencode Go(D-38), 추적용 LangSmith(D-72))와 Colab에 보낼 수 있다. 허용 처리처 목록은 이 줄에만 두고(`docs/SPEC.md` 자원 제약과 `protocol-guard` P6은 이 줄을 가리킨다), 더하거나 바꾸려면 사용자 승인 후 DECISIONS에 기록한다(D-72). 금지하는 것은 공개다: 저장소 커밋, 노트북·로그·문서처럼 저장소에 남는 곳에 질의 원문을 대량으로 남기기, 외부에서 내려받을 수 있게 두기(D-31). 앱 화면에서 코퍼스 문서와 근거 원문(발언자 표시 포함)을 읽는 것은 이 금지 밖이고, 생성 요약 라벨(`summary_q`, `summary_a`)과 평가 질의는 화면에 보이지 않는다(D-74). `test` 질의는 평가 프로토콜에 따라 단계(검색·생성)마다 종료 시 사용자 지시 1회 실행에서만 읽고 보낸다. test 1회 실행은 `LANGSMITH_TRACING=false`로 한다(D-72). 질의 전체처럼 많이 보내는 실행은 호출 수·소요 시간·비용을 보고하고 사용자 승인 후에 한다
 - 외부 GPU(Colab) 실행과 유료 API(OpenRouter) 호출은 예상 시간·비용을 보고하고 사용자 승인 후에만 한다. dev-small은 Jupyter 노트북(`notebooks/`)에서 자유롭게 실행하되, GPU가 필요한 dev-small 임베딩도 Colab 승인 대상이다
 - `data/`와 `.env`는 어떤 형태로도 커밋하지 않는다 (AI Hub 재배포 제한)
 - `owner/`는 사용자가 의도를 전달하는 메모다. 읽고 의도를 파악하되 어떤 문서·코드에서도 참조하지 않고, 사용자 요청 없이 수정하지 않는다
