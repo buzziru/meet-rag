@@ -11,19 +11,17 @@ LIST_MARK = re.compile(r"^(?:\d+[.)]|[-*•·])$")  # 목록 번호·기호만 �
 
 
 def has_parts(sentence: str, parts: list[str]) -> bool:
-    """인용 번호 없이 조각(parts)을 모두 담은 문장인가(공백 차이는 무시). 조각이 없으면 거짓이다.
-    인용이 붙은 문장("… 찾지 못했다고 답했습니다[1].")은 근거를 전하는 내용 문장이다(S34)."""
+    """조각(parts)을 모두 담은 문장인가(공백 차이는 무시). 조각이 없거나 빈 조각이 있으면
+    거짓이다."""
     flat = SPACE.sub("", sentence)
     parts = [SPACE.sub("", p) for p in parts]
-    if not parts or not all(parts) or CITE.search(flat):
-        return False
-    return all(p in flat for p in parts)
+    return bool(parts) and all(parts) and all(p in flat for p in parts)
 
 
 def refusal_split(answer: str, phrase: str, fillers: list[str],
                   parts: list[str]) -> tuple[str | None, list[str], str]:
     """(거부 종류, 거부 문장, 거부 문장을 뺀 답변). 거부 문장은 프롬프트가 지정한 거부 문구를
-    담은 문장과, 문구를 변형해 인용 없이 조각(parts)을 모두 담은 문장이다(공백 차이는 무시,
+    담은 문장과, 문구를 변형해 조각(parts)을 모두 담은 문장이다(공백 차이는 무시,
     S34). 내용 문장(거부 문장도, fillers 문구가 든 문장도 아닌 문장)이 없으면 "full", 있으면
     "partial", 거부 문장이 없으면 None이고 답변을 그대로 돌려준다(S14b)."""
     key = SPACE.sub("", phrase)

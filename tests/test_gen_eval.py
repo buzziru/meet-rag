@@ -82,11 +82,11 @@ def test_refusal_split_counts_variant_as_refusal():
     assert split("다음과 같습니다.\n" + VARIANT)[0] == "full"
     kind, refused, rest = split("A입니다[1]. " + VARIANT)
     assert kind == "partial" and refused == [VARIANT] and rest == "A입니다[1]."
-    # 조각 하나만 든 문장, 인용을 붙여 근거를 전하는 문장은 거부가 아니다
-    for ans in ["자료를 찾지 못했다고 답했습니다[1].",
-                "제공된 회의록에서 김 위원은 대체 재원을 찾지 못했다고 답했습니다[1].",
-                "찾지 못했던 자료를 제공된 회의록에서 확인했습니다[1]."]:
-        assert split(ans) == (None, [], ans)
+    # 인용이 붙어도 거부다(지정 문구 문장과 같다, PR #205 리뷰)
+    assert split("제공된 회의록에서 대책을 찾지 못했습니다[1].")[0] == "full"
+    # 조각 하나만 든 문장은 거부가 아니다
+    ans = "자료를 찾지 못했다고 답했습니다[1]."
+    assert split(ans) == (None, [], ans)
     # 조각을 비우면 지정 문구만 거부로 본다(빈 조건이 모든 문장을 거부로 만들지 않는다)
     assert refusal_split(VARIANT, REFUSAL, FILLERS, []) == (None, [], VARIANT)
     assert refusal_split(VARIANT, REFUSAL, FILLERS, [""]) == (None, [], VARIANT)

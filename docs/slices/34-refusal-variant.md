@@ -68,13 +68,13 @@ LANGSMITH_TRACING=false doppler run -- uv run python -m rag.gen_eval.judge +exp=
 
 ## 결과 (2026-11-04)
 
-커밋: 구현 1e3cdf7, self-review 반영 12de73a. 기준 재채점은 1e3cdf7로 했다
+커밋: 구현 1e3cdf7, self-review 반영 12de73a, 리뷰 반영(인용 조건 제거)은 아래 절. 기준 재채점은 1e3cdf7로 했다. 판별 규칙이 지금과 같다
 
 결정 사항: 1은 부분 거부까지, 2와 3은 승인(사용자 2026-11-04). D-73에 적었다.
 
 - 완료 기준 1: `uv run pytest -q` 420개 통과, `uv run ruff check .` 통과
 - 완료 기준 2\~4: `test_refusal_split_counts_variant_as_refusal`, `test_variant_refusal_is_scored_like_listed_refusal`, `test_gen_compare_main_stops_on_different_refusal_rule`
-- 완료 기준 5: `refusal_split`이 조각을 무시하는 사본에서 앞 두 테스트가, `JUDGE_KEYS`에서 키를 뺀 사본에서 compare 테스트가 실패했다. self-review 반영 뒤 `judge_recipe`에서 키를 뺀 사본과 인용 조건을 없앤 사본에서도 해당 테스트가 실패했다
+- 완료 기준 5: `refusal_split`이 조각을 무시하는 사본에서 앞 두 테스트가, `JUDGE_KEYS`에서 키를 뺀 사본에서 compare 테스트가 실패했다. self-review 반영 뒤 `judge_recipe`에서 키를 뺀 사본에서도 해당 테스트가 실패했다
 - 기준 재계산: 330개 채점, 새 judge 호출 11회, 저장 응답 2,484회. 연결 오류 1건은 실패 항목 재처리로 끝났다
 - 새 기준 결과: `data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v8-dev-full-spk-marks-deepseek_go_mixed-j_v13-s34.jsonl`, SHA-256 `81c6f0da06adc9baaf1bd363604ab384cc05282240b56da4b88e5225497a9087`. 옛 결과 파일은 그대로 둔다
 - 완료 기준 7: report 형식 관찰 표는 전체 거부로 셈 3, 부분 거부로 셈 5, 거부로 세지 않음 0, 진술 없음·변형 거부 아님 0이다. 전체 거부 6, 부분 거부 23이다
@@ -104,8 +104,12 @@ LANGSMITH_TRACING=false doppler run -- uv run python -m rag.gen_eval.judge +exp=
 
 ### self-review 지적과 반영
 
-- 판별 조건에 인용 번호 없음을 더했다. 조각만 보면 "찾지 못했던 자료를 제공된 회의록에서 확인했습니다[1]."처럼 거부가 없는 내용 문장이 전체 거부가 된다. 기준 결과의 변형 문장 8개는 모두 인용이 없어 값이 그대로다(거부 종류를 코드로 다시 내 재채점 결과와 대조). 재채점은 다시 하지 않았다
+- 판별 조건에 인용 번호 없음을 더했다가 리뷰에서 뺐다(아래 절)
 - `judge_recipe`가 `unlisted_refusal`을 남기는지 테스트를 더했다. 이 줄을 지우면 판별이 다른 결과를 compare가 멈추지 않는다
 - report 표가 그 결과의 레시피로 판별을 가린다. 레시피에 키가 없는 옛 결과는 변형 문장이 든 답변을 모두 "거부로 세지 않음"에 두고, 조각은 지금 config가 아니라 레시피에서 읽는다
-- 인용 없이 발언을 전하는 문장은 여전히 거부로 본다. 기준 결과에는 없고 드물어 조건을 더하지 않았다(D-73 감수하는 것)
+- 발언을 전하는 문장은 거부로 본다. 기준 결과에는 없고 드물어 조건을 더하지 않았다(D-73 감수하는 것)
+
+### 리뷰 반영
+
+- 인용 조건 제거(PR #205 리뷰): 인용이 붙은 "제공된 회의록에서 대책을 찾지 못했습니다[1]."은 거부가 맞고, 조건의 근거였던 "찾지 못했던 자료를 제공된 회의록에서 확인했습니다[1]."은 실제 답변에서 나올 문장이 아니다(사용자). 지금 판별 결과를 기준 결과 330행과 대조해 거부 종류·거부 문장 불일치 0을 확인했다. 재채점은 다시 하지 않았다
 
