@@ -2,6 +2,6 @@
 
 배포와 생성 실험처럼 사용자가 + 버튼으로 만든 세션이 동시에 돌 수 있다(사용자 방침 2026-11-03).
 
-- `data/`는 모든 세션이 함께 쓴다. 다른 세션이 쓰는 파일을 고치거나 지우지 않도록, 쓰기 전에 `main`의 STATUS "실행 중 작업"을 본다. worktree 세션은 자기 브랜치의 STATUS가 뒤처졌을 수 있어 `git show origin/main:docs/STATUS.md`로 읽는다
-- `_workspace/`는 .gitignore 대상이라 메인 체크아웃에만 있다. worktree 세션은 메인 경로의 파일을 읽는다
+- `data/`는 모든 세션이 함께 쓴다. 다른 세션이 쓰는 파일을 고치거나 지우지 않도록, 쓰기 전에 `main`의 STATUS "실행 중 작업"을 본다. worktree 세션은 자기 브랜치의 STATUS가 뒤처졌을 수 있어 `git fetch` 뒤 `git show origin/main:docs/STATUS.md`로 읽는다. 이 칸은 핸드오프 때만 갱신되어 지금 도는 작업을 놓칠 수 있으므로, 없음으로 적혀 있어도 다른 세션이 만든 파일은 덮어쓰거나 지우기 전에 사용자에게 묻는다
+- 공유 기록(`_workspace/`의 대기 목록·진행 기록)은 .gitignore 대상이라 메인 체크아웃에 있고 worktree로 따라오지 않는다. worktree 세션은 메인 경로의 파일을 읽는다
 - `orca terminal send`는 그 세션의 입력 칸에 끼어든다. 사용자가 그 터미널에서 대화 중일 수 있으므로 사용자가 요청한 경우가 아니면 쓰지 않고, 전할 내용은 사용자에게 알린다
