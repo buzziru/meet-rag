@@ -49,7 +49,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 베이스라인 조각·실험 백로그: `docs/PLAN.md`(진행 중·대기 항목과 최신 순서), 완료 기록: `docs/PLAN-done.md`
 - 조각 지시서: `docs/slices/NN-이름.md`
 - 실험 지시서: `docs/experiments/EXP-NNN.md` (config는 `configs/exp/expNNN.yaml`)
-- 실험 결과 요약: `docs/EXPERIMENTS.md`
+- 실험별 판정 목록: `docs/EXPERIMENTS.md`(EXP 초안, 다음 실험 결정, 단계 종료 점검 때 읽는다)
 - 채택 설정·방향 결정: `docs/DECISIONS.md`
 - docs 기록 규약(문서 종류별 목적·필수 절·고치는 방식, 결정 작성과 바뀐 앞 결정 표시, 당시 기록 보강, 단계 종료 정합 점검): `docs/CLAUDE.md`. `docs/` 문서를 고치거나 DECISIONS에 적힌 대상(config 값, 코드 동작, 명령)을 바꾸기 전에 읽는다. 하위 폴더 CLAUDE.md는 Read·Write·Edit로 그 폴더 파일을 다룰 때만 불러와지고, 셸로 고치거나 docs를 열지 않는 작업에는 불러와지지 않을 수 있다
 - 구현·테스트 규약: `src/CLAUDE.md`, `tests/CLAUDE.md`. `src/`·`tests/`를 고치기 전에 읽는다(셸로 고치면 불러와지지 않을 수 있다)
@@ -61,7 +61,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 작업 PR을 올리기 전에 작업 브랜치에서 한다.
 
 1. 끝난 실행이 있으면 평가하고 EXP 문서의 결과·결론을 채운다
-2. 판정한 실험을 EXPERIMENTS.md에 한 줄 추가하고, 채택이면 DECISIONS.md를 갱신한다
+2. 판정한 실험과 기준 설정을 바꾼 EXP config(판정 실험이 아니어도)를 EXPERIMENTS.md에 한 줄 추가하고, 채택이면 DECISIONS.md를 갱신한다
 3. PLAN.md 백로그 상태를 갱신하고 우선순위를 다시 정한다. 끝난 항목이 PLAN에 남지 않았는지 확인한다(옮기는 방식: `docs/CLAUDE.md` PLAN 절)
 
 핸드오프는 사용자가 요청할 때 한다.
