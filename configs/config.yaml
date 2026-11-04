@@ -188,6 +188,14 @@ app:
   placeholder: 국회 회의록에 대해 물어보세요
   contexts_title: 근거
   no_answer: 답변을 만들지 못했습니다. 다시 시도해 주세요.
+  browse_notice: 적재한 회의록을 연도와 회의로 찾아 읽을 수 있습니다.
+  doc_placeholder: 왼쪽에서 연도, 회의, 문서를 차례로 고르세요.
+  labels:
+    year: 연도
+    meeting: 회의
+    document: 문서
+    chat_tab: 대화
+    doc_tab: 문서
   # 동시에 처리하는 질의 수. 검색 단계가 여러 스레드에서 안전한지 재지 않아 1로 둔다
   concurrency: 1
 
