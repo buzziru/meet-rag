@@ -7,6 +7,7 @@ LangSmith로 추적하고, 호출마다 질의·근거·답변·레시피를 pat
 
 import hashlib
 import json
+import re
 import sys
 import time
 import uuid
@@ -43,6 +44,7 @@ from rag.retrieve import (
 )
 from rag.speakers import check_mode, chunk_speakers, doc_spans, render
 
+BULLET = re.compile(r"^- ", re.M)
 CONTEXT_META = ["date", "committee_name", "meeting_number", "session_number", "original"]
 
 
@@ -54,6 +56,12 @@ def build_messages(prompt, contexts: list[dict], query: str) -> list[dict]:
               for c in contexts]
     user = prompt.user.format(contexts="\n\n".join(blocks), query=query)
     return [{"role": "system", "content": prompt.system}, {"role": "user", "content": user}]
+
+
+def strip_lone_bullet(answer: str) -> str:
+    """불릿 줄이 하나뿐이면 불릿 기호를 뗀다. 논지 하나는 문단으로 쓰는 형식(S42)을 지시만으로는
+    지키지 못한다. 두 줄 이상이면 그대로 둔다."""
+    return BULLET.sub("", answer) if len(BULLET.findall(answer)) == 1 else answer
 
 
 def recipe(cfg, index_meta: dict, stream: bool) -> dict:
@@ -266,9 +274,10 @@ class Pipeline:
                 usage = chunk.usage.model_dump()
         yield self._result(text, usage, provider, finish, first, t0)
 
-    @staticmethod
-    def _result(text: str, usage, provider, finish, first: float | None, t0: float) -> dict:
+    def _result(self, text: str, usage, provider, finish, first: float | None, t0: float) -> dict:
         thought, answer = split_thought(text)
+        if self.cfg.prompt.get("strip_lone_bullet"):
+            answer = strip_lone_bullet(answer)
         return {"answer": answer, "thought": thought, "usage": usage, "provider": provider,
                 "finish_reason": finish, "first_token_s": first,
                 "total_s": time.perf_counter() - t0}
