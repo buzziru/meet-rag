@@ -24,7 +24,7 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 | `index/snowflake-ko-fixed-256-32/full/`의 `basis.json`, `chunks.jsonl`, `emb/` | 약 906MB |
 | `processed/speaker_spans.json`, `processed/speaker_spans.json.basis.json` | 약 10MB |
 
-- **Space 저장소**: `deploy/space/`에 진입점 `app.py`, Space 카드 `README.md`, `requirements.txt`를 두고, `src/`, `configs/`와 함께 올린다. 데이터 파일은 넣지 않는다(D-74). 진입점은 `rag.app`과 같은 구성(`+exp=current`, `retriever.rerank.enabled=false`)으로 시작하고, 시작 시간과 최고 메모리를 로그에 남긴다
+- **Space 저장소**: `deploy/space/`에 진입점 `app.py`, Space 카드 `README.md`, `requirements.txt`를 두고, `src/`, `configs/`와 함께 올린다. 데이터 파일은 넣지 않는다(D-74). 진입점은 `rag.app`과 같은 구성(`+exp=current`, `retriever.rerank.enabled=false`)으로 시작하고, 시작 시간과 최고 메모리를 로그에 남긴다 이후 변경: S39부터 재정렬을 켠 구성으로 시작한다(D-82)
 - **시크릿과 추적**: 생성 API 키와 LangSmith 값을 `doppler run -- hf …`와 `--secrets NAME`으로 넣어 값을 명령에 적지 않는다. 비공개 볼륨에 토큰이 따로 필요하면 Dataset 읽기 토큰도 같게 넣는다(문서에 적혀 있지 않아 완료 기준 1에서 본다). `LANGSMITH_TRACING=true`는 Space 변수로 둔다(D-71)
 - **설정**: 저장소 이름은 `configs/config.yaml`의 `deploy` 키에, 구간 파일 경로는 `paths`에 둔다. 코드에 직접 쓰지 않는다
 - **결정 기록**: 잰 값으로 호스팅과 벡터스토어(전수 검색 유지 여부)를 정해 DECISIONS에 적고, `docs/SPEC.md` 자원 제약의 "HF Spaces 무료 CPU"를 고친다
@@ -94,7 +94,7 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 - 구간 파일에 만든 설정 지문을 함께 뒀다(`src/CLAUDE.md`, `check_basis`)
 - Space 변수 `HF_HOME=/tmp/hf-home`, `PYTHONUNBUFFERED=1`, `LANGSMITH_TRACING=true`를 뒀다. `HF_HOME`이 없으면 임베딩 모델을 불러오는 단계에서 멈춘다(`rag.index.pinned`)
 - `deploy/space/requirements.txt`는 잠금 파일에서 내보내되 torch, CUDA 묶음을 빼고 `pydantic`을 2.12.5로 낮췄다. Space 빌드가 함께 설치하는 `gradio[mcp]`가 2.12.5 이하를 요구한다. 앱 동작은 완료 기준 4로 확인했고 평가 환경은 바뀌지 않는다
-- 볼륨 위치는 config가 아니라 Space 설정에 있다(`hf spaces volumes`). `deploy.space`, `deploy.dataset`은 이름 기록이고 코드가 읽지 않는다
+- 볼륨 위치는 config가 아니라 Space 설정에 있다(`hf spaces volumes`). `deploy.space`, `deploy.dataset`은 이름 기록이고 코드가 읽지 않는다 이후 변경: S39부터 볼륨이 없고 진입점이 `deploy.space`, `deploy.dataset`을 읽는다(D-82)
 - 첫 콜드 스타트 측정은 재시작이 적용되기 전 옛 컨테이너가 응답한 값(3초)이라 버리고, 실행 상태가 바뀌는 것을 본 값을 적었다
 
 ### 관찰
