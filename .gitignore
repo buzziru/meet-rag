@@ -33,3 +33,5 @@ Thumbs.db
 owner/
 practice/
 notebooks/PR_*.ipynb
+.vercel
+.env*.local
