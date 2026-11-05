@@ -181,7 +181,8 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
     return demo
 
 
-def main(endpoint: Callable | None = None, scorer: Callable | None = None) -> None:
+def main(endpoint: Callable | None = None, scorer: Callable | None = None,
+         embedder: Callable | None = None) -> None:
     cfg = load_cfg(["index.scope=full", *sys.argv[1:]])
     if cfg.retriever.get("rerank") and cfg.retriever.rerank.enabled and scorer is None:
         raise SystemExit("실시간 재정렬은 Space의 GPU 점수 함수가 있어야 한다(S39). 로컬은 "
@@ -190,7 +191,7 @@ def main(endpoint: Callable | None = None, scorer: Callable | None = None) -> No
     if cfg.deploy.prefetch_workers:
         prefetch(cfg, cfg.deploy.prefetch_workers)
         print(f"시작: 미리 읽기 {time.perf_counter() - start:.1f}초", flush=True)
-    pipe = Pipeline(cfg, scorer=scorer)
+    pipe = Pipeline(cfg, scorer=scorer, embedder=embedder)
     loaded = time.perf_counter()
     pipe.embed(cfg.app.title)  # 임베딩 모델을 먼저 불러 첫 질의가 기다리지 않게 한다
     parts = ", ".join(f"{k} {v:.1f}초" for k, v in pipe.retriever.timings.items())

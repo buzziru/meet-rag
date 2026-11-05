@@ -129,7 +129,7 @@ def test_blank_message_keeps_history_and_skips_search(cfg):
     (["+exp=current", "retriever.rerank.enabled=false"], "인덱스 읽음"),
 ])
 def test_main_requires_rerank_off_before_loading(monkeypatch, args, match):
-    def loaded(cfg, scorer=None):
+    def loaded(cfg, scorer=None, embedder=None):
         raise SystemExit("인덱스 읽음")
 
     monkeypatch.setattr(app, "Pipeline", loaded)

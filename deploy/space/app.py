@@ -2,6 +2,7 @@
 
 리랭커는 HF 문서 권장대로 모듈 수준에서 GPU로 올리고, 점수 함수를 @spaces.GPU로 감싼다. 채팅 처리는
 Space 시크릿의 소유자 토큰으로 같은 Space의 점수 함수를 불러 소유자 할당량을 쓴다(S39 결정 5).
+질의 임베딩은 별도 프로세스에서 한다(rag.embed_worker).
 spaces는 torch보다 먼저 불러온다.
 """
 
@@ -18,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from gradio_client import Client  # noqa: E402
 
 from rag.app import main  # noqa: E402
+from rag.embed_worker import EmbedProcess  # noqa: E402
 from rag.index import load_cfg, require_env  # noqa: E402
 from rag.rerank import load_model  # noqa: E402
 
@@ -68,4 +70,6 @@ def log_memory() -> None:
 if __name__ == "__main__":
     threading.Thread(target=log_memory, daemon=True).start()
     sys.argv = [sys.argv[0], *OVERRIDES]
-    main(endpoint=score_pairs, scorer=OwnerScorer())
+    # 모델 적재는 인덱스 적재와 함께 진행된다. 메인에서 임베딩하면 GPU 작업자가 멈춘다(embed_worker)
+    embedder = EmbedProcess(["index.scope=full", *OVERRIDES])
+    main(endpoint=score_pairs, scorer=OwnerScorer(), embedder=embedder)

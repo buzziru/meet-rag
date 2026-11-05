@@ -1,4 +1,5 @@
 import json
+import sys
 
 import numpy as np
 import pytest
@@ -328,3 +329,23 @@ def test_prefetch_reads_all_index_files_and_corpus(tmp_path, monkeypatch):
     monkeypatch.setattr(r, "ROOT", tmp_path)
     prefetch(OmegaConf.create({"paths": {"corpus": "corpus.jsonl"}}), 2)
     assert sorted(read) == ["corpus.jsonl", "part-0.npy"]
+
+
+def test_embed_process_round_trips_query_and_vector_through_worker_protocol():
+    from rag.embed_worker import EmbedProcess
+    code = ("import sys, numpy as np; from rag.embed_worker import serve; "
+            "serve(lambda t: np.array([[len(t[0]), 0.5]]), sys.stdin, sys.stdout)")
+    embed = EmbedProcess([], command=[sys.executable, "-c", code])
+    assert embed("질의 하나").tolist() == [5.0, 0.5]  # 한글이 그대로 전달된다
+    assert embed("둘").tolist() == [1.0, 0.5]
+    embed.process.stdin.close()
+    embed.process.wait()
+    with pytest.raises((RuntimeError, ValueError, OSError)):
+        embed("끝난 뒤")
+
+
+def test_pipeline_embed_uses_embedder_when_given():
+    import rag.generate as g
+    pipe = object.__new__(g.Pipeline)
+    pipe.embedder = lambda q: np.array([len(q)])
+    assert pipe.embed("질의").tolist() == [2]

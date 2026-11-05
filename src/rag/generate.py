@@ -157,12 +157,15 @@ class RerankGate:
 
 class Pipeline:
     """인덱스·코퍼스 메타·클라이언트를 한 번 불러 두고 질의마다 run을 부른다. scorer를 주면 점수
-    파일 대신 자유 질의를 실시간으로 재정렬한다(S39). scorer는 [질의, 청크] 쌍의 점수를 돌려준다."""
+    파일 대신 자유 질의를 실시간으로 재정렬한다(S39). scorer는 [질의, 청크] 쌍의 점수를 돌려준다.
+    embedder를 주면 질의 임베딩을 이 프로세스에서 계산하지 않는다(ZeroGPU, rag.embed_worker)."""
 
     gate = None
 
-    def __init__(self, cfg, scorer: Callable[[list[list[str]]], list[float]] | None = None):
+    def __init__(self, cfg, scorer: Callable[[list[list[str]]], list[float]] | None = None,
+                 embedder: Callable[[str], np.ndarray] | None = None):
         self.cfg = cfg
+        self.embedder = embedder
         r = cfg.retriever
         if r.get("rewrite") and r.rewrite.enabled:  # 생성 경로에는 재작성이 없다(EXP-013 기각, S16)
             raise SystemExit("생성은 retriever.rewrite를 지원하지 않는다. "
@@ -209,6 +212,8 @@ class Pipeline:
         return text, emb[qids.index(qid)]
 
     def embed(self, query: str) -> np.ndarray:
+        if self.embedder is not None:
+            return self.embedder(query)
         if self._model is None:
             self._model = load_model(self.cfg, self.cfg.embedding.query_max_tokens)
         return encoder(self._model, self.cfg, self.cfg.embedding.get("query_prompt"))([query])[0]
