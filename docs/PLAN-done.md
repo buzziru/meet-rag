@@ -49,6 +49,8 @@ S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를
   - [x] DECISIONS 정합 점검(생성 단계 test 1회 전): `docs/CLAUDE.md` "정합 점검" 절차로 DECISIONS 전체를 검토한다(사용자 결정 2026-10-28, ADR-0071) → D-87
   - [x] 생성 test 경로: `rag.gen_eval`이 test 800질의를 읽게 한다(명시적 허용 없이는 멈춤, 합성 입력으로만 검증, S13 지문 대조)(D-87) → slices/46-gen-test.md
   - [x] 생성 test 1회: 사용자 지시로 비피크에 실행한다(`LANGSMITH_TRACING=false`, D-72, D-87) → D-90
+  - [x] 전체 파이프라인 점검(사용자 지시 2026-11-05): `docs/CLAUDE.md` "정합 점검" 절차의 DECISIONS 점검과 코드 리뷰(R1 적재\~검색, R2 생성\~평가)를 병렬로 한다. test 전 점검의 낮음 항목도 이때 본다(사용자 결정 2026-10-28). 사용자가 고칠 범위를 정하고, 수정은 SLICE로 나눈다. 기준과 지적은 `docs/reviews/`에 남긴다. test를 다시 돌리지 않는다(D-90) → docs/reviews/2026-11-pipeline-review.md
+  - [x] 코드 리뷰 R3 앱·배포: S48 병합 뒤 `app`, `display`, `docs`, `deploy/`를 보고, 평가 설정과 배포 설정의 차이를 대조한다 → docs/reviews/2026-11-pipeline-review.md
 
 ## 리팩터링 (코드 리뷰 2026-10)
 
@@ -166,6 +168,8 @@ D-19. 조건 추출은 규칙·사전, 결합은 약한 필터로 한다.
 - [x] 벡터스토어 선정: S38에서 정한다. 지금은 청크 임베딩 행렬(118,039 × 1024, 404MB)을 메모리에 올려 전수 내적으로 검색하고 BM25는 bm25s 파일, 조건 목록은 파이썬 역색인이다. 먼저 전수 검색으로 충분한지(질의당 지연, 메모리)를 보고, 필요하면 저장 용량, 메타데이터 필터 지원, 문서 추가 비용, SPEC 자원 제약(상시 지출 0, HF Spaces 무료 CPU)으로 후보를 비교한다. late-interaction(KURE-v2)처럼 다중 벡터를 쓰면 MaxSim 지원 여부가 조건이 된다(`docs/research/embedding-candidates.md`) → D-80
 
 ## 지난 다음 순서 기록
+
+다음 순서(2026-11-05, D-90): 전체 파이프라인 점검(DECISIONS 정합 점검, 코드 리뷰 R1·R2) → S48 뒤 R3 → S41 뒤 늘어난 결정 점검. 배포·운영은 병행한다
 
 다음 순서(2026-11-05, S46): 생성 test 1회(절차 `docs/slices/46-gen-test.md`). 배포·운영은 생성 실험과 병행한다
 
