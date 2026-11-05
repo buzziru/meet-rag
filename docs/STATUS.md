@@ -14,11 +14,11 @@
 - 없음
 
 ## 리뷰 대기 PR
-- `docs/consistency-check` 정합 점검과 D-87, `chore/harness-pending-1105` 뒤의 하네스 PR #223
+- `docs/consistency-check` 정합 점검과 D-87
 
 ## 다음 행동
 `main` 세션(그쪽 핸드오프에서 이 절을 고친다):
-1. [A] 생성 test 경로 구현: 지시서를 쓰고 확인받은 뒤 `rag.gen_eval`이 test 800질의를 읽게 한다. 합성 입력으로만 검증한다(D-87). 그 뒤 사용자 지시로 test 1회를 비피크에 실행한다. 피크 시간대는 실행 전에 확인한다
+1. [A] 생성 test 경로 구현: 지시서를 쓰고 확인받은 뒤 `rag.gen_eval`이 test 800질의(`gen_eval.seed` 순서)를 읽게 한다. 합성 입력으로만 검증하고, S13 지문은 파일 내용을 읽지 않고 해시로 대조한다. 800질의 검색 지표를 낼 방법과 test 1회 호출 수·시간을 지시서에 적는다(D-87). 그 뒤 사용자 지시로 `LANGSMITH_TRACING=false`, 비피크에 1회 실행한다. 비용은 j_v13 기준으로 실행 전에 다시 어림하고 피크 시간대를 확인한다
 
 `deploy` 세션:
 1. [A] S39 실시간 재정렬: `docs/slices/39-zerogpu-rerank.md`를 사용자가 초안 커밋까지 지시했다(2026-11-04). 지시서를 다시 보이고 구현 착수 지시를 받은 뒤 `feat/s39-zerogpu-rerank`에서 구현한다. 방안은 같은 Space ZeroGPU, 할당량이 떨어지면 재정렬을 뺀 검색이다(사용자 결정). 목표는 로그인 없는 방문자의 5\~10개 질의다. OpenRouter 약 25번, $0.02 이하 승인됨. 소유자 계정 할당량을 소진하지 않는다. 측정 도구는 메인 체크아웃 `_workspace/s38_space_measure.py`, 기록은 `_workspace/s38_main_progress.md`
