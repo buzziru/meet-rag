@@ -40,7 +40,7 @@ from rag.gen_eval.checks import (
     metadata_mismatches,
     refusal_split,
 )
-from rag.gen_eval.common import eval_qids, load_refs, read_jsonl, stable
+from rag.gen_eval.common import check_test_run, eval_qids, load_refs, read_jsonl, stable
 from rag.index import ROOT, git_state, load_cfg, refuse_existing, require_env, write_guarded
 from rag.speakers import render as render_context
 
@@ -515,6 +515,7 @@ def main() -> None:
     if cfg.gen_eval.item_cases:
         judge_cases(cfg)
         return
+    check_test_run(cfg)
     refuse_existing(ROOT / cfg.paths.gen_judge, cfg.search.overwrite)  # judge 호출 전에 본다
     gens = {r["qid"]: r for r in read_jsonl(ROOT / cfg.paths.gen_runs)}
     qids = [q for q in eval_qids(cfg) if q in gens]  # 표본 순서. 아직 생성하지 않은 qid는 뺀다
