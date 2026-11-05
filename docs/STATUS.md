@@ -4,8 +4,8 @@
 - 생성 기준은 `exp029`다(프롬프트 v19, 검색·표지·1위 근거 확장·judge j_v13은 그대로, D-85, DECISIONS 머리 줄). 판정 실험이 아니고 사용자가 채택했다(S44)
 - 생성 실험과 배포를 별도 세션으로 운영한다(사용자 결정 2026-11-04). 세션은 Orca 이름으로 부른다: `main`(메인 체크아웃, 생성 실험, 브랜치와 무관), `deploy`(`.claude/worktrees/deploy`, 배포). 규칙은 `.claude/rules/sessions.md`다. 각 세션은 자기 절만 고치고 상대 세션의 절은 그대로 둔다. 상대에게 영향을 줄 일은 공유 기록 `_workspace/00_sessions_log.md`에 적고 `sessions_news` 훅이 지시마다 전달한다. 늦으면 안 되는 일은 직접 보낸다(ADR-0098)
 - `deploy` 현재: S45 회의 정보 괄호 표시와 `EmbedProcess` 수정을 병합했다(PR #228, D-86, D-88). 비공개 ZeroGPU Space `ingyoun/meet-rag`는 Hub 060d729(S45 포함)로 돌고, Vercel 페이지는 Space가 비공개라 채팅 연결 대기다. 화면 점검은 Vercel에서만 하고 Gradio 화면은 없앤다(D-88). worktree는 병합된 `feat/s45-meeting-info`에 머물러 있어 main 맞추기가 먼저다. `data`는 원본 junction이라 지울 때 링크만 지운다. 값과 주의는 `docs/slices/39-zerogpu-rerank.md`, `39b-vercel-front.md`, `45-meeting-info.md` 결과 절이다
-- `main` 현재: 세션 소식 훅(PR #226, ADR-0098)을 병합했고, 생성 test 경로(S46, PR #227)와 이어 쓰기 해석(D-89)을 올렸다. test 1회는 아직 실행하지 않았다. 입력 해시와 지문, 호출 전 검사는 실제 설정으로 통과했다. 정합 점검의 낮음 약 20건은 프로젝트 마무리 전 점검으로 넘겼다. 회고 입력은 `_workspace/retrospective_main_notes.md`에도 적었다
-- 진행 기록: `_workspace/s46_main_progress.md`, 하네스 대기 `_workspace/00_main_harness-pending.md`. 메인 체크아웃에 있고 worktree로 따라오지 않는다
+- `main` 현재: 생성 test 1회를 마쳤고 생성 단계를 끝냈다(S46, D-90, 실행 커밋 7d16aac). 기준 설정은 그대로이고 다시 돌리지 않는다. 하네스 대기 항목을 ADR-0100으로 반영했다(PR #230). 회고 입력은 `_workspace/retrospective_main_notes.md`에도 적었다
+- 진행 기록: `_workspace/pipeline-review_main_progress.md`(점검 기준·영역·조건), `_workspace/s46_main_progress.md`, 하네스 대기 `_workspace/00_main_harness-pending.md`. 메인 체크아웃에 있고 worktree로 따라오지 않는다
 
 ## 실행 중 작업
 - `main`: 없음
@@ -15,13 +15,14 @@
 - 없음
 
 ## 리뷰 대기 PR
-- PR #227(S46 생성 test 경로, D-89, 위험도 단방향). 판단할 곳은 사용자가 답했고 이 STATUS 커밋까지 올린 뒤 병합한다(사용자 2026-11-05)
+- 생성 test 결과 기록 PR(D-90, 위험도 단방향)
 
 ## 다음 행동
 `main` 세션(그쪽 핸드오프에서 이 절을 고친다):
-1. PR #227 병합 확인 뒤 main 맞추기
-2. 생성 test 1회: 사용자 지시로 `docs/slices/46-gen-test.md` "1회 실행 절차"대로 한다. 호출 수·시간·비용을 다시 보고하고 승인받는다(어림 약 $4.2, 약 75분). 평일 19시 뒤나 주말(한국 시간)에 시작하고, 그동안 PC가 켜져 있어야 한다. 결과로 기준을 바꾸지 않는다(D-87 결정 5)
-3. [F] 하네스 대기 목록의 `[대기]` 항목: `sessions.md`의 `draft` 확인 오탐(Claude 추천 문구가 `draft`에 나온다, 사용자 지적), 충돌 표식 검사, 파일 끝 줄바꿈, Vercel 작업 절
+1. 결과 기록 PR 병합 확인 뒤 main 맞추기
+2. 전체 파이프라인 점검: `_workspace/pipeline-review_main_progress.md` 순서대로 DECISIONS 정합 점검 2개와 코드 리뷰 R1·R2를 병렬로 하고, 높음 항목을 직접 확인해 통합 보고한다. 고칠 범위는 사용자가 정한다
+3. S48 병합 뒤 코드 리뷰 R3, S41 뒤 늘어난 결정만 정합 점검
+4. [F] `protocol-guard`(`SKILL.md:29-30`)와 `meet-rag`(`SKILL.md:127`)의 생성 test 문구를 D-90 뒤 상태로 맞추고 test 경로를 둘지 정한다. 재귀 검색이 `.claude/worktrees/deploy/data` junction으로 들어가는 문제도 본다(`_workspace/00_main_harness-pending.md`)
 
 `deploy` 세션:
 1. [F] `meet-rag` 스킬 "화면 검증" 절의 대상 주소를 Vercel 배포 페이지로 고친다(D-88 결정 1, `_workspace/00_main_harness-pending.md`). 최신 `main`에서 `chore/` 브랜치를 딴다
