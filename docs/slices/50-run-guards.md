@@ -69,4 +69,6 @@
 ### 지시서와 다르게 한 것
 
 - `src/rag/bm25.py`를 수정 허용 목록 밖에서 고쳤다. `BM25Retriever.num_docs` 속성 하나로, `Retriever`가 bm25s 내부 값을 직접 읽지 않게 하려는 것이다
-- `rag.rerank`가 `rag.search`의 `check_test`를 불러 쓴다. 검사 정의를 다시 쓰지 않으려는 것이고(`src/CLAUDE.md`), 그만큼 `rag.rerank`의 import가 늘어난다
+- `rag.rerank`가 `rag.search`의 `check_test`를 `main` 안에서 불러 쓴다. 검사 정의를 다시 쓰지 않으려는 것이고(`src/CLAUDE.md`), Space가 `rag.rerank`를 불러오므로(`deploy/space/app.py:25`) 시작 경로를 늘리지 않으려고 모듈 머리에 두지 않았다
+- `docs/slices/05-retrieve.md`에 `이후 변경`을 붙였다(수정 허용 목록 밖). `embed-queries` 동작이 바뀌어 `docs/CLAUDE.md` 당시 기록 절이 요구한다
+- Space 시작 때 `Retriever`도 새 BM25 대조를 지난다. 로컬 full 인덱스에서만 확인했고 Dataset 사본은 다음 Space 업로드에서 처음 확인된다

@@ -24,7 +24,6 @@ from langsmith.run_trees import get_cached_client
 
 from rag.index import ROOT, load_cfg, pinned, refuse_existing, require_env, write_guarded
 from rag.retrieve import rerank_basis, rerank_basis_path
-from rag.search import check_test
 
 
 def load_model(rr):
@@ -159,6 +158,8 @@ def jev_score(cfg) -> None:
 def main() -> None:
     cfg = load_cfg(sys.argv[1:])
     if cfg.search.queries == "test":  # 후보 쌍에 test 질의가 들어 있다(S50)
+        from rag.search import check_test  # Space가 이 모듈을 불러오므로 시작 경로를 늘리지 않는다
+
         check_test(cfg)
     rr = cfg.retriever.rerank
     if cfg.adopt_basis:  # 지문 없는 기존 점수 파일에 지문만 쓴다. 채점하지 않는다(S15)
