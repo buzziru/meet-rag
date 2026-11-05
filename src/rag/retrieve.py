@@ -389,6 +389,9 @@ class Retriever:
         if self.hybrid:
             self.bm25_ids = read_doc_ids(self.index_dir)  # BM25는 기본 청크만 쓴다
             self.bm25 = BM25Retriever(cfg, self.index_dir)
+            if self.bm25.num_docs != len(self.bm25_ids):  # 행이 밀리면 다른 문서와 짝지어진다(S50)
+                raise SystemExit(f"{self.index_dir}: 청크 {len(self.bm25_ids)}개와 BM25 "
+                                 f"{self.bm25.num_docs}행이 다르다")
             self.bm25_doc_no = np.unique(self.bm25_ids, return_inverse=True)[1]
         self.use_cond = bool(self.hybrid and r.get("conditions") and r.conditions.enabled)
         # 재정렬 점수로 상위 후보를 다시 줄 세우는지. 평가와 생성이 이 값을 읽는다(S16)

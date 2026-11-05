@@ -121,8 +121,18 @@ def load_refs(cfg, qids: list[str]) -> dict[str, dict]:
 
 
 def read_jsonl(path: Path) -> list[dict]:
+    """강제 종료로 잘린 줄은 건너뛰지 않고 위치를 적어 멈춘다. 건너뛰면 값이 조용히 빠진다(S50)."""
+    rows = []
     with path.open(encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
+        for n, line in enumerate(f, 1):
+            if not line.strip():
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError as e:
+                raise SystemExit(f"{path}의 {n}번째 줄을 읽지 못했다({e.msg}). 쓰다가 잘렸을 수 "
+                                 "있다. 어디까지 쓰였는지 확인한다") from e
+    return rows
 
 
 def stable(rec: dict) -> dict:
