@@ -1,0 +1,7 @@
+# @package _global_
+# S44 답을 먼저 쓰는 방안의 비교용 프롬프트 v20(docs/slices/44-answer-gaps.md, D-83 결정 3). 기준 후보가 아니고 gen-small 생성만 한다.
+# 판정 실험이 아니라 EXP 문서는 없다. 기준 exp026을 직접 상속하고 프롬프트만 바꾼다
+defaults:
+  - exp026
+  - override /prompt: v20
+  - _self_
