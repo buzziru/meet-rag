@@ -268,6 +268,7 @@ function resetSelection() {
 }
 
 async function loadYears() {
+  if ($("year").options.length > 1) return; // 다시 연결해도 두 번 넣지 않는다
   for (const year of await call("years")) {
     const option = el("option", "", String(year));
     option.value = year;
