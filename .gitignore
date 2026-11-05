@@ -32,4 +32,4 @@ Thumbs.db
 # owner
 owner/
 practice/
-notebooks/PR_*.ipynb
+notebooks/PR_*.ipynb.vercel
