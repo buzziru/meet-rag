@@ -37,11 +37,11 @@
 | 3 | 미리보기 주소에서 Aside(토큰은 스크립트로 옮김), 지어낸 질의 1번 | 답변이 조각으로 나오고 근거 5개, 연도·회의·문서를 골라 문서가 열린다. 콘솔 오류 없음 |
 | 4 | Space 로그 | 3의 질의에서 재정렬이 돈다(`재정렬 N초`). 질의 원문은 로그에 없다 |
 | 5 | 페이지 커밋 뒤에 문서 커밋을 함께 push | 미리보기가 빌드된다(S47에서 보지 못한 경우). `Vercel` 상태와 배포 기록을 적는다 |
-| 6 | 병합 뒤 production 주소에서 Aside, 지어낸 질의 1번 | 3과 같다. 결과는 PR 댓글에 적는다 |
+| 6 | 병합 뒤 production 주소에서 Aside, 질의 없음 | 연결되고 연도·회의·문서를 골라 문서가 열린다. 콘솔 오류 없음. 결과는 PR 댓글에 적는다. 처음 지시는 질의 1번을 보내는 것이었고, 생성 변경이 없으면 답변으로 검증할 필요가 없다는 사용자 지시로 바꿨다(2026-11-05) |
 
 ## 수정 허용 파일
 
-`src/rag/app.py`, `src/rag/docs.py`, `configs/config.yaml`(`app` 절), `tests/test_app.py`, `deploy/web/app.js`, `CLAUDE.md`(명령 두 줄), 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/DECISIONS.md`(D-84·D-88 표시), `docs/slices/35-chat-app.md`, `docs/slices/39b-vercel-front.md`, `docs/slices/45-meeting-info.md`(`이후 변경` 표시)
+`src/rag/app.py`, `src/rag/docs.py`, `configs/config.yaml`(`app` 절), `tests/test_app.py`, `deploy/web/app.js`, `CLAUDE.md`(명령 두 줄), 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/DECISIONS.md`(D-84·D-88 표시), `docs/slices/35-chat-app.md`, `docs/slices/39b-vercel-front.md`, `docs/slices/36-doc-browser.md`, `docs/slices/45-meeting-info.md`(`이후 변경` 표시), `tests/test_docs.py`
 
 ## 범위 밖
 
@@ -63,7 +63,7 @@
 | 5 | 8ef6b6b(페이지)와 baadcfe(문서)를 함께 push해 빌드됐다. 다만 새 브랜치의 첫 push라 비교 대상이 없어서 빌드된 것일 수 있다. S47 수정이 같은 브랜치의 이어진 push에서도 맞는지는 이번에도 가리지 못했다 |
 | 6 | 병합 뒤 확인(PR 댓글) |
 
-OpenRouter: 미리보기 1번. 비용은 재지 않았다(1,000질의당 약 $0.37로 어림).
+OpenRouter: 미리보기 1번(승인 2번 중). production 확인은 질의 없이 해 나머지 1번은 쓰지 않는다. 비용은 재지 않았다(1,000질의당 약 $0.37로 어림).
 
 ### 지시서와 다르게 하거나 더한 것
 
