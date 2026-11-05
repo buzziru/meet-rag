@@ -17,10 +17,11 @@ BEGIN = time.perf_counter()
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from gradio_client import Client  # noqa: E402
+from huggingface_hub import snapshot_download  # noqa: E402
 
 from rag.app import main  # noqa: E402
 from rag.embed_worker import EmbedProcess  # noqa: E402
-from rag.index import load_cfg, require_env  # noqa: E402
+from rag.index import ROOT, load_cfg, require_env  # noqa: E402
 from rag.rerank import load_model  # noqa: E402
 
 OVERRIDES = ["+exp=current", "deploy.speakers_from_file=true", "retriever.rerank.device=cuda",
@@ -58,6 +59,16 @@ class OwnerScorer:
         return job.result(timeout=d.rerank.timeout_s)
 
 
+def download_data() -> None:
+    """비공개 Dataset을 앱이 읽는 data/로 내려받는다. 볼륨보다 빨라 콜드 스타트가 짧다(S39 결과 절).
+    디스크는 재시작하면 지워져 시작할 때마다 받는다."""
+    start = time.perf_counter()
+    d = CFG.deploy
+    snapshot_download(d.dataset, repo_type="dataset", revision=d.dataset_revision,
+                      local_dir=ROOT / "data", token=require_env(d.rerank.token_env))
+    print(f"시작: 데이터 내려받기 {time.perf_counter() - start:.1f}초", flush=True)
+
+
 def log_memory() -> None:
     """최고 메모리를 1분마다 로그에 남긴다."""
     begin = time.perf_counter()
@@ -72,4 +83,5 @@ if __name__ == "__main__":
     sys.argv = [sys.argv[0], *OVERRIDES]
     # 모델 적재는 인덱스 적재와 함께 진행된다. 메인에서 임베딩하면 GPU 작업자가 멈춘다(embed_worker)
     embedder = EmbedProcess(["index.scope=full", *OVERRIDES])
+    download_data()
     main(endpoint=score_pairs, scorer=OwnerScorer(), embedder=embedder)

@@ -8,7 +8,7 @@ from omegaconf import OmegaConf
 from rag.generate import build_messages, recipe
 from rag.index import load_cfg
 from rag.llm import answer_start, split_thought
-from rag.retrieve import ChunkStore, Retriever, best_chunks, prefetch
+from rag.retrieve import ChunkStore, Retriever, best_chunks
 from rag.speakers import render
 
 
@@ -309,26 +309,6 @@ def test_stream_reports_skip_only_when_live_rerank_was_skipped():
     assert run(object(), {"rrf_score": 1.0}) is True
     assert run(object(), {"rerank_score": None}) is False
     assert run(None, {"rrf_score": 1.0}) is False  # 재정렬을 끈 구성
-
-
-def test_prefetch_reads_all_index_files_and_corpus(tmp_path, monkeypatch):
-    import rag.retrieve as r
-    d = tmp_path / "idx"
-    (d / "emb").mkdir(parents=True)
-    (d / "emb" / "part-0.npy").write_bytes(b"x")
-    (tmp_path / "corpus.jsonl").write_bytes(b"y")
-    read = []
-    real_open = type(d).open
-
-    def spy(self, *a, **kw):
-        read.append(self.name)
-        return real_open(self, *a, **kw)
-
-    monkeypatch.setattr(type(d), "open", spy)
-    monkeypatch.setattr(r, "dense_dirs", lambda cfg: [d])
-    monkeypatch.setattr(r, "ROOT", tmp_path)
-    prefetch(OmegaConf.create({"paths": {"corpus": "corpus.jsonl"}}), 2)
-    assert sorted(read) == ["corpus.jsonl", "part-0.npy"]
 
 
 def test_embed_process_round_trips_query_and_vector_through_worker_protocol():

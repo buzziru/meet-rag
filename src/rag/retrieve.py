@@ -10,7 +10,6 @@
 import json
 import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from json.decoder import scanstring
 from pathlib import Path
 
@@ -353,19 +352,6 @@ def dense_chunkings(cfg) -> list:
 
 def dense_dirs(cfg) -> list[Path]:
     return [index_path(cfg, c) for c in dense_chunkings(cfg)]
-
-
-def prefetch(cfg, workers: int) -> None:
-    """시작 때 읽을 인덱스·코퍼스 파일을 스레드로 먼저 읽어 OS 파일 캐시에 올린다(S39). 값은 버리고
-    이어지는 적재는 그대로라 배열 순서와 검색 결과가 바뀌지 않는다."""
-    def read(path: Path) -> None:
-        with path.open("rb") as f:
-            while f.read(1 << 23):
-                pass
-
-    files = [p for d in dense_dirs(cfg) for p in d.rglob("*") if p.is_file()]
-    with ThreadPoolExecutor(workers) as pool:
-        list(pool.map(read, [*files, ROOT / cfg.paths.corpus]))
 
 
 def load_dense(dirs: list[Path]) -> tuple[np.ndarray, np.ndarray]:

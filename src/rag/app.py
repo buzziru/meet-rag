@@ -16,7 +16,6 @@ from langsmith.run_trees import configure, get_cached_client
 from rag.docs import Corpus, format_doc, readable
 from rag.generate import Pipeline, recipe
 from rag.index import load_cfg
-from rag.retrieve import prefetch
 from rag.speakers import render
 
 SCROLL_TO_QUESTION = """() => { setTimeout(() => {
@@ -224,9 +223,6 @@ def main(endpoint: Callable | None = None, scorer: Callable | None = None,
                          "retriever.rerank.enabled=false로 실행한다")
     logging.getLogger("langsmith.client").addHandler(TRACING)
     start = time.perf_counter()
-    if cfg.deploy.prefetch_workers:
-        prefetch(cfg, cfg.deploy.prefetch_workers)
-        print(f"시작: 미리 읽기 {time.perf_counter() - start:.1f}초", flush=True)
     pipe = Pipeline(cfg, scorer=scorer, embedder=embedder)
     loaded = time.perf_counter()
     pipe.embed(cfg.app.title)  # 임베딩 모델을 먼저 불러 첫 질의가 기다리지 않게 한다

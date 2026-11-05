@@ -213,7 +213,8 @@ deploy:
   space: ingyoun/meet-rag
   dataset: ingyoun/meet-rag-data
   speakers_from_file: false
-  prefetch_workers: 0  # 시작 때 파일을 미리 읽는 스레드 수. 0이면 끈다(S39)
+  # Space가 시작할 때 내려받는 Dataset 커밋. 저장소에 새 커밋을 올려도 값이 조용히 바뀌지 않는다(S39)
+  dataset_revision: 968be89c7ee6bfb1fb2bb8847805bda03190ed8f
   rerank:
     api_name: score_pairs  # Space의 GPU 점수 함수 경로
     token_env: HF_TOKEN  # 소유자 할당량으로 부르는 토큰의 환경 변수(S39 결정 5)
