@@ -11,11 +11,13 @@ import re
 import sys
 import time
 import uuid
-from collections.abc import Iterator
-from datetime import datetime
+from collections.abc import Callable, Iterator
+from datetime import datetime, timedelta
+from functools import partial
 
 import numpy as np
 from langsmith import traceable
+from langsmith.run_helpers import get_current_run_tree
 from langsmith.run_trees import get_cached_client
 from langsmith.wrappers import wrap_openai
 from omegaconf import OmegaConf
@@ -45,6 +47,8 @@ from rag.speakers import check_mode, chunk_speakers, load_spans, render
 
 BULLET = re.compile(r"^- ", re.M)
 CONTEXT_META = ["date", "committee_name", "meeting_number", "session_number", "original"]
+# ZeroGPU 할당량 초과 메시지의 대기 시간. spaces가 timedelta를 그대로 적는다(S39 완료 기준 1)
+RETRY_AFTER = re.compile(r"Try again in (?:(\d+) days?, )?(\d+):(\d+):(\d+)")
 
 
 def build_messages(prompt, contexts: list[dict], query: str) -> list[dict]:
@@ -118,11 +122,62 @@ def swap_gold(docs: list[str], stages: list[dict], k: int, gold: str | None,
     return [docs[i] for i in keep], [stages[i] for i in keep]
 
 
-class Pipeline:
-    """인덱스·코퍼스 메타·클라이언트를 한 번 불러 두고 질의마다 run을 부른다."""
+def pause_seconds(message: str, default: float) -> float:
+    """실패 뒤 재정렬을 부르지 않을 시간. 오류의 대기 시간을 읽지 못하면 기본값이다."""
+    m = RETRY_AFTER.search(message)
+    if m is None:
+        return default
+    days, hours, minutes, seconds = (int(v or 0) for v in m.groups())
+    return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds).total_seconds()
 
-    def __init__(self, cfg):
+
+class RerankGate:
+    """실시간 재정렬 호출. 실패하면 방문자에게 오류를 보이지 않고 재정렬을 건너뛰며, 일정 시간 모든
+    질의의 호출을 멈췄다가 다시 시도한다(S39 결정 4). 앱은 질의를 하나씩 처리한다(app.concurrency).
+    """
+
+    def __init__(self, score: Callable[[list[list[str]]], list[float]], default_pause: float,
+                 clock: Callable[[], float] = time.monotonic):
+        self.score, self.default_pause, self.clock = score, default_pause, clock
+        self.until = 0.0
+
+    def __call__(self, pairs: list[list[str]]) -> list[float] | None:
+        if self.clock() < self.until:
+            self._note({"rerank_skipped": "paused"})
+            return None
+        start = self.clock()
+        try:
+            got = self.score(pairs)
+            spent = self.clock() - start
+            print(f"재정렬 {spent:.2f}초", flush=True)
+            self._note({"rerank_s": spent})
+            return got
+        except Exception as e:  # 어떤 실패든 답변은 나가야 한다(S39 결정 2)
+            pause = pause_seconds(str(e), self.default_pause)
+            self.until = self.clock() + pause
+            kind = type(e).__name__
+            print(f"재정렬 실패({kind}): {e}. {pause:.0f}초 동안 부르지 않는다", flush=True)
+            self._note({"rerank_skipped": "failed", "rerank_error": kind,
+                        "rerank_pause_s": pause})
+            return None
+
+    @staticmethod
+    def _note(metadata: dict) -> None:
+        if (run := get_current_run_tree()) is not None:
+            run.add_metadata(metadata)
+
+
+class Pipeline:
+    """인덱스·코퍼스 메타·클라이언트를 한 번 불러 두고 질의마다 run을 부른다. scorer를 주면 점수
+    파일 대신 자유 질의를 실시간으로 재정렬한다(S39). scorer는 [질의, 청크] 쌍의 점수를 돌려준다.
+    embedder를 주면 질의 임베딩을 이 프로세스에서 계산하지 않는다(ZeroGPU, rag.embed_worker)."""
+
+    gate = None
+
+    def __init__(self, cfg, scorer: Callable[[list[list[str]]], list[float]] | None = None,
+                 embedder: Callable[[str], np.ndarray] | None = None):
         self.cfg = cfg
+        self.embedder = embedder
         r = cfg.retriever
         if r.get("rewrite") and r.rewrite.enabled:  # 생성 경로에는 재작성이 없다(EXP-013 기각, S16)
             raise SystemExit("생성은 retriever.rewrite를 지원하지 않는다. "
@@ -152,7 +207,9 @@ class Pipeline:
                                          max_retries=cfg.generator.max_retries))
         self._model = None
         # 재정렬 점수는 EXP-017이 Colab에서 만든 파일을 읽는다. 실시간 재정렬은 배포 SLICE(S14)
-        use_rerank = self.retriever.use_rerank
+        use_rerank = self.retriever.use_rerank and scorer is None
+        if scorer is not None:
+            self.gate = RerankGate(scorer, cfg.deploy.rerank.pause_s)
         self.rerank_scores = read_rerank_scores(cfg) if use_rerank else None
         self.index_meta["rerank_scores_sha256"] = (
             file_sha256(ROOT / cfg.paths.rerank_scores) if use_rerank else None)
@@ -167,6 +224,8 @@ class Pipeline:
         return text, emb[qids.index(qid)]
 
     def embed(self, query: str) -> np.ndarray:
+        if self.embedder is not None:
+            return self.embedder(query)
         if self._model is None:
             self._model = load_model(self.cfg, self.cfg.embedding.query_max_tokens)
         return encoder(self._model, self.cfg, self.cfg.embedding.get("query_prompt"))([query])[0]
@@ -174,18 +233,29 @@ class Pipeline:
     def rank(self, query: str, q_emb: np.ndarray, qid: str | None = None,
              ) -> tuple[np.ndarray, list[str], list[dict]]:
         """dense 청크 점수, 문서 순위, 문서별 단계 기록. rag.search와 같은 Retriever를 쓴다(S12)."""
-        rerank = None
-        if self.rerank_scores is not None:
+        scores = self.retriever.chunk_emb @ q_emb
+        rerank, scorer = None, None
+        if self.gate is not None:
+            scorer = partial(self._live_rerank, query, scores)
+        elif self.rerank_scores is not None:
             if qid not in self.rerank_scores:
                 raise SystemExit("재정렬 점수 파일에 없는 질의다. 자유 질의의 실시간 재정렬은 "
                                  "배포 SLICE에서 만든다(S14 결정 1)")
             rerank = self.rerank_scores[qid]
-        scores = self.retriever.chunk_emb @ q_emb
         tokens = self.retriever.query_tokens([query])
         conds = self.extractor.extract(query) if self.extractor else None
         docs, stages = self.retriever.explain(scores, tokens[0] if tokens else None, conds,
-                                              rerank=rerank)
+                                              rerank=rerank, scorer=scorer)
         return scores, docs, stages
+
+    def _live_rerank(self, query: str, scores: np.ndarray,
+                     fused: list[str]) -> dict[str, float] | None:
+        """RRF 상위 후보를 rag.search 후보 쌍과 같은 규칙(best_chunks)으로 만들어 점수를 받는다."""
+        head = fused[: self.cfg.retriever.rerank.depth]
+        picked = best_chunks(scores, self.doc_chunks, head)
+        texts = self.store.texts(set(picked))
+        got = self.gate([[query, texts[c]] for c in picked])
+        return None if got is None else dict(zip(head, got, strict=True))
 
     @traceable(name="retrieve", process_inputs=lambda i: {"k": i["k"]})
     def retrieve(self, query: str, q_emb: np.ndarray, k: int, qid: str | None = None,

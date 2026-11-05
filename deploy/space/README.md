@@ -7,4 +7,4 @@ app_file: app.py
 pinned: false
 ---
 
-국회 회의록 질의응답. 코드는 저장소의 `src/`, `configs/`를 그대로 쓰고, 데이터는 Dataset 저장소를 볼륨으로 붙인다(`docs/slices/38-hf-space.md`).
+국회 회의록 질의응답. 코드는 저장소의 `src/`, `configs/`를 그대로 쓰고, 데이터는 시작할 때 비공개 Dataset에서 내려받는다(`docs/slices/39-zerogpu-rerank.md`).
