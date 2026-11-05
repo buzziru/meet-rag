@@ -53,3 +53,20 @@
 - `docs/reviews/2026-11-pipeline-review.md`의 B 항목(`deploy` S49)
 - judge 지시, 판정표, 기본 judge 설정, 보호 경로
 - 유료 호출, Colab, 재실행
+
+## 결과 (2026-11-05)
+
+커밋: 구현 9e7ae2b
+
+- 테스트: `uv run pytest -q` 557개 통과, ruff 통과, `.claude/skills/meet-rag/scripts`와 `.claude/hooks` 138개 통과
+- 망가뜨린 사본(플러그인으로 끼움): `reason` 검사, `refuse_existing`, BM25 대조, `check_test`, 새 `read_jsonl`을 하나씩 뺀 사본에서 해당 테스트가 실패한다
+- `rag.gen_eval.report +exp=current` 출력이 구현 전후로 바이트까지 같다(gen-full)
+- judge 레시피: 지금 설정으로 만든 값과 gen-full 기록의 값이 20개 키 모두 같다. `configs/`는 바꾸지 않았다
+- gen-full judge 기록의 `verdicts` 321질의가 모두 새 검사를 지난다. 건수만 봤다
+- 실제 full 인덱스: BM25 118,039행과 청크 118,039개가 같아 `Retriever`가 불러와진다
+- test 기록은 열지 않았고 test 경로는 실행하지 않았다. 유료 호출 없음
+
+### 지시서와 다르게 한 것
+
+- `src/rag/bm25.py`를 수정 허용 목록 밖에서 고쳤다. `BM25Retriever.num_docs` 속성 하나로, `Retriever`가 bm25s 내부 값을 직접 읽지 않게 하려는 것이다
+- `rag.rerank`가 `rag.search`의 `check_test`를 불러 쓴다. 검사 정의를 다시 쓰지 않으려는 것이고(`src/CLAUDE.md`), 그만큼 `rag.rerank`의 import가 늘어난다
