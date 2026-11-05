@@ -42,6 +42,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
    - 하네스(`.claude/`의 스킬·에이전트·규약·보조 스크립트) 수정, 하네스 피드백 반영 → F
    - 전체 코퍼스 임베딩·인덱스 구축 등 GPU 작업 → 해당 A·B 단계 안에서 E
    - HF Space·저장소·버킷·Jobs·Inference Endpoints를 다루는 작업 → 해당 A·B 단계 안에서 "Hugging Face 작업" 절
+   - Vercel 프로젝트·배포를 다루는 작업 → 해당 A·B 단계 안에서 "Vercel 작업" 절
    - 앱 화면의 모양과 클릭 흐름 확인 → 해당 A·B 단계 안에서 "화면 검증" 절
 
 ## 작업 기록 (`_workspace/`)
@@ -144,6 +145,13 @@ Space·저장소·버킷을 만들거나 고칠 때, 파일을 올릴 때, 시�
 - **토큰**: 로그인은 사용자가 한다(`! hf auth login`). `hf auth token`처럼 값을 출력하는 명령을 쓰지 않고, Space 시크릿은 `--secrets KEY=값`으로 값을 명령에 적지 않는다. 대화와 로그에 남는다
 - **Git Bash 경로 변환**: Space 변수처럼 Linux 쪽에서 쓸 `/` 경로를 `hf` 인자로 넘길 때는 명령 앞에 `MSYS_NO_PATHCONV=1`을 붙인다. Git Bash가 값을 Windows 경로로 바꿔 넣는다. S38에서 `HF_HOME=/tmp/hf-home`이 이렇게 바뀌어 모델이 `/app` 아래에 받아졌고, 검증에서야 찾았다. 로컬 파일 경로에는 붙이지 않는다
 
+## Vercel 작업
+
+Vercel 프로젝트와 배포를 다룰 때는 전역 `vercel-cli` 스킬을 Skill 도구로 먼저 불러온다. 이 스킬은 명령 사용법만 담고 이 저장소의 규칙을 모르므로 아래는 메인이 지킨다.
+
+- **배포 경로**: Git 연결로만 배포한다. 저장소 루트에서 `vercel deploy`를 하지 않는다. 링크된 `data/`가 함께 올라갈 수 있고, AI Hub 데이터는 재배포가 제한된다(S39b)
+- **도구**: CLI를 쓴다. Vercel MCP의 프로젝트 생성과 수정은 403이었다(S39b). 플러그인은 설치하지 않는다(사용자 결정 2026-11-05)
+
 ## 화면 검증
 
 앱 화면의 모양과 실제 클릭 흐름을 볼 때 전역 `aside-browser` 스킬과 `aside` CLI를 쓴다(D-77, ADR-0089). 역할을 나눈다: 눈으로 볼 일은 `aside exec`(Aside 에이전트), 값으로 판정할 일은 `aside repl`, 나머지 로직은 pytest, 디자인 판단과 최종 확인은 사용자다.
@@ -163,7 +171,7 @@ Space·저장소·버킷을 만들거나 고칠 때, 파일을 올릴 때, 시�
 - 외부 API(OpenRouter, opencode Go, Google AI Studio 등)가 5xx를 내면 다시 시도하기 전에 그 제공자의 서버 상태(OpenRouter https://status.openrouter.ai, Google AI Studio https://aistudio.google.com/status 등)를 먼저 확인한다. 장애·성능 저하로 표시되면 멈추고 상태와 함께 보고한다. 정상으로 표시될 때만 한 번 다시 시도하고, 또 실패하면 보고한다. SDK 자동 재시도에 반복 실행을 겹치면 호출만 늘고 원인은 그대로다(S6 노트북을 서버 장애 중 일곱 번 다시 실행한 사례, ADR-0012). 402(결제)·403(인증)은 다시 시도하지 않고 보고한다
 - 노트북은 `scripts/nb_kernel.py`(지속 커널)로 실행한다. 셀 하나가 실패하면 처음부터 다시 돌리지 않고 그 셀을 고쳐 이어서 실행한다. 커널 유지와 `stop` 시점은 `.claude/rules/notebook.md` §8을 따른다
 - 에이전트 보고가 "사용자 승인 필요"를 포함하면 그 지점에서 멈추고 사용자에게 묻는다
-- 이스케이프(`\n`, `\~`)가 든 문자열을 파일에 넣거나 바꿀 때는 Bash heredoc 안의 Python·sed로 하지 않고 Edit 도구로 한다. 함수·테스트를 통째로 덧붙이는 스크립트도 같다. 셸과 Python이 이스케이프를 두 번 해석해 실제 줄바꿈이 들어가거나 `\~`가 어긋나 파일이 깨졌다(S14 2회, 하네스 1회, S17 1회). 스크립트로 파일을 쓸 때는 `open(..., newline="\n")`로 쓴다(`write_text`·`open`은 Windows에서 CRLF로 쓴다, S16). `python`·`sed -i`가 든 Bash 명령 뒤에는 `file_damage_check` 훅이 바뀐 파일의 구문 오류와 CRLF를 알린다(ADR-0055). 알림이 오면 그 자리에서 Edit로 바로잡는다
+- 이스케이프(`\n`, `\~`)가 든 문자열을 파일에 넣거나 바꿀 때는 Bash heredoc 안의 Python·sed로 하지 않고 Edit 도구로 한다. 함수·테스트를 통째로 덧붙이는 스크립트도 같다. 셸과 Python이 이스케이프를 두 번 해석해 실제 줄바꿈이 들어가거나 `\~`가 어긋나 파일이 깨졌다(S14 2회, 하네스 1회, S17 1회). 스크립트로 파일을 쓸 때는 `open(..., newline="\n")`로 쓴다(`write_text`·`open`은 Windows에서 CRLF로 쓴다, S16). 파일 끝에 덧붙일 때(`>>`, 추가 모드)는 Edit 도구로 하거나 끝 줄바꿈을 먼저 본다. 없으면 앞 줄과 붙고 어떤 훅도 잡지 못한다(`.gitignore` 두 줄이 붙은 채 커밋됨, S39b, ADR-0100). `python`·`sed -i`가 든 Bash 명령 뒤에는 `file_damage_check` 훅이 바뀐 파일의 구문 오류, CRLF, 충돌 표식을 알리고, `git commit`이 든 명령 뒤에는 마지막 커밋이 바꾼 파일도 함께 본다(ADR-0055·0100). 알림이 오면 그 자리에서 Edit로 바로잡는다
 
 ## 테스트 시나리오
 
