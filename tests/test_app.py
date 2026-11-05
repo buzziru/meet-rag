@@ -245,3 +245,9 @@ def test_doc_payload_returns_one_document_with_chunk_marks_and_no_labels(cfg):
     assert "2020-01-02 법제사법위원회 제1회 제2차" == out["name"]
     assert f"**{labels.chunk_start}**" in out["body"] and "<b>근거</b>" in out["body"]
     assert labels.chunk_start not in app.doc_payload(pipe, cfg, corpus, "a1", -1, -1)["body"]
+
+
+def test_chat_events_skip_blank_message(cfg):
+    seen = []
+    assert list(app.chat_events(fake_pipe(["답"], seen), cfg, {}, CORPUS, "  ")) == []
+    assert seen == []

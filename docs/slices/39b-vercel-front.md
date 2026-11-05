@@ -71,7 +71,7 @@ Space가 잠들면 방문자가 HF 대기 화면을 약 1분 본다. 화면을 V
 
 ## 수정 허용 파일
 
-`deploy/web/`, `src/rag/app.py`, `src/rag/docs.py`, `configs/config.yaml`(`app`, `deploy` 키), `tests/test_app.py`, `.gitignore`(Vercel 로컬 폴더), `CLAUDE.md`(배포 줄), `docs/DECISIONS.md`, 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`
+`deploy/web/`, `src/rag/app.py`, `src/rag/docs.py`, `configs/config.yaml`(`app`, `deploy` 키), `tests/test_app.py`, `.gitignore`(Vercel 로컬 폴더와 토큰 파일), `docs/SPEC.md`(자원 제약), `CLAUDE.md`(배포 줄), `docs/DECISIONS.md`, 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`
 
 ## 범위 밖
 
@@ -115,4 +115,5 @@ Space가 잠들면 방문자가 HF 대기 화면을 약 1분 본다. 화면을 V
 
 - 공개 전에 Vercel 보호 설정을 풀어야 방문자가 열 수 있다. `meet-rag.vercel.app`은 404라 대표 주소를 정해야 한다(S41)
 - 재시작 직후 첫 질의의 첫 조각은 7.50초, 8.10초였다. 5초 대기 문구가 쓰이는 경우다
-- `.vercel`을 `.gitignore`에 더했다. CLI 연결이 만든 `.env.local`(OIDC 토큰)은 지웠다
+- `.vercel`, `.env*.local`을 `.gitignore`에 더했다. CLI 연결이 만든 `.env.local`(OIDC 토큰)은 지웠다
+- 공개 뒤 API를 직접 부르는 경우(`start`·`end` 범위, 없는 회의 번호)는 문서 한 건 안의 일이라 두었다. 점수 경로와 함께 S41에서 본다

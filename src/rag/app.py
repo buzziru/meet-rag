@@ -145,7 +145,10 @@ def context_payload(c: dict, corpus) -> dict:
 
 
 def chat_events(pipe, cfg, rec: dict, corpus, message: str) -> Iterator[dict]:
-    """정적 페이지의 채팅. 지금까지의 답변을 조각마다 보내고 마지막에 근거를 붙인다."""
+    """정적 페이지의 채팅. 지금까지의 답변을 조각마다 보내고 마지막에 근거를 붙인다. API를 직접
+    불러 빈 질문을 보내면 생성을 부르지 않는다."""
+    if not message.strip():
+        return
     TRACING.refresh()
     query = search_query(message, [])
     text = ""
