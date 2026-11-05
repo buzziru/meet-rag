@@ -138,8 +138,13 @@ class RerankGate:
         if self.clock() < self.until:
             self._note({"rerank_skipped": "paused"})
             return None
+        start = self.clock()
         try:
-            return self.score(pairs)
+            got = self.score(pairs)
+            spent = self.clock() - start
+            print(f"재정렬 {spent:.2f}초", flush=True)
+            self._note({"rerank_s": spent})
+            return got
         except Exception as e:  # 어떤 실패든 답변은 나가야 한다(S39 결정 2)
             pause = pause_seconds(str(e), self.default_pause)
             self.until = self.clock() + pause
