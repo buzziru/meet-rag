@@ -1,6 +1,6 @@
 # 생성 EXP 실행 절차
 
-B 흐름에서 EXP 문서 판정 기준이 SPEC "생성 단계 평가 > 판정"(D-53)인 실험(H10, H18 등)에 쓴다. B의 각 단계는 그대로 하고, 아래는 생성 EXP에서 달라지거나 더해지는 것이다. 명령 호출법은 `CLAUDE.md` "명령"의 생성 평가 줄, 경로·옵션은 `docs/slices/14-gen-eval.md`·`docs/slices/24-variance.md`·`docs/slices/27-gen-compare.md`에 있다.
+B 흐름에서 EXP 문서 판정 기준이 SPEC "생성 단계 평가 > 판정"(D-53)인 실험에 쓴다. B의 각 단계는 그대로 하고, 아래는 생성 EXP에서 달라지거나 더해지는 것이다. 명령 호출법은 `CLAUDE.md` "명령"의 생성 평가 줄, 경로·옵션은 `docs/slices/14-gen-eval.md`·`docs/slices/24-variance.md`·`docs/slices/27-gen-compare.md`에 있다.
 
 ## B1 초안
 
