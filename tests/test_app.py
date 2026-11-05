@@ -1,9 +1,13 @@
 """채팅 앱(S35). API·인덱스·gradio 없이 합성 스트림과 합성 Pipeline으로 본다."""
 
+import logging
 import sys
+from datetime import date
 from types import SimpleNamespace
 
 import pytest
+from langsmith.run_trees import configure
+from langsmith.utils import tracing_is_enabled
 
 from rag import app
 from rag.generate import Pipeline
@@ -156,3 +160,41 @@ def test_evidence_link_round_trips_and_handles_missing_chunk():
     missing = SimpleNamespace(chunk_span=lambda doc_id, text: None)
     value = app.evidence_link(CTX, missing).removeprefix(app.EVIDENCE_PREFIX)
     assert app.parse_evidence(value) == ("a1", None)
+
+
+@pytest.fixture
+def clean_tracing():
+    # 환경 변수는 langsmith가 캐시해 뒤 테스트까지 추적이 켜지므로 전역 설정으로 켠다
+    configure(enabled=True)
+    yield
+    configure(enabled=None)
+
+
+def test_tracing_turns_off_on_limit_and_back_on_next_month(clean_tracing, cfg, monkeypatch):
+    now = [date(2026, 11, 20)]
+    switch = app.TracingSwitch(today=lambda: now[0])
+    monkeypatch.setattr(app, "TRACING", switch)
+    log = logging.getLogger("langsmith.client")
+    log.addHandler(switch)
+    try:
+        log.warning("Failed to send compressed multipart ingest: connection reset")
+        assert tracing_is_enabled() is True  # 다른 전송 실패로는 끄지 않는다
+        log.warning("Failed to multipart ingest runs: Rate limit exceeded for https://x")
+        assert tracing_is_enabled() is False
+        now[0] = date(2026, 11, 30)
+        list(app.respond(fake_pipe(["답"]), cfg, {}, *ASKED))
+        assert tracing_is_enabled() is False  # 같은 달에는 켜지 않는다
+        now[0] = date(2026, 12, 1)
+        list(app.respond(fake_pipe(["답"]), cfg, {}, *ASKED))
+        assert tracing_is_enabled() is True
+        log.warning("Failed to multipart ingest runs: Rate limit exceeded for https://x")
+        assert tracing_is_enabled() is False  # 다음 달에도 넘으면 다시 끈다
+    finally:
+        log.removeHandler(switch)
+
+
+def test_tracing_switch_leaves_tracing_alone_without_limit(cfg, clean_tracing, monkeypatch):
+    switch = app.TracingSwitch(today=lambda: date(2026, 12, 1))
+    monkeypatch.setattr(app, "TRACING", switch)
+    list(app.respond(fake_pipe(["답"]), cfg, {}, *ASKED))
+    assert tracing_is_enabled() is True

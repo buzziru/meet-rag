@@ -5,11 +5,13 @@
 LangSmith 추적으로만 남는다.
 """
 
+import logging
 import sys
 import time
 from collections.abc import Callable, Iterator
+from datetime import date
 
-from langsmith.run_trees import get_cached_client
+from langsmith.run_trees import configure, get_cached_client
 
 from rag.docs import Corpus, format_doc, readable
 from rag.generate import Pipeline, recipe
@@ -40,6 +42,38 @@ SCROLL_TO_CHUNK = """() => { setTimeout(() => {
 }, 200); }"""
 # 선택 칸의 긴 이름이 화살표와 겹치지 않게 오른쪽을 비운다
 CSS = ".browse input { padding-right: 2rem !important; text-overflow: ellipsis; }"
+
+
+class TracingSwitch(logging.Handler):
+    """LangSmith 월 한도를 넘으면 추적을 끄고 다음 달에 다시 켠다(D-71 자동화). 전송 실패는
+    클라이언트 경고 로그로만 알 수 있어 로그를 본다. 끈 상태는 저장하지 않는다. 재시작하면 켠
+    상태로 시작하고, 아직 한도를 넘었으면 첫 전송 실패로 다시 꺼진다."""
+
+    LIMIT = "Rate limit exceeded"
+
+    def __init__(self, today: Callable[[], date] = date.today):
+        super().__init__(logging.WARNING)
+        self.today = today
+        self.off_month = None
+
+    def month(self) -> tuple[int, int]:
+        d = self.today()
+        return d.year, d.month
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if self.off_month is None and self.LIMIT in record.getMessage():
+            self.off_month = self.month()
+            configure(enabled=False)
+            print("LangSmith 한도 초과로 추적을 끈다. 다음 달에 다시 켠다", flush=True)
+
+    def refresh(self) -> None:
+        if self.off_month is not None and self.off_month != self.month():
+            self.off_month = None
+            configure(enabled=True)
+            print("달이 바뀌어 LangSmith 추적을 다시 켠다", flush=True)
+
+
+TRACING = TracingSwitch()
 
 
 def search_query(message: str, history: list[dict]) -> str:
@@ -85,6 +119,7 @@ def respond(pipe, cfg, rec: dict, corpus, message: str,
     if not message:
         yield history
         return
+    TRACING.refresh()
     query = search_query(message, history[:-1])
     answer = {"role": "assistant", "content": ""}
     chat = [*history, answer]
@@ -187,6 +222,7 @@ def main(endpoint: Callable | None = None, scorer: Callable | None = None,
     if cfg.retriever.get("rerank") and cfg.retriever.rerank.enabled and scorer is None:
         raise SystemExit("실시간 재정렬은 Space의 GPU 점수 함수가 있어야 한다(S39). 로컬은 "
                          "retriever.rerank.enabled=false로 실행한다")
+    logging.getLogger("langsmith.client").addHandler(TRACING)
     start = time.perf_counter()
     if cfg.deploy.prefetch_workers:
         prefetch(cfg, cfg.deploy.prefetch_workers)
