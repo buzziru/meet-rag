@@ -10,25 +10,32 @@ Windows에서 훅 하나를 띄우는 데 약 0.5초가 들어 모든 Bash 뒤�
 `if: "Bash(*<<*)"`는 heredoc 명령에 걸리지 않았다(2026-10-21 확인). 깨진 사례는 모두 heredoc으로
 만든 Python 스크립트였고 `python` 조건에 걸린다. `cat > 파일 <<'EOF'`는 내용을 그대로 쓴다.
 보는 것: 바뀐 `.py`의 구문 오류, 작업트리가 CRLF가 된 파일(.gitattributes가 작업트리까지 LF로
-정한다). 이스케이프하지 않은 `~`는 Write·Edit 쪽 전역 훅이 보고, Bash로 깨진 사례가 없어
-보지 않는다.
+정한다), 충돌 표식. 이스케이프하지 않은 `~`는 Write·Edit 쪽 전역 훅이 보고, Bash로 깨진 사례가
+없어 보지 않는다.
+충돌 표식이 커밋에 들어간 일이 있어(8f60f69, ADR-0100) `git commit`이 든 명령 뒤에는 마지막 커밋이
+바꾼 파일도 본다. 커밋은 이미 끝났으므로 push 전에 고칠 수 있게 알리는 것이다.
 `if`를 지원하지 않는 버전에서는 모든 Bash 뒤에 실행되므로 아래 TRIGGERS로 한 번 더 거른다.
 """
 
 import ast
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
-TRIGGERS = ("python", "sed -i")
+TRIGGERS = ("python", "sed -i", "git commit")
+CONFLICT_MARKER = re.compile(rb"^(?:<{7}|>{7}) ", re.MULTILINE)
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def triggered(command: str, args: list[str]) -> bool:
-    """검사할 명령인지. settings.json의 `if`는 조건을 묶을 수 없어 python·sed 핸들러를 따로 둔다.
-    둘 다 든 명령에서 알림이 두 번 나지 않게 sed 핸들러(인자 sed)는 python이 든 명령을 넘긴다."""
+    """검사할 명령인지. settings.json의 `if`는 조건을 묶을 수 없어 python·sed·git 핸들러를
+    따로 둔다. 여럿이 든 명령에서 알림이 두 번 나지 않게 sed 핸들러(인자 sed)는 python이 든 명령을,
+    git 핸들러(인자 git)는 python이나 `sed -i`가 든 명령을 넘긴다."""
     if args == ["sed"] and "python" in command:
+        return False
+    if args == ["git"] and ("python" in command or "sed -i" in command):
         return False
     return any(t in command for t in TRIGGERS)
 
@@ -48,6 +55,13 @@ def changed_files(root: Path = ROOT) -> list[str]:
     return paths
 
 
+def head_files(root: Path = ROOT) -> list[str]:
+    """마지막 커밋이 바꾼 파일. 병합 커밋은 첫 부모와 비교한다."""
+    out = subprocess.run(["git", "diff", "--name-only", "-z", "HEAD~1", "HEAD"],
+                         cwd=root, capture_output=True, text=True, encoding="utf-8").stdout
+    return [p for p in out.split("\0") if p]
+
+
 def problems(paths: list[str], root: Path = ROOT) -> dict[str, list[str]]:
     """파일별 손상 알림. 손상이 없는 파일은 넣지 않는다."""
     found: dict[str, list[str]] = {}
@@ -61,6 +75,9 @@ def problems(paths: list[str], root: Path = ROOT) -> dict[str, list[str]]:
         if b"\r\n" in raw:
             found.setdefault(rel, []).append(f"{rel}: 줄바꿈에 CRLF가 있다(저장소 규약은 LF). "
                                              "스크립트로 쓸 때 open(..., newline='\\n')")
+        if marker := CONFLICT_MARKER.search(raw):
+            line = raw.count(b"\n", 0, marker.start()) + 1
+            found.setdefault(rel, []).append(f"{rel}:{line}: 병합 충돌 표식이 남아 있다")
         if rel.endswith(".py"):
             try:
                 ast.parse(raw.decode("utf-8"), filename=rel)
@@ -98,9 +115,13 @@ def state_path(root: Path = ROOT) -> Path:
 
 def main() -> int:
     data = json.loads(sys.stdin.buffer.read().decode("utf-8"))
-    if not triggered(data.get("tool_input", {}).get("command", ""), sys.argv[1:]):
+    command = data.get("tool_input", {}).get("command", "")
+    if not triggered(command, sys.argv[1:]):
         return 0
-    found = unreported(problems(changed_files()), ROOT, state_path())
+    paths = changed_files()
+    if "git commit" in command:
+        paths = list(dict.fromkeys([*paths, *head_files()]))
+    found = unreported(problems(paths), ROOT, state_path())
     if not found:
         return 0
     msg = ["[파일 손상 검사] 이 Bash 명령 뒤 작업트리에서 아래를 찾았다. "
