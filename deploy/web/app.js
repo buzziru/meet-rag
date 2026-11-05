@@ -123,7 +123,7 @@ async function ask(message) {
       const item = event.data[0];
       showText(item.text);
       // 클라이언트가 마지막 값을 한 번 더 보내므로 근거는 처음 한 번만 붙인다
-      if (item.done && !answer.querySelector(".sources")) answer.append(renderSources(item.contexts));
+      if (item.done && item.contexts.length && !answer.querySelector(".sources")) answer.append(renderSources(item.contexts));
     }
   } catch {
     showText("답변을 만들지 못했습니다. 다시 시도해 주세요.");
