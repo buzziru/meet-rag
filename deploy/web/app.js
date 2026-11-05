@@ -129,6 +129,10 @@ async function ask(message) {
     }
   } catch {
     showText("답변을 만들지 못했습니다. 다시 시도해 주세요.");
+    // Space가 재시작했을 수 있어 다음 요청 전에 새로 연결한다
+    client = null;
+    connecting = null;
+    connect();
   } finally {
     clearTimeout(timer);
     busy = false;
@@ -216,7 +220,7 @@ function combobox(input, list, onPick) {
   let items = [];
   const render = () => {
     const query = input.value.trim().toLowerCase();
-    const shown = items.filter(([name]) => name.toLowerCase().includes(query)).slice(0, 200);
+    const shown = items.filter(([name]) => name.toLowerCase().includes(query));
     list.replaceChildren();
     for (const [name, value] of shown) {
       const li = el("li", "", name);

@@ -236,7 +236,9 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
         asked = box.submit(ask, [box, chatbot], [chatbot, box, question], queue=False,
                            api_name=False)
         asked.then(None, js=SCROLL_TO_QUESTION, api_name=False)
-        asked.then(answer, [question, chatbot], chatbot, api_name=False)
+        # 화면과 페이지 API가 같은 그룹이라 합쳐서 app.concurrency개만 처리한다
+        asked.then(answer, [question, chatbot], chatbot, api_name=False,
+                   concurrency_id="answer")
         # 답변 생성이 큐를 잡고 있어도 문서를 볼 수 있게 큐를 거치지 않는다
         year.input(pick_year, year, [meeting, documents], queue=False, api_name=False)
         meeting.input(pick_meeting, meeting, documents, queue=False, api_name=False)
@@ -267,7 +269,7 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
             return doc_payload(pipe, cfg, corpus, doc_id, start, end)
 
         # 답변 생성이 큐를 잡고 있어도 문서를 볼 수 있게 문서 함수는 큐를 거치지 않는다
-        gr.api(chat, api_name="chat", **api)
+        gr.api(chat, api_name="chat", concurrency_id="answer", **api)
         for fn in (years, meetings, documents, document):
             gr.api(fn, api_name=fn.__name__, queue=False, **api)
     return demo
