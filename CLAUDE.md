@@ -21,7 +21,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 인덱스: `uv run python -m rag.index index.scope=dev-small|full [embedding.device=cuda embedding.dtype=float16]` (full은 Colab L4 약 21분. 옵션: slices/04-index.md)
 - 검색: `uv run python -m rag.search [index.scope=full]` (질의 임베딩 캐시가 없을 때: slices/05-retrieve.md)
 - test 1회(S13): 실행을 마쳤고 다시 돌리지 않는다. 절차·명령·결과는 slices/13-test-run.md, D-39
-- 생성 test 1회(S46): 사용자 지시로 1회만 한다. 절차·명령은 slices/46-gen-test.md, D-87
+- 생성 test 1회(S46): 실행을 마쳤고 다시 돌리지 않는다. 절차는 slices/46-gen-test.md, 결과는 D-90
 - 생성: `uv run python -m rag.generate +exp=current ask.qid=<dev qid>` (`current`는 지금 기준 EXP의 별칭 `configs/exp/current.yaml`. 검색은 `+exp`의 설정. 재정렬 점수 파일이 있는 dev 질의만, 경로·옵션: slices/06-generate.md, slices/14-gen-eval.md. 5xx는 서버 상태부터 확인)
 - 생성 평가(S14): `uv run python -m rag.gen_eval.generate +exp=current` → `rag.gen_eval.judge` → `rag.gen_eval.report` (같은 override, 기본은 판정용 세트 dev-full 330질의(D-50), 반복은 `gen_eval.gen_rep`·`judge.rep`, 비용·시간: slices/24-variance.md)
 - 블라인드 확인(S25): 1질의 검수 뒤 중단(D-51). 표본·집계 도구 `uv run python -m rag.gen_eval.blind +exp=exp017 [--score]` (S25 기록, slices/25-blind-baseline.md)
@@ -37,7 +37,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 ## 금지
 
 - `src/rag/eval/`, `src/rag/eval_multi/`와 `configs/config.yaml`의 `multidoc.eval`, G3 동결 세트를 정하는 `configs/multidoc/g3_exclude.yaml`, `paths.multidoc_frozen`(D-15), 동결 sha `multidoc.frozen_sha256`(D-62), `configs/eval/`, `data/splits/`를 수정하지 않는다. 바꿔야 하면 사용자 승인 후 DECISIONS.md에 기록한다
-- test 분할의 질의를 읽거나 test 점수를 계산하지 않는다. test는 검색 단계와 생성 단계 종료 시 사용자 지시로 단계마다 1회만 실행한다. 검색 단계 1회는 S13에서 마쳤고(D-39), 생성 단계 1회는 생성 단계를 마칠 때 사용자 지시로 한다(SPEC 개정 D-53)
+- test 분할의 질의를 읽거나 test 점수를 계산하지 않는다. test는 검색 단계와 생성 단계 종료 시 사용자 지시로 단계마다 1회만 실행한다. 검색 단계 1회는 S13에서 마쳤고(D-39), 생성 단계 1회는 S46 경로로 마쳤다(D-90)
 - `docs/SPEC.md`의 평가 프로토콜은 사용자 승인 없이 바꾸지 않는다
 - 파라미터를 코드에 직접 쓰지 않는다. `configs/`로만 바꾸고, 실험 설정은 `configs/exp/expNNN.yaml`에 둔다. 채택마다 바뀌는 값(지금 기준 EXP, 프롬프트 버전, 기준 결과 경로)도 명령·테스트 기대값·하네스 절차 문서에 적지 않는다. 지금 기준은 별칭 `configs/exp/current.yaml`과 DECISIONS 머리 줄 두 곳에만 두고, 명령은 `+exp=current`, 테스트는 config에서 값을 읽고, 문서는 머리 줄을 가리킨다(PR #180 리뷰, ADR-0076)
 - HF에서 받는 모델·토크나이저(임베딩, 리랭커 등)는 `configs/`에 revision(커밋 해시)을 고정하고, 불러오는 코드는 revision을 `rag.index.pinned(...)`로만 넘긴다(커밋 해시가 아니면 받기 전에 멈춤). 고정하지 않으면 같은 설정이 다른 가중치를 받아 재현되지 않는다. `tests/test_revisions.py`가 점검한다. API로 부르는 생성·judge 모델은 고정할 수 없어 모델 이름과 제공자를 기록한다(D-46)

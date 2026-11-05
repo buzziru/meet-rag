@@ -48,6 +48,7 @@ S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를
 - [x] 회의 일자·위원회 불일치 오탐 수정(SLICE, D-75 결정 2): `metadata_mismatches`가 근거 날짜 형식(공백 든 형식)을 읽지 못하고, 약칭을 다른 위원회로 보고, 본문의 다른 날짜를 회의 일자로 본다. H23 v10 전에 끝낸다. `src/rag/gen_eval/checks.py`를 바꿔 병합 전 self-review 대상이다 → slices/37-metadata-false-positive.md
   - [x] DECISIONS 정합 점검(생성 단계 test 1회 전): `docs/CLAUDE.md` "정합 점검" 절차로 DECISIONS 전체를 검토한다(사용자 결정 2026-10-28, ADR-0071) → D-87
   - [x] 생성 test 경로: `rag.gen_eval`이 test 800질의를 읽게 한다(명시적 허용 없이는 멈춤, 합성 입력으로만 검증, S13 지문 대조)(D-87) → slices/46-gen-test.md
+  - [x] 생성 test 1회: 사용자 지시로 비피크에 실행한다(`LANGSMITH_TRACING=false`, D-72, D-87) → D-90
 
 ## 리팩터링 (코드 리뷰 2026-10)
 
@@ -163,6 +164,8 @@ D-19. 조건 추출은 규칙·사전, 결합은 약한 필터로 한다.
 - [x] 벡터스토어 선정: S38에서 정한다. 지금은 청크 임베딩 행렬(118,039 × 1024, 404MB)을 메모리에 올려 전수 내적으로 검색하고 BM25는 bm25s 파일, 조건 목록은 파이썬 역색인이다. 먼저 전수 검색으로 충분한지(질의당 지연, 메모리)를 보고, 필요하면 저장 용량, 메타데이터 필터 지원, 문서 추가 비용, SPEC 자원 제약(상시 지출 0, HF Spaces 무료 CPU)으로 후보를 비교한다. late-interaction(KURE-v2)처럼 다중 벡터를 쓰면 MaxSim 지원 여부가 조건이 된다(`docs/research/embedding-candidates.md`) → D-80
 
 ## 지난 다음 순서 기록
+
+다음 순서(2026-11-05, S46): 생성 test 1회(절차 `docs/slices/46-gen-test.md`). 배포·운영은 생성 실험과 병행한다
 
 다음 순서(2026-11-05, D-87): 생성 test 경로 구현 → 생성 test 1회. 배포·운영은 생성 실험과 병행한다
 
