@@ -80,9 +80,9 @@ gen-small은 답변을 읽어 확인한다. gen-full은 코드 집계와 judge �
 
 ## 수정 허용 파일
 
-`configs/prompt/v11.yaml`, `configs/exp/exp024.yaml`, `notebooks/`의 근거 노트북, 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`. 결정 뒤 올리기로 하면 `configs/exp/current.yaml`, `docs/DECISIONS.md`.
+`configs/prompt/v11.yaml`\~`v16.yaml`, `configs/exp/exp024.yaml`\~`exp026.yaml`, `notebooks/`의 근거 노트북, 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`. 결정 뒤 올리기로 하면 `configs/exp/current.yaml`, `docs/DECISIONS.md`.
 
-## 중간 결과 (2026-11-04, 진행 중)
+## 중간 결과 (2026-11-04)
 
 근거: `notebooks/46_01_S42_답변형식.ipynb`, v16은 `notebooks/46_02_S42_근거번호.ipynb`. 결정 사항 1은 메인 제안대로 쓴다(사용자 착수 지시).
 
@@ -96,6 +96,26 @@ gen-small은 답변을 읽어 확인한다. gen-full은 코드 집계와 judge �
 v15의 인용 전무 답변은 D-75에서 v9를 올리지 않은 이유와 같은 문제라, 사용자가 근거 번호 지시를 보강해 다시 재기로 했다(2026-11-04, 비용 승인).
 
 v14·v15 gen-full은 `LANGSMITH_TRACING=true`로 돌려 D-71과 어긋났고 추적 업로드 429가 났다. 판정 기록은 로컬 파일이라 수치에는 영향이 없다. 이후 대량 실행은 끈다.
+
+## 결과 (2026-11-05)
+
+커밋: 구현 77c954b(v16, `exp026`), 결과 4d5f014
+
+사용자가 v16을 기준으로 올렸다(D-81). 지시서의 처음 형식(논지 수)과 달리 문단으로 통일했고, 그 경과는 위 중간 결과다.
+
+| 완료 기준 | 결과 |
+| --- | --- |
+| 2·3 gen-small | 20질의 생성·judge 오류 없음. 메인이 답변을 읽음: 불릿 0, 인용 전무 0, 인용 없는 문장 0/51 |
+| 4 gen-full·재생성 | 330질의 완료, 재생성 포함 추적 끔. 충실성 형식 오류 4로 기준과 같다 |
+| 5 compare, 노트북 | `data/gen_eval/compare/s42-v16-vs-exp023.json`, `notebooks/46_02_S42_근거번호.ipynb`. judge 설정 차이 없음. 수치는 D-81 |
+
+### 세트 밖 100질의
+
+채택과 보강을 정하려고 판정 세트 밖 dev 100질의를 v16으로 생성·채점해 읽었다(사용자 선택 2026-11-05, 판정 세트 330은 다시 부르거나 읽지 않음, 추적 끔). 생성 $0.04 안팎(예상값), judge 642회. 기록: `data/gen_eval/runs/hybrid-cond-filter-law-ms256-k20-ce-v16-dev-full-spk-marks-outset100.jsonl`, judge 결과는 같은 이름 뒤 `-deepseek_go_mixed-j_v13.jsonl`. 만든 방법: `gen_eval.n=430`, 앞 330줄을 미리 채운 임시 파일로 이어 쓴 뒤 세트 밖 줄만 남겼다.
+
+- 인용 전무 0/100, 인용 없는 문장 0/272. 세트 안 5건의 유형은 확인하지 못했다
+- "근거 없이 답함" 19항목(15질의): 처리가 답함 11, 상황을 밝히고 답함 7, 부분임을 밝히고 답함 1. 읽은 범위에서 모두 질문이 답변자의 입장·이유를 묻는데 근거에 답변자의 답이 없는 경우다(메인 판독, 근거 원문과 대조하지 않음)
+- 이 항목은 충실성(F5)과 관련성(R8)이 아니라 참고값인 항목 처리(I6, I8, I11)에서 틀린 처리로 센다. 판정 지표의 어긋남이 아니므로 judge는 그대로 두고 오차 분석에서 생성 쪽으로 보자고 메인이 권했다(사용자 결정 대기 아님, 어긋나면 리뷰에서 고친다)
 
 ## 범위 밖
 
