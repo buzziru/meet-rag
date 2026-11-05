@@ -266,8 +266,8 @@ def test_retriever_hybrid_fuses_dense_and_bm25(tmp_path):
     row = ret.chunk_emb @ np.array([1.0, 0.0], dtype=np.float32)
     tokens = ret.query_tokens(["국정감사 질의"])[0]
     fused, matched, _ = ret.candidates(row, tokens)
-    lexical = rank_docs(ret.bm25.scores(tokens), ret.bm25_ids, 3)
-    assert fused == rrf([["a", "b", "c"], lexical], cfg.retriever.fusion.rrf_k, None)
+    # 0점 문서 c, a는 BM25 목록에 들지 않는다(S49)
+    assert fused == rrf([["a", "b", "c"], ["b"]], cfg.retriever.fusion.rrf_k, None)
     assert matched == set() and ret.rank(row, tokens) == fused[:2]
 
 

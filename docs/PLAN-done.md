@@ -49,6 +49,8 @@ S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를
   - [x] DECISIONS 정합 점검(생성 단계 test 1회 전): `docs/CLAUDE.md` "정합 점검" 절차로 DECISIONS 전체를 검토한다(사용자 결정 2026-10-28, ADR-0071) → D-87
   - [x] 생성 test 경로: `rag.gen_eval`이 test 800질의를 읽게 한다(명시적 허용 없이는 멈춤, 합성 입력으로만 검증, S13 지문 대조)(D-87) → slices/46-gen-test.md
   - [x] 생성 test 1회: 사용자 지시로 비피크에 실행한다(`LANGSMITH_TRACING=false`, D-72, D-87) → D-90
+  - [x] 전체 파이프라인 점검(사용자 지시 2026-11-05): `docs/CLAUDE.md` "정합 점검" 절차의 DECISIONS 점검과 코드 리뷰(R1 적재\~검색, R2 생성\~평가)를 병렬로 한다. test 전 점검의 낮음 항목도 이때 본다(사용자 결정 2026-10-28). 사용자가 고칠 범위를 정하고, 수정은 SLICE로 나눈다. 기준과 지적은 `docs/reviews/`에 남긴다. test를 다시 돌리지 않는다(D-90) → docs/reviews/2026-11-pipeline-review.md
+  - [x] 코드 리뷰 R3 앱·배포: S48 병합 뒤 `app`, `display`, `docs`, `deploy/`를 보고, 평가 설정과 배포 설정의 차이를 대조한다 → docs/reviews/2026-11-pipeline-review.md
 
 ## 리팩터링 (코드 리뷰 2026-10)
 
@@ -162,9 +164,12 @@ D-19. 조건 추출은 규칙·사전, 결합은 약한 필터로 한다.
 - [x] S45 회의 정보 괄호 표시: 앱이 화면에 보여 줄 때 문장 첫머리의 회의 정보를 문장 끝 괄호로 옮긴다. 프롬프트와 judge는 바꾸지 않고, 스트리밍은 첫머리만 잡아 둔다. 패턴에 맞지 않거나 조각이 걸쳐도 답변 글자가 사라지지 않게 테스트로 고정하고, 실제 화면에서 첫 글자 시간을 잰다(D-86). `deploy` 세션 → slices/45-meeting-info.md
 - [x] S47 화면 점검용 채팅 열기: 공개 전에 Vercel 페이지에서 채팅을 볼 수 있게, 페이지가 사용자 브라우저 저장소의 토큰으로 비공개 Space에 연결한다(D-88 결정 3). 토큰으로 연결되는지 먼저 확인한다. 병합 뒤 사용자에게 토큰을 만들고 넣는 절차를 단계별로 안내하고, S45 답변 표시를 Vercel에서 확인받는다(S45 완료 기준 5). 첫 PR에서 미리보기 주소가 Space를 부를 수 있는지(CORS, Vercel 보호 설정 아래 Aside 접속 포함)와, 페이지 커밋 뒤에 문서 커밋을 함께 push해도 미리보기가 빌드되는지(`vercel.json`의 `ignoreCommand`는 끝 커밋만 비교한다)도 본다. `deploy` 세션 → slices/47-chat-token.md 이후 변경: 같은 조각에서 `ignoreCommand`를 마지막 성공 배포와 비교하게 고쳤고, 토큰 확인은 병합 전 미리보기에서 했다
 - [x] S48 Gradio 화면 제거: Space 주소의 Gradio 화면을 없애고 API만 남긴다(D-88 결정 2). `gr.api`가 Blocks 안에 있어 Space 주소에 무엇이 남는지 지시서에서 확인한다. `rag.app`의 `respond`와 화면 코드, 채팅 앱 명령(`CLAUDE.md`), `meet-rag` 스킬 "화면 검증" 절의 Gradio 선택 칸 사례, 로컬 확인 `?api=`(`CLAUDE.md` 화면 배포 줄, `deploy/web/app.js`), 관련 테스트를 함께 고친다. 페이지 커밋과 문서 커밋을 함께 올려 미리보기가 빌드되는지 본다(S47에서 고친 뒤 보지 못한 경우). `deploy` 세션 → slices/48-remove-gradio-ui.md 이후 변경: 새 브랜치 첫 push라 가리지 못해 빌드 확인을 S40 줄로 옮겼고, 스킬 문구는 하네스 대기 목록으로 옮겼다
+- [x] S49 앱 점검 수정(S40 앞, `deploy` 세션, `docs/slices/49-app-fixes.md`): R1-1 BM25 0점 문서, R3-2 `flush` 제한, R3-9 질의 길이 상한, R3-12 Space 코드와 main 일치(`docs/reviews/2026-11-pipeline-review.md`). R1-1을 고친 뒤 dev-full 순위가 달라지면 기준 변경 결정 대상이다 → slices/49-app-fixes.md
 - [x] 벡터스토어 선정: S38에서 정한다. 지금은 청크 임베딩 행렬(118,039 × 1024, 404MB)을 메모리에 올려 전수 내적으로 검색하고 BM25는 bm25s 파일, 조건 목록은 파이썬 역색인이다. 먼저 전수 검색으로 충분한지(질의당 지연, 메모리)를 보고, 필요하면 저장 용량, 메타데이터 필터 지원, 문서 추가 비용, SPEC 자원 제약(상시 지출 0, HF Spaces 무료 CPU)으로 후보를 비교한다. late-interaction(KURE-v2)처럼 다중 벡터를 쓰면 MaxSim 지원 여부가 조건이 된다(`docs/research/embedding-candidates.md`) → D-80
 
 ## 지난 다음 순서 기록
+
+다음 순서(2026-11-05, D-90): 전체 파이프라인 점검(DECISIONS 정합 점검, 코드 리뷰 R1·R2) → S48 뒤 R3 → S41 뒤 늘어난 결정 점검. 배포·운영은 병행한다
 
 다음 순서(2026-11-05, S46): 생성 test 1회(절차 `docs/slices/46-gen-test.md`). 배포·운영은 생성 실험과 병행한다
 

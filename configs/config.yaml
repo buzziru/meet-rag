@@ -189,6 +189,9 @@ ask:
 app:
   title: 국회 회의록 질의응답
   no_answer: 답변을 만들지 못했습니다. 다시 시도해 주세요.
+  # 질문 길이 상한(S49). 평가 질의 최대 약 260자의 약 4배. 페이지 입력칸(deploy/web/index.html)도 같은 값이다
+  max_query_chars: 1000
+  query_too_long: 질문이 너무 깁니다. 1,000자 안으로 줄여 주세요.
   labels:
     chunk_start: ▼ 답변에 쓴 근거
     chunk_end: ▲ 근거 끝

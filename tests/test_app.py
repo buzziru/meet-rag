@@ -9,6 +9,7 @@ import pytest
 from langsmith.run_trees import configure
 from langsmith.utils import tracing_is_enabled
 
+import rag.index
 from rag import app
 from rag.generate import Pipeline
 from rag.index import load_cfg
@@ -45,11 +46,6 @@ def fake_pipe(parts, seen=None):
 @pytest.fixture
 def cfg():
     return load_cfg(["index.scope=full"])
-
-
-@pytest.fixture(autouse=True)
-def no_flush(monkeypatch):
-    monkeypatch.setattr(app, "get_cached_client", lambda: SimpleNamespace(flush=lambda: None))
 
 
 def test_tokens_join_to_generate_answer_and_hide_thought():
@@ -219,6 +215,25 @@ def test_doc_payload_returns_one_document_with_chunk_marks_and_no_labels(cfg):
     assert "2020-01-02 법제사법위원회 제1회 제2차" == out["name"]
     assert f"**{labels.chunk_start}**" in out["body"] and "<b>근거</b>" in out["body"]
     assert labels.chunk_start not in app.doc_payload(pipe, cfg, corpus, "a1", -1, -1)["body"]
+
+
+def test_chat_events_refuse_too_long_message_without_search(cfg):
+    """S49. 상한까지는 처리하고, 넘으면 검색과 생성을 부르지 않고 안내만 보낸다."""
+    seen = []
+    limit = cfg.app.max_query_chars
+    events = list(app.chat_events(fake_pipe(["답"], seen), cfg, {}, CORPUS, "가" * (limit + 1)))
+    assert events == [{"text": cfg.app.query_too_long, "done": True, "contexts": []}]
+    assert seen == []
+    assert list(app.chat_events(fake_pipe(["답"], seen), cfg, {}, CORPUS, "가" * limit))
+    assert len(seen) == 1
+
+
+def test_git_state_reads_commit_file_when_uploaded(tmp_path, monkeypatch):
+    """S49. Space의 git은 Hub 커밋이라 올릴 때 넣은 커밋을 먼저 쓴다."""
+    git_state = rag.index.git_state.__wrapped__
+    monkeypatch.setattr(rag.index, "ROOT", tmp_path)
+    (tmp_path / "COMMIT").write_text("abc123\n", encoding="utf-8")
+    assert git_state() == ("abc123", False)
 
 
 def test_chat_events_skip_blank_message(cfg):
