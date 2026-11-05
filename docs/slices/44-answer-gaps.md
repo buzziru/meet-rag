@@ -4,7 +4,7 @@
 
 ## 만드는 것
 
-- `configs/prompt/v17.yaml`: 지금 기준 프롬프트에 구절 두 개만 더한다. 새 줄을 만들지 않고 다른 지시는 그대로다
+- `configs/prompt/v17.yaml`: 지금 기준 프롬프트에 구절 두 개만 더한다. 새 줄을 만들지 않고 다른 지시는 그대로다. 이후 변경(2026-11-05): 첫 구절이 gen-small에서 작동하지 않아 v18, v19로 고쳤다. 아래 결과 절
 
   ```text
   (답하지 못한 부분을 쓰는 줄의 끝)
@@ -15,7 +15,7 @@
   ```
 
 - `configs/exp/exp027.yaml`: 지금 기준 EXP를 직접 상속하고 프롬프트만 v17로 바꾼다
-- `configs/prompt/v18.yaml`, `configs/exp/exp028.yaml`: 답을 먼저 쓰고 회의 정보를 뒤로 두는 방안의 비교용이다(D-83 결정 3). 문구는 v17 결과를 본 뒤 쓴다. 생성만 하고 judge를 부르지 않는다
+- `configs/prompt/v18.yaml`, `configs/exp/exp028.yaml`: 답을 먼저 쓰고 회의 정보를 뒤로 두는 방안의 비교용이다(D-83 결정 3). 이후 변경: 이 번호는 첫 구절 시험에 썼고 비교용은 `v20`, `exp030`이다. 문구는 v17 결과를 본 뒤 쓴다. 생성만 하고 judge를 부르지 않는다
 
 입력 → 바뀐 뒤 기대 동작(지어낸 예):
 
@@ -72,7 +72,31 @@ gen-small과 세트 밖 답변은 읽는다. gen-full은 판정 전에 코드 �
 
 ## 수정 허용 파일
 
-`configs/prompt/v17.yaml`, `configs/exp/exp027.yaml`, 필요하면 `configs/prompt/v18.yaml`, `configs/exp/exp028.yaml`, 근거 노트북, 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/STATUS.md`. 결정 뒤 올리기로 하면 `configs/exp/current.yaml`, `docs/DECISIONS.md`, `docs/EXPERIMENTS.md`.
+`configs/prompt/v17.yaml`\~`v20.yaml`, `configs/exp/exp027.yaml`\~`exp030.yaml`, 근거 노트북, 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/STATUS.md`. 결정 뒤 올리기로 하면 `configs/exp/current.yaml`, `docs/DECISIONS.md`, `docs/EXPERIMENTS.md`.
+
+## 결과 (2026-11-05)
+
+커밋: 구현 3d5174c(v17), db2a907(v18, v19)
+
+사용자가 v19를 기준으로 올렸다(D-84). 수치는 D-84 이유와 감수하는 것, 근거는 `notebooks/48_01_S44_답없는부분.ipynb`다.
+
+| 프롬프트(config) | 첫 구절 | gen-small 안내 답변(v16은 1/20) |
+| --- | --- | ---: |
+| v17(`exp027`) | "…답이 근거에 없는 경우도 같습니다." | 1/20 |
+| v18(`exp028`) | "질문이 묻는 답이 근거에 없고 질의자의 말이나 관련 발언만 있으면, 그 내용을 전한 뒤 이 문장을 쓰세요." | 1/20 |
+| v19(`exp029`) | "질문이 답변자의 입장·계획·이유를 묻는데 근거에 답변자의 답이 없으면, 질의자의 말을 전한 뒤 이 문장을 쓰세요." | 2/20 |
+
+| 완료 기준 | 결과 |
+| --- | --- |
+| 2 gen-small | 20질의 오류 없음. 메인이 안내가 든 답변을 읽음. 겨냥한 1건에 새로 붙었고 답이 있는데 없다고 쓴 것은 없음 |
+| 3 gen-full·재생성 | 330질의 완료. judge 형식 오류 7로 기준 4보다 많아 사용자에게 알렸고 사용자가 반영을 정함 |
+| 4 compare, 노트북 | `data/gen_eval/compare/s44-v19-vs-exp026.json`, judge 설정 차이 없음 |
+
+세트 밖 100질의는 v16 기록과 같은 방법으로 만들었다. 달라진 답변 중 안내가 새로 붙음, 겨냥 유형, 잘린 발언, 종합이 낮아짐에 드는 34질의를 서브에이전트 셋이 근거 원문과 대조했다. 입력과 판독은 `data/gen_eval/error_analysis/s44_cases/`, `s44_compare/`다.
+
+인용 없는 문장은 v19 4.9%로 v16 2.2%보다 높지만, 재생성끼리는 v16 4.0%, v19 2.9%라 생성 흔들림 안으로 본다. 세트 밖의 0/272 → 11/267은 1회 측정이다.
+
+gen-small 추적에서 LangSmith 429가 났다. 판정 기록은 로컬 파일이라 수치에는 영향이 없다.
 
 ## 범위 밖
 
