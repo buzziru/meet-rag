@@ -38,6 +38,46 @@ def test_retriever_score_fusion_replaces_dense_and_bm25(tmp_path):
     assert ret.candidates(row, tokens)[0] == ["b", "a", "c"]
 
 
+def _rrf_retriever(tmp_path):
+    cfg = _tmp_cfg(tmp_path, ["+exp=exp001", "retriever.fusion.depth=3",
+                              "retriever.bm25.name=test"])
+    _write_text_index(tmp_path / "kure-v1-512" / "dev-small",
+                      [("a", "예산 심사"), ("b", "국정감사 질의"), ("c", "법안 처리")],
+                      [[0.9, 0.0], [0.5, 0.0], [0.1, 0.0]])
+    return Retriever(cfg)
+
+
+def test_rrf_bm25_list_keeps_only_docs_with_matching_tokens(tmp_path):
+    """S49. 0점 문서가 BM25 목록으로 RRF 점수를 받지 않는다. 점수가 있는 문서 순서는 그대로다."""
+    ret = _rrf_retriever(tmp_path)
+    row = ret.chunk_emb @ np.array([1.0, 0.0], dtype=np.float32)
+    named, _, _ = ret.lists(row, ret.query_tokens(["국정감사 질의"])[0])
+    assert named["bm25"] == ["b"]
+    assert named["dense"] == ["a", "b", "c"]
+
+
+def test_rrf_with_no_matching_token_answers_from_dense_only(tmp_path):
+    """S49. 맞는 토큰이 없으면 BM25 목록이 비고 dense 순서로 답한다."""
+    ret = _rrf_retriever(tmp_path)
+    row = ret.chunk_emb @ np.array([1.0, 0.0], dtype=np.float32)
+    named, _, _ = ret.lists(row, ret.query_tokens(["ㅋㅋㅋ"])[0])
+    assert named["bm25"] == []
+    assert ret.candidates(row, ret.query_tokens(["ㅋㅋㅋ"])[0])[0] == ["a", "b", "c"]
+
+
+def test_score_fusion_with_no_matching_token_does_not_stop(tmp_path):
+    """S49. 점수 결합은 빈 목록을 minmax에 넘기지 않는다."""
+    cfg = _tmp_cfg(tmp_path, ["+exp=exp001", "retriever.fusion.depth=3",
+                              "retriever.bm25.name=test", "+retriever.fusion.method=score",
+                              "+retriever.fusion.alpha=0.5"])
+    _write_text_index(tmp_path / "kure-v1-512" / "dev-small",
+                      [("a", "예산 심사"), ("b", "국정감사 질의"), ("c", "법안 처리")],
+                      [[0.9, 0.0], [0.5, 0.0], [0.1, 0.0]])
+    ret = Retriever(cfg)
+    row = ret.chunk_emb @ np.array([1.0, 0.0], dtype=np.float32)
+    assert ret.candidates(row, ret.query_tokens(["ㅋㅋㅋ"])[0])[0] == ["a", "b", "c"]
+
+
 def test_condition_fuse_off_needs_score_fusion(tmp_path):
     # RRF 결합에는 cc 목록이 없어 지금까지는 첫 질의에서 KeyError가 났다(S19)
     fuse_off = "+retriever.conditions={enabled: true, min_fields: 1, filter: best, fuse: false}"
