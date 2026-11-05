@@ -22,6 +22,7 @@
 1. 결과 기록 PR 병합 확인 뒤 main 맞추기
 2. 전체 파이프라인 점검: `_workspace/pipeline-review_main_progress.md` 순서대로 DECISIONS 정합 점검 2개와 코드 리뷰 R1·R2를 병렬로 하고, 높음 항목을 직접 확인해 통합 보고한다. 고칠 범위는 사용자가 정한다
 3. S48 병합 뒤 코드 리뷰 R3, S41 뒤 늘어난 결정만 정합 점검
+4. [F] `protocol-guard`(`SKILL.md:29-30`)와 `meet-rag`(`SKILL.md:127`)의 생성 test 문구를 D-90 뒤 상태로 맞추고 test 경로를 둘지 정한다. 재귀 검색이 `.claude/worktrees/deploy/data` junction으로 들어가는 문제도 본다(`_workspace/00_main_harness-pending.md`)
 
 `deploy` 세션:
 1. [F] `meet-rag` 스킬 "화면 검증" 절의 대상 주소를 Vercel 배포 페이지로 고친다(D-88 결정 1, `_workspace/00_main_harness-pending.md`). 최신 `main`에서 `chore/` 브랜치를 딴다
