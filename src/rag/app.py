@@ -1,18 +1,20 @@
 """채팅 화면. 자유 질의를 검색해 답변을 스트리밍으로 보여 주고 끝나면 근거를 붙인다.
 
-명세는 docs/slices/35-chat-app.md. 실시간 재정렬이 없어 재정렬을 끈 구성으로만 시작한다(S39에서
-만든다). 방문자 질의는 data/에 저장하지 않고 LangSmith 추적으로만 남는다.
+명세는 docs/slices/35-chat-app.md. 실시간 재정렬은 Space 진입점이 GPU 점수 함수를 넘길 때만 켠다
+(S39). 로컬에는 GPU가 없어 재정렬을 끈 구성으로 시작한다. 방문자 질의는 data/에 저장하지 않고
+LangSmith 추적으로만 남는다.
 """
 
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from langsmith.run_trees import get_cached_client
 
 from rag.docs import Corpus, format_doc, readable
 from rag.generate import Pipeline, recipe
 from rag.index import load_cfg
+from rag.retrieve import prefetch
 from rag.speakers import render
 
 SCROLL_TO_QUESTION = """() => { setTimeout(() => {
@@ -89,6 +91,8 @@ def respond(pipe, cfg, rec: dict, corpus, message: str,
     for item in pipe.stream(query, pipe.embed(query), langsmith_extra={"metadata": rec}):
         if isinstance(item, dict):
             answer["content"] = item["answer"] or cfg.app.no_answer
+            if item.get("rerank_skipped"):
+                answer["content"] += f"\n\n{cfg.app.rerank_skipped}"
             chat.append({"role": "assistant",
                          "content": format_contexts(item["contexts"], corpus),
                          "metadata": {"title": cfg.app.contexts_title}})
@@ -98,8 +102,9 @@ def respond(pipe, cfg, rec: dict, corpus, message: str,
     get_cached_client().flush()
 
 
-def build(cfg, pipe, corpus):
-    """화면을 만든다. 평가·실험 환경에는 gradio가 없어 여기서 불러온다(pyproject의 app)."""
+def build(cfg, pipe, corpus, endpoint: Callable | None = None):
+    """화면을 만든다. 평가·실험 환경에는 gradio가 없어 여기서 불러온다(pyproject의 app). endpoint는
+    Space의 GPU 점수 함수로, 토큰 호출에 쓰도록 API 문서에 보이지 않는 경로로 연다(S39, D-74)."""
     import gradio as gr
 
     rec = recipe(cfg, pipe.index_meta, True)
@@ -170,21 +175,28 @@ def build(cfg, pipe, corpus):
                                      js=READ_EVIDENCE, api_name=False)
         opened.then(None, js=SCROLL_TO_CHUNK.replace("MARK", labels.chunk_start), api_name=False)
         demo.load(None, js=BIND_EVIDENCE_LINKS, api_name=False)
+        if endpoint is not None:
+            gr.api(endpoint, api_name=cfg.deploy.rerank.api_name,
+                   api_visibility="undocumented")
     return demo
 
 
-def main() -> None:
+def main(endpoint: Callable | None = None, scorer: Callable | None = None) -> None:
     cfg = load_cfg(["index.scope=full", *sys.argv[1:]])
-    if cfg.retriever.get("rerank") and cfg.retriever.rerank.enabled:
-        raise SystemExit("앱에는 실시간 재정렬이 없다(S39). retriever.rerank.enabled=false로 "
-                         "실행한다")
+    if cfg.retriever.get("rerank") and cfg.retriever.rerank.enabled and scorer is None:
+        raise SystemExit("실시간 재정렬은 Space의 GPU 점수 함수가 있어야 한다(S39). 로컬은 "
+                         "retriever.rerank.enabled=false로 실행한다")
     start = time.perf_counter()
-    pipe = Pipeline(cfg)
+    if cfg.deploy.prefetch_workers:
+        prefetch(cfg, cfg.deploy.prefetch_workers)
+        print(f"시작: 미리 읽기 {time.perf_counter() - start:.1f}초", flush=True)
+    pipe = Pipeline(cfg, scorer=scorer)
     loaded = time.perf_counter()
     pipe.embed(cfg.app.title)  # 임베딩 모델을 먼저 불러 첫 질의가 기다리지 않게 한다
-    print(f"시작: 인덱스·코퍼스 {loaded - start:.1f}초, 임베딩 모델 "
+    parts = ", ".join(f"{k} {v:.1f}초" for k, v in pipe.retriever.timings.items())
+    print(f"시작: 인덱스·코퍼스 {loaded - start:.1f}초({parts}), 임베딩 모델 "
           f"{time.perf_counter() - loaded:.1f}초", flush=True)
-    demo = build(cfg, pipe, Corpus(cfg))
+    demo = build(cfg, pipe, Corpus(cfg), endpoint)
     demo.queue(default_concurrency_limit=cfg.app.concurrency).launch(css=CSS)
 
 
