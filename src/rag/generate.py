@@ -206,7 +206,7 @@ class Pipeline:
                                          timeout=cfg.generator.timeout,
                                          max_retries=cfg.generator.max_retries))
         self._model = None
-        # 재정렬 점수는 EXP-017이 Colab에서 만든 파일을 읽는다. 실시간 재정렬은 배포 SLICE(S14)
+        # 평가는 EXP-017이 Colab에서 만든 재정렬 점수를 읽고, 앱은 scorer로 재정렬한다(S39)
         use_rerank = self.retriever.use_rerank and scorer is None
         if scorer is not None:
             self.gate = RerankGate(scorer, cfg.deploy.rerank.pause_s)
@@ -239,8 +239,8 @@ class Pipeline:
             scorer = partial(self._live_rerank, query, scores)
         elif self.rerank_scores is not None:
             if qid not in self.rerank_scores:
-                raise SystemExit("재정렬 점수 파일에 없는 질의다. 자유 질의의 실시간 재정렬은 "
-                                 "배포 SLICE에서 만든다(S14 결정 1)")
+                raise SystemExit("재정렬 점수 파일에 없는 질의다. 자유 질의는 앱(rag.app)이 "
+                                 "실시간으로 재정렬한다(S39)")
             rerank = self.rerank_scores[qid]
         tokens = self.retriever.query_tokens([query])
         conds = self.extractor.extract(query) if self.extractor else None

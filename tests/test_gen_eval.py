@@ -16,7 +16,7 @@ from rag.gen_eval.checks import (
     sentences,
     unlisted_refusal,
 )
-from rag.gen_eval.common import done_qids, sample_qids
+from rag.gen_eval.common import done_qids, read_jsonl, sample_qids
 from rag.gen_eval.judge import (
     check_item_steps,
     check_prompt,
@@ -278,6 +278,10 @@ def test_faithfulness_scores_and_format_errors():
     del no_flag["verdicts"][0]["speaker_unclear"]
     no_flag = StubJudge({"statements": st, "verdicts": no_flag})
     assert faithfulness(no_flag, "q", "a", [ctx(1)])["error"] == "verdict 값 오류"
+    no_reason = verdicts_reply(["s1", "s2"], [1, 0])
+    del no_reason["verdicts"][1]["reason"]  # report가 읽는 칸이라 여기서 막는다(S50)
+    no_reason = StubJudge({"statements": st, "verdicts": no_reason})
+    assert faithfulness(no_reason, "q", "a", [ctx(1)])["error"] == "verdict 값 오류"
     assert faithfulness(StubJudge({"statements": None}), "q", "a", [])["score"] is None
 
 
@@ -622,6 +626,19 @@ def test_judge_format_retry_appends_previous_reply_and_correction(tmp_path):
     # 다시 실행하면 첫 요청·재요청 모두 저장 응답을 읽는다
     again = relevance(j, "q", "a")
     assert again["score"] == 1.0 and len(sent) == 2 and j.hits == 2
+
+
+def test_judge_format_retry_asks_again_when_reason_is_missing(tmp_path):
+    from rag.gen_eval.judge import valid_verdicts
+
+    j, sent = scripted_judge(tmp_path, [
+        ('{"verdicts": [{"statement": "s", "verdict": 1, "speaker_unclear": false}]}', "stop"),
+        ('{"verdicts": [{"statement": "s", "reason": "r", "verdict": 1, '
+         '"speaker_unclear": false}]}', "stop")])
+    j.prompt["verdicts"] = j.prompt["relevance"]
+    out, usage = j.ask("verdicts", valid_verdicts(["s"]), answer="a")
+    assert out["verdicts"][0]["reason"] == "r" and len(sent) == 2
+    assert [u.get("format_retry") for u in usage] == [None, 1]
 
 
 def test_judge_format_retry_stops_at_limit_and_skips_empty_reply(tmp_path):
@@ -1718,3 +1735,12 @@ def test_report_main_counts_answers_without_any_citation(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "| 인용이 전혀 없는 답변 | 1/3 (33.3%) |" in out
     assert "D-53) 0.750 (3질의)" in out
+
+
+def test_read_jsonl_names_file_and_line_of_truncated_row(tmp_path):
+    path = tmp_path / "gen.jsonl"
+    path.write_text('{"qid": "q1"}\n\n{"qid": "q2"}\n{"qid": "q', encoding="utf-8")
+    with pytest.raises(SystemExit, match=r"gen\.jsonl의 4번째 줄"):
+        read_jsonl(path)
+    path.write_text('{"qid": "q1"}\n\n{"qid": "q2"}\n', encoding="utf-8")
+    assert [r["qid"] for r in read_jsonl(path)] == ["q1", "q2"]
