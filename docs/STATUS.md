@@ -17,7 +17,7 @@
 - 없음
 
 ## 리뷰 대기 PR
-- 하네스 정리 PR(`chore/harness-after-gen-test`, ADR-0103, 위험도는 PR 본문). test 경로를 남길지 판단이 있다
+- 하네스 정리 PR(`chore/harness-after-gen-test`, ADR-0103, 위험도는 PR 본문)
 
 ## 다음 행동
 `main` 세션:
