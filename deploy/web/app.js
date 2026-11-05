@@ -31,7 +31,9 @@ function connect() {
   connecting ??= (async () => {
     for (;;) {
       try {
-        client = await Client.connect(target, { events: ["data", "status"] });
+        // 공개 전 점검용 토큰(D-88 결정 3). S41에서 지우고 토큰을 폐기한다.
+        const token = localStorage.getItem("hf_token") ?? undefined;
+        client = await Client.connect(target, { events: ["data", "status"], token });
         $("connection").hidden = true;
         loadYears();
         return client;
