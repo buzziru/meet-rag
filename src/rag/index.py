@@ -78,8 +78,8 @@ def _read_corpus_meta(path: Path, mtime_ns: int, size: int) -> list[dict]:
 
 
 def git_state() -> tuple[str, bool]:
-    """(HEAD 커밋, 추적 파일에 커밋하지 않은 변경이 있는지). 생성·judge 레시피에 남긴다. Space에는
-    git 기록이 없어 올릴 때 넣은 COMMIT 파일을 읽는다(S49)."""
+    """(HEAD 커밋, 추적 파일에 커밋하지 않은 변경이 있는지). 생성·judge 레시피에 남긴다. Space의 git은
+    Hub 커밋이라 main과 대조할 수 없어, 올릴 때 넣은 COMMIT 파일을 먼저 읽는다(S49)."""
     marker = ROOT / "COMMIT"
     if marker.exists():
         return marker.read_text(encoding="utf-8").strip(), False

@@ -229,7 +229,7 @@ def test_chat_events_refuse_too_long_message_without_search(cfg):
 
 
 def test_git_state_reads_commit_file_when_uploaded(tmp_path, monkeypatch):
-    """S49. Space에는 git 기록이 없어 올릴 때 넣은 커밋을 쓴다."""
+    """S49. Space의 git은 Hub 커밋이라 올릴 때 넣은 커밋을 먼저 쓴다."""
     git_state = rag.index.git_state.__wrapped__
     monkeypatch.setattr(rag.index, "ROOT", tmp_path)
     (tmp_path / "COMMIT").write_text("abc123\n", encoding="utf-8")
