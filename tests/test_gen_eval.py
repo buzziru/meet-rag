@@ -1401,3 +1401,320 @@ def test_applied_judge_prompt_override_reaches_entry(monkeypatch, main, first_wo
     monkeypatch.setattr(sys, "argv", ["entry", *args])
     with pytest.raises(_PassedConfigCheck, match=f"-{version}.jsonl$"):
         main()
+
+
+# S46 생성 test 경로(D-87). 모든 입력은 합성이고 실제 test 분할은 읽지 않는다
+TEST_LAYER = ["gen_eval.queries=test", "gen_eval.n=800", "gen_eval.allow_test=true",
+              "search.queries=test", "search.allow_test=true"]
+
+
+@pytest.mark.parametrize("entry", ["generate", "judge"])
+@pytest.mark.parametrize(("over", "tracing", "match"), [
+    (["gen_eval.queries=test", "gen_eval.n=800"], "false", "allow_test=true가 있어야"),
+    ([*TEST_LAYER[:3]], "false", "search.queries=test"),
+    ([*TEST_LAYER[:3], "search.queries=test"], "false", "search.queries=test"),
+    ([*TEST_LAYER[:1], "gen_eval.n=330", *TEST_LAYER[2:]], "false", "gen_eval.n은 800"),
+    (TEST_LAYER, "true", "LANGSMITH_TRACING=false"),
+    (TEST_LAYER, None, "LANGSMITH_TRACING=false"),
+    ([*TEST_LAYER, "gen_eval.gen_rep=1"], "false", "반복 번호 0"),
+    ([*TEST_LAYER, "judge.rep=1"], "false", "반복 번호 0"),
+    ([*TEST_LAYER, "gen_eval.contexts=oracle"], "false", "반복 번호 0"),
+])
+def test_test_layer_stops_before_reading_labels(monkeypatch, entry, over, tracing, match):
+    """허용·1회 제약이 어긋나면 라벨을 읽기 전에, API를 부르기 전에 멈춘다."""
+    from langsmith.utils import get_env_var
+
+    from rag.gen_eval import generate, judge
+
+    def forbidden(*a, **kw):
+        raise AssertionError("라벨이나 입력 파일을 읽었다")
+    monkeypatch.setattr("rag.gen_eval.common.load_gold", forbidden)
+    monkeypatch.setattr("rag.gen_eval.common.file_sha256", forbidden)
+    if tracing is None:
+        monkeypatch.delenv("LANGSMITH_TRACING", raising=False)
+    else:
+        monkeypatch.setenv("LANGSMITH_TRACING", tracing)
+    monkeypatch.setattr(sys, "argv", [entry, "+exp=current", *over])
+    get_env_var.cache_clear()
+    with pytest.raises(SystemExit, match=match):
+        {"generate": generate, "judge": judge}[entry].main()
+
+
+def _test_inputs(tmp_path, corrupt=None):
+    """합성 S13 산출물과 그 경로·해시 override."""
+    from hashlib import sha256
+    over = []
+    for key, name in (("query_emb_test", "emb.npz"), ("rerank_pairs", "pairs.jsonl"),
+                      ("rerank_scores", "scores.jsonl"), ("run", "run.csv")):
+        path = tmp_path / name
+        path.write_bytes(key.encode())
+        digest = sha256(key.encode()).hexdigest()[:8]
+        if key == corrupt:
+            path.write_bytes(b"changed")
+        over += [f"gen_eval.test_inputs.{key}.path='{path.as_posix()}'",
+                 f"gen_eval.test_inputs.{key}.sha256='{digest}'"]
+        if key != "run":
+            over.append(f"paths.{key}='{path.as_posix()}'")
+    return over
+
+
+@pytest.mark.parametrize("key", ["query_emb_test", "rerank_pairs", "rerank_scores", "run"])
+def test_test_layer_stops_on_changed_s13_input(tmp_path, monkeypatch, key):
+    from rag.gen_eval import generate
+
+    def forbidden(*a, **kw):
+        raise AssertionError("라벨을 읽었다")
+    monkeypatch.setattr("rag.gen_eval.common.load_gold", forbidden)
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    monkeypatch.setattr(sys, "argv", ["generate", "+exp=current", *TEST_LAYER,
+                                      *_test_inputs(tmp_path, corrupt=key)])
+    with pytest.raises(SystemExit, match="S13 기록"):
+        generate.main()
+
+
+@pytest.mark.parametrize(("exp", "over", "match"), [
+    ("exp017", [], "prompt"),  # 지난 설정은 다른 프롬프트로 생성한다
+    ("current", ["gen_eval.seed=1"], "gen_eval.seed"),
+    ("current", ["generator.params.temperature=0.9"], "generator"),
+    ("current", ["judge=deepseek_go"], "judge"),
+])
+def test_test_layer_stops_when_not_baseline(tmp_path, monkeypatch, exp, over, match):
+    from rag.gen_eval import generate
+
+    def forbidden(*a, **kw):
+        raise AssertionError("라벨을 읽었다")
+    monkeypatch.setattr("rag.gen_eval.common.load_gold", forbidden)
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    monkeypatch.setattr(sys, "argv", ["generate", f"+exp={exp}", *TEST_LAYER,
+                                      *_test_inputs(tmp_path), *over])
+    with pytest.raises(SystemExit, match=f"다른 설정: .*{match}"):
+        generate.main()
+
+
+def test_test_layer_stops_on_tracing_under_another_name(tmp_path, monkeypatch):
+    """LANGSMITH_TRACING=false여도 라이브러리가 먼저 읽는 이름으로 켜져 있으면 멈춘다."""
+    from langsmith.utils import get_env_var
+
+    from rag.gen_eval import generate
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true")
+    get_env_var.cache_clear()
+    monkeypatch.setattr(sys, "argv", ["generate", "+exp=current", *TEST_LAYER])
+    with pytest.raises(SystemExit, match="TRACING_V2"):
+        generate.main()
+    get_env_var.cache_clear()
+
+
+def test_dev_layer_stops_on_test_search_queries(monkeypatch):
+    from rag.gen_eval import generate
+    monkeypatch.setattr(sys, "argv", ["generate", "+exp=current", "search.queries=test"])
+    with pytest.raises(SystemExit, match="gen_eval.queries=test와 함께"):
+        generate.main()
+
+
+def test_judge_test_layer_stops_on_partial_generation(tmp_path, monkeypatch):
+    """일부만 채점해 결과 파일을 쓰면 1회 기록을 덮어써야 한다."""
+    from langsmith.utils import get_env_var
+
+    from rag.gen_eval import judge
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    monkeypatch.delenv("LANGCHAIN_TRACING_V2", raising=False)
+    get_env_var.cache_clear()
+    monkeypatch.setattr(judge, "read_jsonl", lambda p: [{"qid": "q1", "recipe": {}}])
+    monkeypatch.setattr(judge, "eval_qids", lambda cfg: ["q1", "q2"])
+    monkeypatch.setattr(judge, "refuse_existing", lambda *a: None)
+    monkeypatch.setattr(sys, "argv", ["judge", "+exp=current", *TEST_LAYER,
+                                      *_test_inputs(tmp_path)])
+    with pytest.raises(SystemExit, match="2개 중 1개만 생성"):
+        judge.main()
+
+
+def test_test_layer_stops_when_paths_are_not_s13_outputs(tmp_path, monkeypatch):
+    from rag.gen_eval import generate
+    over = [o for o in _test_inputs(tmp_path) if not o.startswith("paths.rerank_scores")]
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    monkeypatch.setattr(sys, "argv", ["generate", "+exp=current", *TEST_LAYER, *over])
+    with pytest.raises(SystemExit, match="S13 산출물이 아니다"):
+        generate.main()
+
+
+def test_generate_test_layer_reads_test_inputs_and_writes_apart(tmp_path, monkeypatch):
+    """test 층의 원문은 paths.queries, 임베딩은 paths.query_emb_test에서 온다. 표본은 seed 순서의
+    앞 n개이고, 기록 경로는 dev와 겹치지 않는다."""
+    import numpy as np
+    import pandas as pd
+
+    from rag.gen_eval import generate
+    qids = [f"q{i:04d}" for i in range(1000)]
+    queries = tmp_path / "queries.jsonl"
+    queries.write_text("".join(json.dumps({"qid": q, "query": f"test {q}"}) + "\n" for q in qids),
+                       encoding="utf-8")
+    dev = tmp_path / "dev.jsonl"
+    dev.write_text(json.dumps({"qid": "dev", "query": "dev 질의"}) + "\n", encoding="utf-8")
+    gold_calls, read_paths, got = [], [], {}
+
+    def fake_gold(cfg, layer, allow_test=False):
+        gold_calls.append((layer, allow_test))
+        return pd.DataFrame(index=qids)
+
+    def fake_emb(cfg, path):
+        read_paths.append(path.name)
+        return qids, np.arange(len(qids))
+
+    def fake_generate_all(pipe, items, rec, concurrency, gen_rep, write, golds, contexts):
+        got.update(items=items, gen_rep=gen_rep, contexts=contexts)
+
+    monkeypatch.setattr("rag.gen_eval.common.load_gold", fake_gold)
+    monkeypatch.setattr(generate, "read_query_emb", fake_emb)
+    monkeypatch.setattr(generate, "generate_all", fake_generate_all)
+    monkeypatch.setattr(generate, "Pipeline", lambda cfg: type("P", (), {"index_meta": {}})())
+    monkeypatch.setattr(generate, "recipe", lambda cfg, meta, stream: {"r": 1})
+    monkeypatch.setattr(generate, "get_cached_client",
+                        lambda: type("C", (), {"flush": staticmethod(lambda: None)}))
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    runs = tmp_path / "runs.jsonl"
+    monkeypatch.setattr(sys, "argv", [
+        "generate", "+exp=current", *TEST_LAYER, *_test_inputs(tmp_path),
+        f"paths.gen_runs='{runs.as_posix()}'", f"paths.queries='{queries.as_posix()}'",
+        f"paths.queries_dev='{dev.as_posix()}'"])
+    generate.main()
+
+    assert gold_calls == [("test", True)]
+    assert read_paths == ["emb.npz"]
+    assert [q for q, _, _ in got["items"]] == sample_qids(qids, 20260929, 800)
+    assert all(text == f"test {q}" for q, text, _ in got["items"])
+    default = load_cfg(["index.scope=full", "+exp=current"])
+    layer = load_cfg(["index.scope=full", "+exp=current", *TEST_LAYER])
+    assert default.paths.gen_runs != layer.paths.gen_runs
+    assert default.paths.gen_judge != layer.paths.gen_judge
+    assert default.paths.query_emb != layer.paths.query_emb_test
+    assert default.paths.rerank_scores != layer.paths.rerank_scores
+
+
+def test_dev_layers_stay_without_test_keys(monkeypatch):
+    """compare는 override를 받지 않아 기본값 dev-full이고, 허용은 기본으로 꺼져 있다."""
+    from rag.gen_eval.common import check_test_run
+    cfg = load_cfg(["index.scope=full"])
+    assert cfg.gen_eval.queries == "dev-full" and cfg.gen_eval.allow_test is False
+    monkeypatch.delenv("LANGSMITH_TRACING", raising=False)
+    check_test_run(cfg)  # dev 층은 추적 값과 무관하다
+
+
+def _retrieval_files(tmp_path, gens_docs):
+    """합성 순위 파일과 생성 기록. 질의마다 문서 10개이고 정답은 a 1위, b 2위, c 없음이다."""
+    import pandas as pd
+    run = pd.DataFrame([{"qid": q, "rank": r, "doc_id": f"{q}{r}"} for q in "abc"
+                        for r in range(1, 11)])
+    run_path = tmp_path / "run.csv"
+    run.to_csv(run_path, index=False)
+    gens = tmp_path / "gens.jsonl"
+    gens.write_text("".join(json.dumps({"qid": q, "contexts": [{"doc_id": d} for d in docs]})
+                            + "\n" for q, docs in gens_docs.items()), encoding="utf-8")
+    gold = pd.DataFrame({"doc_id": ["a1", "b2", "zz", "x"], "qna_type": ["t"] * 4,
+                         "meeting_name": ["m"] * 4, "conference_number": ["1"] * 4},
+                        index=pd.Index(["a", "b", "c", "other"], name="qid"))
+    return run_path, gens, gold
+
+
+def test_retrieval_main_scores_only_sample(tmp_path, monkeypatch):
+    from rag.gen_eval import retrieval
+    docs = {q: [f"{q}{r}" for r in range(1, 6)] for q in "ab"}
+    run_path, gens, gold = _retrieval_files(tmp_path, docs)
+    monkeypatch.setattr(retrieval, "eval_qids", lambda cfg: ["a", "b"])
+    monkeypatch.setattr(retrieval, "load_gold", lambda cfg, layer: gold)
+    out = tmp_path / "out" / "r.json"
+    monkeypatch.setattr(sys, "argv", [
+        "retrieval", "+exp=exp017", f"gen_eval.retrieval_run='{run_path.as_posix()}'",
+        f"paths.gen_runs='{gens.as_posix()}'", f"paths.gen_retrieval='{out.as_posix()}'"])
+    retrieval.main()
+    result = json.loads(out.read_text(encoding="utf-8"))
+    overall = result["metrics"][0]
+    assert result["n_queries"] == 2
+    # c와 표본 밖 other는 세지 않는다
+    assert overall["recall@1"] == 0.5 and overall["recall@5"] == 1.0
+    assert overall["mrr@10"] == 0.75
+
+
+@pytest.mark.parametrize(("docs", "match"), [
+    ({"a": ["a1", "a2", "a3", "a5", "a4"], "b": [f"b{r}" for r in range(1, 6)]}, "다른 질의 1개"),
+    ({"a": [f"a{r}" for r in range(1, 6)]}, "생성 기록에 없는 질의 1개"),
+])
+def test_retrieval_main_stops_when_contexts_differ(tmp_path, monkeypatch, docs, match):
+    from rag.gen_eval import retrieval
+    run_path, gens, gold = _retrieval_files(tmp_path, docs)
+    monkeypatch.setattr(retrieval, "eval_qids", lambda cfg: ["a", "b"])
+    monkeypatch.setattr(retrieval, "load_gold", lambda cfg, layer: gold)
+    monkeypatch.setattr(sys, "argv", [
+        "retrieval", "+exp=exp017", f"gen_eval.retrieval_run='{run_path.as_posix()}'",
+        f"paths.gen_runs='{gens.as_posix()}'"])
+    with pytest.raises(SystemExit, match=match):
+        retrieval.main()
+
+
+def test_retrieval_main_checks_test_run_hash_before_labels(tmp_path, monkeypatch):
+    from rag.gen_eval import retrieval
+    run_path = tmp_path / "run.csv"
+    run_path.write_text("qid,rank,doc_id\n", encoding="utf-8")
+
+    def forbidden(*a, **kw):
+        raise AssertionError("라벨을 읽었다")
+    monkeypatch.setattr("rag.gen_eval.common.load_gold", forbidden)
+    monkeypatch.setattr(retrieval, "load_gold", forbidden)
+    monkeypatch.setattr(sys, "argv", [
+        "retrieval", "+exp=current", *TEST_LAYER,
+        f"gen_eval.test_inputs.run.path='{run_path.as_posix()}'",
+        "gen_eval.test_inputs.run.sha256='00000000'"])
+    with pytest.raises(SystemExit, match="S13 기록"):
+        retrieval.main()
+
+
+def test_retrieval_main_test_layer_reads_test_labels(tmp_path, monkeypatch):
+    from hashlib import sha256
+
+    from rag.gen_eval import retrieval
+    docs = {q: [f"{q}{r}" for r in range(1, 6)] for q in "ab"}
+    run_path, gens, gold = _retrieval_files(tmp_path, docs)
+    calls = []
+
+    def fake_gold(cfg, layer, allow_test=False):
+        calls.append((layer, allow_test))
+        return gold
+
+    monkeypatch.setattr(retrieval, "eval_qids", lambda cfg: ["a", "b"])
+    monkeypatch.setattr(retrieval, "load_gold", fake_gold)
+    out = tmp_path / "r.json"
+    monkeypatch.setattr(sys, "argv", [
+        "retrieval", "+exp=current", *TEST_LAYER,
+        f"gen_eval.test_inputs.run.path='{run_path.as_posix()}'",
+        f"gen_eval.test_inputs.run.sha256='{sha256(run_path.read_bytes()).hexdigest()[:8]}'",
+        f"paths.gen_runs='{gens.as_posix()}'", f"paths.gen_retrieval='{out.as_posix()}'"])
+    retrieval.main()
+    assert calls == [("test", True)]
+    assert json.loads(out.read_text(encoding="utf-8"))["layer"] == "test"
+
+
+def test_report_main_counts_answers_without_any_citation(monkeypatch, capsys):
+    """안내 문장을 뺀 본문이 있고 답변 전체에 인용이 없는 답변만 센다(S44 노트북). 종합 지표도
+    낸다."""
+    answers = {"a": "내용만 있는 문장입니다.", "b": "인용이 있습니다[1]. 없는 문장입니다.",
+               "c": "제공된 회의록에서 답을 찾지 못했습니다."}
+    rows = [_judged(q, 0.5, 1.0) for q in answers]
+    for row in rows:
+        row["citations"] = {"n_sentences": 1, "invalid": [], "uncited": 0, "filler": 0}
+        row["metadata"] = []
+        row.update(usage=None, first_token_s=None, total_s=1.0, provider="p",
+                   gen_finish_reason="stop")
+    monkeypatch.setattr("rag.gen_eval.report.read_jsonl", lambda path: rows)
+    monkeypatch.setattr("rag.gen_eval.report.check_qids", lambda cfg, rows: None)
+    monkeypatch.setattr("rag.gen_eval.report.matching_gens", lambda cfg, rows: {
+        q: {"answer": a} for q, a in answers.items()})
+    # 이 칸과 무관한 앞 표는 합성 기록에 없는 항목을 읽어 뺀다
+    monkeypatch.setattr("rag.gen_eval.report.speaker_names", lambda gen: [])
+    monkeypatch.setattr("rag.gen_eval.report.unlisted_table", lambda cfg, rows: "없음")
+    monkeypatch.setattr("rag.gen_eval.report.refusal_table", lambda rows: [])
+    monkeypatch.setattr("rag.gen_eval.report.print_items", lambda rows: None)
+    monkeypatch.setattr(sys, "argv", ["report", "+exp=current"])
+    report_main()
+    out = capsys.readouterr().out
+    assert "| 인용이 전혀 없는 답변 | 1/3 (33.3%) |" in out
+    assert "D-53) 0.750 (3질의)" in out

@@ -21,7 +21,7 @@ from datetime import datetime
 
 from langsmith.run_trees import get_cached_client
 
-from rag.gen_eval.common import done_qids, eval_qids, load_refs
+from rag.gen_eval.common import check_test_run, done_qids, eval_qids, load_refs
 from rag.generate import Pipeline, recipe
 from rag.index import ROOT, load_cfg
 from rag.retrieve import read_query_emb
@@ -106,6 +106,7 @@ def main() -> None:
     g = cfg.gen_eval
     if g.concurrency < 1:
         raise SystemExit(f"gen_eval.concurrency는 1 이상이다: {g.concurrency}")
+    check_test_run(cfg)
     qids = eval_qids(cfg)
     path = ROOT / cfg.paths.gen_runs
     if g.contexts not in ("retrieved", "oracle", "no_gold"):
@@ -121,9 +122,12 @@ def main() -> None:
         return
 
     keep = set(todo)
-    with (ROOT / cfg.paths.queries_dev).open(encoding="utf-8") as f:
+    test = g.queries == "test"  # dev 질의 파일에는 test가 없고, 임베딩 캐시도 따로다(S13)
+    with (ROOT / (cfg.paths.queries if test else cfg.paths.queries_dev)).open(
+            encoding="utf-8") as f:
         texts = {q["qid"]: q["query"] for q in map(json.loads, f) if q["qid"] in keep}
-    cached_qids, emb = read_query_emb(cfg, ROOT / cfg.paths.query_emb)
+    cached_qids, emb = read_query_emb(
+        cfg, ROOT / (cfg.paths.query_emb_test if test else cfg.paths.query_emb))
     pos = {q: i for i, q in enumerate(cached_qids)}
 
     path.parent.mkdir(parents=True, exist_ok=True)

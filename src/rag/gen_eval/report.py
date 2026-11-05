@@ -4,9 +4,9 @@
 진술 수(S22), 전체·부분 거부(S14b), 지정 거부 문구를 변형한 거부(이슈 #156, S34), 거부 교차 집계,
 인용·메타데이터 오류, 토큰·비용, 첫 토큰 시간, 끝나지 않은 생성 수를 낸다. 항목 평가 결과가 있으면
 정보 상태 × 처리 표, 거부 정확도, 틀린 처리 유형, 과잉 거부율(질의 평균, D-53)을 낸다(S14c).
-judge 단계 표에는 형식 재요청 수(D-58)를 함께 낸다. 종합 지표와 두 실행의 판정은
-rag.gen_eval.compare가 낸다(S27). gen_eval.item_cases를 주면 판정 확인 사례의 judge 결과를 정답과
-대조한다. 인자는 Hydra override(기본은 판정용 세트 dev-full 330질의, D-50. S14 표본은
+judge 단계 표에는 형식 재요청 수(D-58)를 함께 낸다. 종합 지표는 이 실행의 값만 내고(S46), 두 실행의
+판정은 rag.gen_eval.compare가 낸다(S27). gen_eval.item_cases를 주면 판정 확인 사례의 judge 결과를
+정답과 대조한다. 인자는 Hydra override(기본은 판정용 세트 dev-full 330질의, D-50. S14 표본은
 gen_eval.queries=dev-small gen_eval.n=20). 읽은 결과의 질의가 표본과 다르면 멈춘다(리뷰 G2-3).
 """
 
@@ -18,7 +18,7 @@ from hashlib import sha256
 import numpy as np
 import pandas as pd
 
-from rag.gen_eval.checks import HANDLINGS, STATES, item_outcome, unlisted_refusal
+from rag.gen_eval.checks import HANDLINGS, STATES, item_outcome, sentences, unlisted_refusal
 from rag.gen_eval.common import eval_qids, read_jsonl, stable
 from rag.gen_eval.judge import sha
 from rag.index import ROOT, load_cfg
@@ -55,6 +55,11 @@ def criterion(rows: list[dict], key: str) -> tuple[list[float], Counter, int]:
         else:
             errors += 1
     return scores, excluded, errors
+
+
+def no_citation(answer: str, key: str) -> bool:
+    """안내 문장을 뺀 본문이 있는데 답변 전체에 인용이 없는가(S42·S44 "인용 전무")."""
+    return bool([s for s in sentences(answer) if key not in s]) and not CITE.search(answer)
 
 
 def speaker_mismatch(r: dict) -> float:
@@ -305,6 +310,9 @@ def main() -> None:
         part = len(criterion(partial, key)[0])
         ex = ", ".join(f"{k} {v}" for k, v in excluded.items()) or "-"
         print(f"| {name} | {mean(scores)} | {len(scores)} | {part} | {ex} | {errors} |")
+    composite = per_query(rows)["composite"].dropna()
+    print(f"\n종합 지표(질의별 충실성·관련성 평균의 평균, D-53) {mean(list(composite))} "
+          f"({len(composite)}질의)")
     # 뒷받침(1)으로 판정하고 발언자 구분 불가로 표시한 진술만 센다(기준 문서 F7)
     unclear = [sum(v["speaker_unclear"] and v["verdict"] == 1
                    for v in (r.get("faithfulness") or {}).get("verdicts", [])) for r in rows]
@@ -357,6 +365,12 @@ def main() -> None:
     bad = sum(1 for c in cites if c["invalid"])
     print(f"| 근거 번호 밖 인용이 있는 답변 | {rate(bad, len(cites))} |")
     print(f"| 인용 없는 문장 | {rate(sum(c['uncited'] for c in cites), n_sent)} |")
+    if isinstance(gens, str):
+        print(f"| 인용이 전혀 없는 답변 | {gens} |")
+    else:
+        key = cfg.gen_eval.notice_key
+        print(f"| 인용이 전혀 없는 답변 | "
+              f"{rate(sum(no_citation(gens[r['qid']]['answer'], key) for r in rows), n)} |")
     print(f"| 내용 없는 문장(인사말·도입 문장, 문장 수에서 뺌) | "
           f"{sum(c.get('filler', 0) for c in cites)} |")
     print(f"| 회의 일자·위원회 불일치가 있는 답변 | {rate(sum(1 for m in meta if m), len(meta))} |")

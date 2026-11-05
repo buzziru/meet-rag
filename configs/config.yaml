@@ -78,6 +78,8 @@ paths:
   gen_runs: data/gen_eval/runs/${retriever.run_name}-${prompt.version}-${gen_eval.queries}${ctx:${gen_eval.contexts}}${spk:${speakers.mode}}${rep:${gen_eval.gen_rep}}.jsonl
   gen_judge: data/gen_eval/judge/${retriever.run_name}-${prompt.version}-${gen_eval.queries}${ctx:${gen_eval.contexts}}${spk:${speakers.mode}}${rep:${gen_eval.gen_rep}}-${judge.name}-${judge.prompt.version}${rep:${judge.rep}}.jsonl
   gen_judge_cache: data/gen_eval/judge_cache
+  # 같은 표본의 검색 지표(S46, rag.gen_eval.retrieval)
+  gen_retrieval: data/gen_eval/retrieval/${retriever.run_name}-${gen_eval.queries}-n${gen_eval.n}.json
   gen_dev_queries: configs/gen_eval/dev_queries.yaml  # judge 지시 개발에 쓴 질의. dev-full 표본에서 뺀다(S22)
   # multi-doc 후보 집합과 시작 묶음 (docs/slices/07-bundles.md)
   multidoc_pools: data/multidoc/pools.jsonl
@@ -290,6 +292,19 @@ gen_eval:
   # S14 표본 재채점처럼 개발 층을 볼 때는 gen_eval.queries=dev-small gen_eval.n=20으로 바꾼다
   queries: dev-full
   n: 330  # seed로 섞은 순서의 앞에서 자른다. n을 늘려도 앞 표본이 유지된다
+  # test 층(생성 단계 종료 1회, D-87, slices/46-gen-test.md). queries=test는 allow_test 없이 멈추고
+  # n은 test_n이어야 한다. test_inputs는 S13 실행 기록의 산출물과 SHA-256 앞자리다
+  allow_test: false
+  test_n: 800
+  test_inputs:
+    query_emb_test: {path: data/index/snowflake-ko/queries-test.npz, sha256: 8f828601}
+    rerank_pairs: {path: data/rerank/test-full-ms256-k20.pairs.jsonl, sha256: 018f1544}
+    rerank_scores: {path: data/rerank/test-full-ms256-k20-cross-encoder.scores.jsonl, sha256: c8dea3ee}
+    run: {path: data/runs/snowflake-ko-fixed-512-64-hybrid-cond-filter-law-ms256-k20-ce-test.csv, sha256: d905a3d3}
+  # 인용이 전혀 없는 답변을 셀 때 본문에서 빼는 안내 문장의 문구(S44 노트북과 같다)
+  notice_key: 찾지 못
+  # dev 층에서 rag.gen_eval.retrieval이 읽을 순위 파일. test 층은 test_inputs.run을 쓴다
+  retrieval_run: null
   seed: ${seed}
   # 생성 반복 번호(S24). 같은 질의를 같은 설정으로 다시 생성해 생성 잡음을 잰다. 0이면 반복 도입 전과 같은 경로다
   gen_rep: 0

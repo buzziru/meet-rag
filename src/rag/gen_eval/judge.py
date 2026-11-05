@@ -40,7 +40,7 @@ from rag.gen_eval.checks import (
     metadata_mismatches,
     refusal_split,
 )
-from rag.gen_eval.common import eval_qids, load_refs, read_jsonl, stable
+from rag.gen_eval.common import check_test_run, eval_qids, load_refs, read_jsonl, stable
 from rag.index import ROOT, git_state, load_cfg, refuse_existing, require_env, write_guarded
 from rag.speakers import render as render_context
 
@@ -515,9 +515,13 @@ def main() -> None:
     if cfg.gen_eval.item_cases:
         judge_cases(cfg)
         return
+    check_test_run(cfg)
     refuse_existing(ROOT / cfg.paths.gen_judge, cfg.search.overwrite)  # judge 호출 전에 본다
     gens = {r["qid"]: r for r in read_jsonl(ROOT / cfg.paths.gen_runs)}
-    qids = [q for q in eval_qids(cfg) if q in gens]  # 표본 순서. 아직 생성하지 않은 qid는 뺀다
+    sample = eval_qids(cfg)
+    qids = [q for q in sample if q in gens]  # 표본 순서. 아직 생성하지 않은 qid는 뺀다
+    if cfg.gen_eval.queries == "test" and len(qids) != len(sample):  # 결과 파일은 덮어쓰지 않는다
+        raise SystemExit(f"test 표본 {len(sample)}개 중 {len(qids)}개만 생성됐다. 생성을 마저 한다")
     refs = load_refs(cfg, qids)
     with (ROOT / cfg.paths.corpus).open(encoding="utf-8") as f:
         committees = {committee_base(json.loads(line)["committee_name"]) for line in f} - {""}
