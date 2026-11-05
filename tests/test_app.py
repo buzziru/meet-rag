@@ -1,4 +1,4 @@
-"""채팅 앱(S35). API·인덱스·gradio 없이 합성 스트림과 합성 Pipeline으로 본다."""
+"""채팅 API(S35, S48). 외부 API·인덱스·gradio 없이 합성 스트림과 합성 Pipeline으로 본다."""
 
 import logging
 import sys
@@ -16,7 +16,6 @@ from rag.index import load_cfg
 CTX = {"n": 1, "doc_id": "a1", "date": "2020-01-02", "committee_name": "법제사법위원회",
        "original": "http://example/1", "text": "본문 <b>굵게</b>"}
 CORPUS = SimpleNamespace(chunk_span=lambda doc_id, text: (3, 3 + len(text)))
-ASKED = (CORPUS, "질의", [{"role": "user", "content": "질의"}])
 
 
 def chunk(content=None, finish=None, usage=None):
@@ -91,49 +90,6 @@ def test_stream_ends_with_contexts():
     assert items[-1]["contexts"] == [CTX] and items[-1]["answer"] == "답변"
 
 
-def test_history_does_not_change_search_query(cfg):
-    seen = []
-    pipe = fake_pipe(["답"], seen)
-    list(app.respond(pipe, cfg, {}, *ASKED))
-    past = [{"role": "user", "content": "앞 질문"}, {"role": "assistant", "content": "앞 답변"}]
-    history, _, message = app.ask("질의", past)
-    last = list(app.respond(pipe, cfg, {}, CORPUS, message, history))[-1]
-    assert seen == ["질의", "질의"]
-    assert last[:3] == history
-
-
-def test_ask_shows_question_and_clears_input():
-    history, box, message = app.ask("질의", [])
-    assert history == [{"role": "user", "content": "질의"}]
-    assert box == "" and message == "질의"
-
-
-def test_respond_waits_for_first_token_then_appends_contexts(cfg):
-    """첫 조각 전에 내보내면 화면의 대기 표시가 사라진다."""
-    chats = list(app.respond(fake_pipe(["답", "변"]), cfg, {}, *ASKED))
-    assert [c[1]["content"] for c in chats[:2]] == ["답", "답변"]
-    last = chats[-1]
-    assert last[1]["content"] == "답변"
-    assert last[2]["metadata"] == {"title": cfg.app.contexts_title}
-    assert "&lt;b&gt;" in last[2]["content"] and "<b>" not in last[2]["content"]
-    assert "(http://example/1)" in last[2]["content"]
-    assert f'<a href="#evidence:a1:3:{3 + len(CTX["text"])}">' in last[2]["content"]
-
-
-def test_respond_shows_notice_when_answer_is_empty(cfg):
-    last = list(app.respond(fake_pipe([]), cfg, {}, *ASKED))[-1]
-    assert last[1]["content"] == cfg.app.no_answer
-
-
-def test_blank_message_keeps_history_and_skips_search(cfg):
-    seen = []
-    history, box, message = app.ask("  ", [])
-    assert (history, box, message) == ([], "", "")
-    chats = list(app.respond(fake_pipe(["답"], seen), cfg, {}, CORPUS, message, history))
-    assert chats == [[]]
-    assert seen == []
-
-
 @pytest.mark.parametrize("args, match", [
     (["+exp=current"], "재정렬"),
     (["+exp=current", "retriever.rerank.enabled=false"], "인덱스 읽음"),
@@ -148,24 +104,15 @@ def test_main_requires_rerank_off_before_loading(monkeypatch, args, match):
         app.main()
 
 
-def test_format_contexts_shows_speakers_as_readable_paragraphs():
+def test_context_body_shows_speakers_as_readable_paragraphs():
     speakers = {"questioners": [{"name": "홍길동", "position": "위원", "affiliation": ""}],
                 "answerers": [{"name": "김철수", "position": "장관", "affiliation": "국토부"}],
                 "spans": [{"role": "question", "start": 0, "end": 2, "name": "홍길동",
                            "position": "위원", "affiliation": ""}]}
-    out = app.format_contexts([{**CTX, "speakers": speakers}], CORPUS)
+    out = app.context_payload({**CTX, "speakers": speakers}, CORPUS)["body"]
     assert "질의자: 홍길동 위원 / 답변자: 김철수 국토부 장관\n\n" in out
-    assert "**〈질의 홍길동 위원〉**\n\n본문\n\n &lt;b&gt;" in out
-    assert "<b>" not in out and "〈/" not in out
-
-
-def test_evidence_link_round_trips_and_handles_missing_chunk():
-    link = app.evidence_link(CTX, CORPUS)
-    assert app.parse_evidence(link.removeprefix(app.EVIDENCE_PREFIX)) == (
-        "a1", (3, 3 + len(CTX["text"])))
-    missing = SimpleNamespace(chunk_span=lambda doc_id, text: None)
-    value = app.evidence_link(CTX, missing).removeprefix(app.EVIDENCE_PREFIX)
-    assert app.parse_evidence(value) == ("a1", None)
+    assert "**〈질의 홍길동 위원〉**\n\n본문\n\n <b>" in out
+    assert "〈/" not in out
 
 
 @pytest.fixture
@@ -188,10 +135,10 @@ def test_tracing_turns_off_on_limit_and_back_on_next_month(clean_tracing, cfg, m
         log.warning("Failed to multipart ingest runs: Rate limit exceeded for https://x")
         assert tracing_is_enabled() is False
         now[0] = date(2026, 11, 30)
-        list(app.respond(fake_pipe(["답"]), cfg, {}, *ASKED))
+        list(app.chat_events(fake_pipe(["답"]), cfg, {}, CORPUS, "질의"))
         assert tracing_is_enabled() is False  # 같은 달에는 켜지 않는다
         now[0] = date(2026, 12, 1)
-        list(app.respond(fake_pipe(["답"]), cfg, {}, *ASKED))
+        list(app.chat_events(fake_pipe(["답"]), cfg, {}, CORPUS, "질의"))
         assert tracing_is_enabled() is True
         log.warning("Failed to multipart ingest runs: Rate limit exceeded for https://x")
         assert tracing_is_enabled() is False  # 다음 달에도 넘으면 다시 끈다
@@ -202,7 +149,7 @@ def test_tracing_turns_off_on_limit_and_back_on_next_month(clean_tracing, cfg, m
 def test_tracing_switch_leaves_tracing_alone_without_limit(cfg, clean_tracing, monkeypatch):
     switch = app.TracingSwitch(today=lambda: date(2026, 12, 1))
     monkeypatch.setattr(app, "TRACING", switch)
-    list(app.respond(fake_pipe(["답"]), cfg, {}, *ASKED))
+    list(app.chat_events(fake_pipe(["답"]), cfg, {}, CORPUS, "질의"))
     assert tracing_is_enabled() is True
 
 
@@ -234,11 +181,6 @@ def test_chat_events_show_meeting_info_at_sentence_end(cfg, capsys):
     assert [e["text"] for e in events] == ["A는", "A는 답했습니다", MOVED, MOVED]
     log = capsys.readouterr().out
     assert log.count("첫 글자 지연:") == 1 and "국방" not in log and "질의" not in log
-
-
-def test_respond_shows_meeting_info_at_sentence_end(cfg):
-    chats = list(app.respond(fake_pipe(MOVED_RAW), cfg, {}, *ASKED))
-    assert [c[1]["content"] for c in chats] == ["A는", "A는 답했습니다", MOVED, MOVED]
 
 
 def test_shown_logs_delay_at_final_answer_when_nothing_was_released(capsys):

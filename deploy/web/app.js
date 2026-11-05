@@ -10,10 +10,6 @@ const RETRY_MS = 5000;
 const CONTEXTS_TITLE = "근거";
 const CHUNK_START = "▼ 답변에 쓴 근거";
 
-// 로컬 확인: ?api=http://127.0.0.1:7860 (localhost에서 연 페이지에서만 받는다)
-const local = ["localhost", "127.0.0.1"].includes(location.hostname);
-const target = (local && new URLSearchParams(location.search).get("api")) || SPACE;
-
 const $ = (id) => document.getElementById(id);
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -33,7 +29,7 @@ function connect() {
       try {
         // 공개 전 점검용 토큰(D-88 결정 3). S41에서 지우고 토큰을 폐기한다.
         const token = localStorage.getItem("hf_token") ?? undefined;
-        client = await Client.connect(target, { events: ["data", "status"], token });
+        client = await Client.connect(SPACE, { events: ["data", "status"], token });
         $("connection").hidden = true;
         loadYears();
         return client;

@@ -4,10 +4,10 @@
 
 ## 만드는 것
 
-- `src/rag/app.py`: Gradio `Blocks` 채팅 화면. 입력창, 스트리밍 답변, 답변 아래 근거(번호, 회의 정보, 발언자 표시를 붙인 근거 원문, `original` 링크)를 둔다. 실행은 아래 완료 기준 2의 명령이다
+- `src/rag/app.py`: Gradio `Blocks` 채팅 화면. 입력창, 스트리밍 답변, 답변 아래 근거(번호, 회의 정보, 발언자 표시를 붙인 근거 원문, `original` 링크)를 둔다. 실행은 아래 완료 기준 2의 명령이다 이후 변경: S48에서 화면을 지웠다. 지금 `rag.app`은 API만 연다
 - `src/rag/generate.py`: 스트리밍 응답을 토큰 단위로 내보내는 경로를 더한다. 사고 과정은 내보내지 않고(`answer_start`), 기존 `generate()`는 이 경로를 쓰도록 바꾸되 반환 값과 `echo` 출력은 그대로 둔다
 - 재정렬을 끈 구성: `retriever.rerank.enabled=false`를 명령으로 준다. 켠 채 앱을 시작하면 시작할 때 원인을 적고 멈춘다(실시간 재정렬은 S38). `rag.generate`의 점수 파일 동작은 바꾸지 않는다 이후 변경: 조각 번호가 밀려 Space 배포는 S38, 실시간 재정렬은 S39, 공개는 S40이다(S36 PR)
-- 멀티턴 대비: 처리 함수는 `(message, history)`를 받고 검색 질의를 만드는 함수 한 곳(`search_query(message, history)`)을 거친다. 지금은 `message`만 돌려준다. 멀티턴은 이 함수에 재작성을 넣고 프롬프트에 이력을 더하는 것으로 넓힌다. 화면에는 앞 질문이 이어지지 않는다는 안내를 한 줄 둔다
+- 멀티턴 대비: 처리 함수는 `(message, history)`를 받고 검색 질의를 만드는 함수 한 곳(`search_query(message, history)`)을 거친다. 지금은 `message`만 돌려준다. 멀티턴은 이 함수에 재작성을 넣고 프롬프트에 이력을 더하는 것으로 넓힌다. 화면에는 앞 질문이 이어지지 않는다는 안내를 한 줄 둔다 이후 변경: S48에서 화면의 안내 칸을 지웠다. 문구는 `deploy/web/`에 있다
 - 설정: 제목, 안내 문구, 동시 처리 수를 `configs/config.yaml`의 `app` 키에 둔다. 코드에 직접 쓰지 않는다
 - 의존성: `pyproject.toml`의 선택 의존성 `app`에 `gradio`를 더하고 `uv.lock`을 갱신한다. 평가·실험 환경에는 설치하지 않는다
 - 테스트: `tests/test_app.py`. API를 부르지 않고 합성 응답과 합성 `Pipeline`을 쓴다
