@@ -185,27 +185,13 @@ ask:
   qid: null
   query: null
 
-# 채팅 앱(S35, rag.app)
+# 채팅 API(S35, S48, rag.app)
 app:
   title: 국회 회의록 질의응답
-  notice: 질문마다 따로 답합니다. 앞 질문의 내용은 이어지지 않습니다.
-  placeholder: 국회 회의록에 대해 물어보세요
-  contexts_title: 근거
   no_answer: 답변을 만들지 못했습니다. 다시 시도해 주세요.
-  browse_notice: 적재한 회의록을 연도와 회의로 찾아 읽을 수 있습니다.
-  doc_placeholder: 왼쪽에서 연도, 회의, 문서를 차례로 고르세요.
   labels:
-    year: 연도
-    meeting: 회의
-    document: 문서
-    chat_tab: 대화
-    doc_tab: 문서
-    reset: 선택 초기화
-    evidence_tab: 근거
     chunk_start: ▼ 답변에 쓴 근거
     chunk_end: ▲ 근거 끝
-  evidence_placeholder: 답변의 근거에서 회의 이름을 누르면 그 문서가 여기에 열립니다.
-  sidebar_width: 400
   # 동시에 처리하는 질의 수. 검색 단계가 여러 스레드에서 안전한지 재지 않아 1로 둔다
   concurrency: 1
   # 화면에서 문장 끝 괄호로 옮기는 회의 이름의 길이 상한(S45). 넘으면 첫머리를 그대로 둔다

@@ -5,7 +5,7 @@ import json
 import pytest
 from omegaconf import OmegaConf
 
-from rag.docs import CHUNK_END, CHUNK_START, Corpus, format_doc, readable
+from rag.docs import CHUNK_END, CHUNK_START, Corpus, doc_body, readable
 from rag.index import _read_corpus_meta
 
 
@@ -58,11 +58,10 @@ def test_read_returns_the_chosen_document_from_file(corpus):
     assert corpus.read("c1")["context"] == "앞선 해"
 
 
-def test_format_doc_hides_split_info_and_escapes_html(corpus):
-    out = format_doc(corpus.read("a1"), [], "off")
-    assert "첫 문서 &lt;b&gt;" in out and "<b>" not in out and "<i>" not in out
+def test_doc_body_hides_split_info_and_escapes_html(corpus):
+    out = doc_body(corpus.read("a1"), [], "off")
+    assert "첫 문서 &lt;b&gt;" in out and "<b>" not in out
     assert "training" not in out and "n_qa" not in out
-    assert "(http://example/1)" in out
     assert "질의자" not in out
 
 
@@ -79,21 +78,20 @@ def test_chunk_span_finds_chunk_or_nothing(corpus):
     assert corpus.chunk_span("a2", "없는 말") is None
 
 
-def test_format_doc_marks_chunk_and_keeps_span_positions(corpus):
+def test_doc_body_marks_chunk_and_keeps_span_positions(corpus):
     spans = [{"role": "answer", "start": 3, "end": 5, "name": "김철수", "position": "장관",
               "affiliation": "국토부"}]
-    out = format_doc(corpus.read("a2"), spans, "marks", (0, 2), ("시작", "끝"))
-    body = out.split("---", 1)[1]
+    body = doc_body(corpus.read("a2"), spans, "marks", (0, 2), ("시작", "끝"))
     assert body.index("**시작**") < body.index("둘째") < body.index("**끝**")
     assert body.index("**〈답변 김철수 장관〉**") < body.index("문서")
-    assert CHUNK_START not in out and CHUNK_END not in out
+    assert CHUNK_START not in body and CHUNK_END not in body
 
 
-def test_format_doc_adds_speakers_when_on(corpus):
+def test_doc_body_adds_speakers_when_on(corpus):
     spans = [{"role": "answer", "start": 0, "end": 2, "name": "김철수", "position": "장관",
               "affiliation": "국토부"}]
-    out = format_doc(corpus.read("a2"), spans, "marks")
+    out = doc_body(corpus.read("a2"), spans, "marks")
     assert "질의자: 홍길동 위원 / 답변자: 김철수 국토부 장관" in out
     assert "**〈답변 김철수 장관〉**" in out and "둘째" in out and "〈/" not in out
-    head = format_doc(corpus.read("a2"), spans, "head")
+    head = doc_body(corpus.read("a2"), spans, "head")
     assert "질의자: 홍길동 위원" in head and "〈답변" not in head

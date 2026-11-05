@@ -94,11 +94,3 @@ def doc_body(doc: dict, spans: list[dict], mode: str,
         c["speakers"] = chunk_speakers(doc, spans, 0, len(text), mode)
     body = readable(render(c)).replace(CHUNK_START, f"\n\n**{marks[0]}**\n\n")
     return body.replace(CHUNK_END, f"\n\n**{marks[1]}**\n\n")
-
-
-def format_doc(doc: dict, spans: list[dict], mode: str,
-               chunk: tuple[int, int] | None = None, marks: tuple[str, str] = ("", "")) -> str:
-    """Gradio 문서 화면. 머리에 이름, 안건, 회의록 링크를 붙인다."""
-    body = doc_body(doc, spans, mode, chunk, marks)
-    return (f"## {html.escape(doc_name(doc))}\n\n{html.escape(doc['agenda'])}\n\n"
-            f"[회의록]({doc['original']})\n\n---\n\n{body}")
