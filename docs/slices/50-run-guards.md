@@ -56,7 +56,7 @@
 
 ## 결과 (2026-11-05)
 
-커밋: 구현 9e7ae2b
+커밋: 구현 9e7ae2b, 가이드 지적 반영 7cb53ac, S49 병합 a9c78be(병합 뒤 pytest 562개 통과)
 
 - 테스트: `uv run pytest -q` 557개 통과, ruff 통과, `.claude/skills/meet-rag/scripts`와 `.claude/hooks` 138개 통과
 - 망가뜨린 사본(플러그인으로 끼움): `reason` 검사, `refuse_existing`, BM25 대조, `check_test`, 새 `read_jsonl`을 하나씩 뺀 사본에서 해당 테스트가 실패한다
