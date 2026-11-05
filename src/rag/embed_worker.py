@@ -33,7 +33,7 @@ class EmbedProcess:
         self.process = subprocess.Popen(
             command or [sys.executable, "-m", "rag.embed_worker", *overrides],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding="utf-8",
-            env={**os.environ, "PYTHONPATH": src})
+            env={**os.environ, "PYTHONPATH": src, "PYTHONUTF8": "1"})
 
     def __call__(self, query: str) -> np.ndarray:
         self.process.stdin.write(json.dumps(query, ensure_ascii=False) + "\n")

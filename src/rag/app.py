@@ -14,6 +14,7 @@ from datetime import date
 
 from langsmith.run_trees import configure, get_cached_client
 
+from rag.display import MeetingInfoMover, move_meeting_info
 from rag.docs import Corpus, doc_body, doc_name, format_doc, readable
 from rag.generate import Pipeline, recipe
 from rag.index import load_cfg
@@ -112,6 +113,25 @@ def ask(message: str, history: list[dict]) -> tuple[list[dict], str, str]:
     return [*history, {"role": "user", "content": message}], "", message
 
 
+def shown(stream: Iterator[str | dict], max_name: int) -> Iterator[str | dict]:
+    """pipe.stream의 답변을 화면 글로 바꾼다(S45). 생성 결과와 추적에는 원문이 남는다. 잡아 둔
+    동안은 내보내지 않고, 첫 원문 조각과 첫 표시 글자 사이의 시간을 로그에 남긴다."""
+    mover = MeetingInfoMover(max_name)
+    raw_at = None
+    logged = False
+    for item in stream:
+        if isinstance(item, dict):
+            out = {**item, "answer": move_meeting_info(item["answer"], max_name)}
+        else:
+            raw_at = raw_at or time.perf_counter()
+            out = mover.feed(item)
+        if out:
+            if raw_at and not logged:
+                print(f"첫 글자 지연: {time.perf_counter() - raw_at:.3f}초", flush=True)
+                logged = True
+            yield out
+
+
 def respond(pipe, cfg, rec: dict, corpus, message: str,
             history: list[dict]) -> Iterator[list[dict]]:
     """history는 ask가 질문을 더한 대화다. 첫 조각이 오기 전에는 아무것도 내보내지 않는다. 내보내면
@@ -123,7 +143,8 @@ def respond(pipe, cfg, rec: dict, corpus, message: str,
     query = search_query(message, history[:-1])
     answer = {"role": "assistant", "content": ""}
     chat = [*history, answer]
-    for item in pipe.stream(query, pipe.embed(query), langsmith_extra={"metadata": rec}):
+    stream = pipe.stream(query, pipe.embed(query), langsmith_extra={"metadata": rec})
+    for item in shown(stream, cfg.app.meeting_info_max_name):
         if isinstance(item, dict):
             answer["content"] = item["answer"] or cfg.app.no_answer
             chat.append({"role": "assistant",
@@ -152,7 +173,8 @@ def chat_events(pipe, cfg, rec: dict, corpus, message: str) -> Iterator[dict]:
     TRACING.refresh()
     query = search_query(message, [])
     text = ""
-    for item in pipe.stream(query, pipe.embed(query), langsmith_extra={"metadata": rec}):
+    stream = pipe.stream(query, pipe.embed(query), langsmith_extra={"metadata": rec})
+    for item in shown(stream, cfg.app.meeting_info_max_name):
         if isinstance(item, dict):
             yield {"text": item["answer"] or cfg.app.no_answer, "done": True,
                    "contexts": [context_payload(c, corpus) for c in item["contexts"]]}

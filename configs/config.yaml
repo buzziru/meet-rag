@@ -208,6 +208,8 @@ app:
   sidebar_width: 400
   # 동시에 처리하는 질의 수. 검색 단계가 여러 스레드에서 안전한지 재지 않아 1로 둔다
   concurrency: 1
+  # 화면에서 문장 끝 괄호로 옮기는 회의 이름의 길이 상한(S45). 넘으면 첫머리를 그대로 둔다
+  meeting_info_max_name: 40
 
 # Space 배포(S38, S39). 진입점 deploy/space/app.py가 speakers_from_file을 켜고 rerank를 쓴다
 deploy:

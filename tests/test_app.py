@@ -224,6 +224,38 @@ def test_chat_events_send_growing_text_then_contexts_without_labels(cfg):
     assert "<b>굵게</b>" in c["body"]  # 이스케이프를 풀어 보내고 페이지가 글자로 넣는다
 
 
+MOVED_RAW = ["2018년 10월 10일 국방", "위원회 회의에서 A는 ", "답했습니다", " [1]."]
+MOVED = "A는 답했습니다(2018년 10월 10일 국방위원회) [1]."
+
+
+def test_chat_events_show_meeting_info_at_sentence_end(cfg, capsys):
+    """S45. 잡아 둔 동안은 보내지 않고, 조각과 마지막 답변이 같은 글이고, 로그에 원문이 없다."""
+    events = list(app.chat_events(fake_pipe(MOVED_RAW), cfg, {}, CORPUS, "질의"))
+    assert [e["text"] for e in events] == ["A는", "A는 답했습니다", MOVED, MOVED]
+    log = capsys.readouterr().out
+    assert log.count("첫 글자 지연:") == 1 and "국방" not in log and "질의" not in log
+
+
+def test_respond_shows_meeting_info_at_sentence_end(cfg):
+    chats = list(app.respond(fake_pipe(MOVED_RAW), cfg, {}, *ASKED))
+    assert [c[1]["content"] for c in chats] == ["A는", "A는 답했습니다", MOVED, MOVED]
+
+
+def test_shown_logs_delay_at_final_answer_when_nothing_was_released(capsys):
+    """전부 잡아 둔 채 끝나면 마지막 답변이 첫 글자다."""
+    raw = "2018년 10월 10일 국방"
+    items = list(app.shown(iter([raw, {"answer": raw}]), 40))
+    assert items == [{"answer": raw}]
+    assert capsys.readouterr().out.count("첫 글자 지연:") == 1
+
+
+def test_shown_keeps_raw_answer_for_pipeline(cfg):
+    """Pipeline이 넘긴 결과 dict를 고치지 않는다. 추적·생성 기록은 원문이다."""
+    result = {"answer": "".join(MOVED_RAW), "contexts": []}
+    list(app.shown(iter([*MOVED_RAW, result]), cfg.app.meeting_info_max_name))
+    assert result["answer"] == "".join(MOVED_RAW)
+
+
 def test_chat_events_show_no_answer_notice_when_empty(cfg):
     def stream(query, q_emb, langsmith_extra=None):
         yield {"answer": "", "contexts": [CTX]}
