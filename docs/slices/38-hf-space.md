@@ -24,7 +24,7 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 | `index/snowflake-ko-fixed-256-32/full/`의 `basis.json`, `chunks.jsonl`, `emb/` | 약 906MB |
 | `processed/speaker_spans.json`, `processed/speaker_spans.json.basis.json` | 약 10MB |
 
-- **Space 저장소**: `deploy/space/`에 진입점 `app.py`, Space 카드 `README.md`, `requirements.txt`를 두고, `src/`, `configs/`와 함께 올린다. 데이터 파일은 넣지 않는다(D-74). 진입점은 `rag.app`과 같은 구성(`+exp=current`, `retriever.rerank.enabled=false`)으로 시작하고, 시작 시간과 최고 메모리를 로그에 남긴다 이후 변경: S39부터 재정렬을 켠 구성으로 시작한다(D-82)
+- **Space 저장소**: `deploy/space/`에 진입점 `app.py`, Space 카드 `README.md`, `requirements.txt`를 두고, `src/`, `configs/`와 함께 올린다. 데이터 파일은 넣지 않는다(D-74). 진입점은 `rag.app`과 같은 구성(`+exp=current`, `retriever.rerank.enabled=false`)으로 시작하고, 시작 시간과 최고 메모리를 로그에 남긴다 이후 변경: S39부터 재정렬을 켠 구성으로 시작한다(D-84)
 - **시크릿과 추적**: 생성 API 키와 LangSmith 값을 `doppler run -- hf …`와 `--secrets NAME`으로 넣어 값을 명령에 적지 않는다. 비공개 볼륨에 토큰이 따로 필요하면 Dataset 읽기 토큰도 같게 넣는다(문서에 적혀 있지 않아 완료 기준 1에서 본다). `LANGSMITH_TRACING=true`는 Space 변수로 둔다(D-71)
 - **설정**: 저장소 이름은 `configs/config.yaml`의 `deploy` 키에, 구간 파일 경로는 `paths`에 둔다. 코드에 직접 쓰지 않는다
 - **결정 기록**: 잰 값으로 호스팅과 벡터스토어(전수 검색 유지 여부)를 정해 DECISIONS에 적고, `docs/SPEC.md` 자원 제약의 "HF Spaces 무료 CPU"를 고친다
@@ -32,7 +32,7 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 ## 결정 사항
 
 1. **HF를 처리처로 더하는 범위**: 코퍼스(test 회의 문서 본문 포함, D-78), 인덱스, 발언 구간 파일을 비공개 Dataset 저장소와 비공개 Space로 보낸다. 라벨(`summary_q`, `summary_a`)과 질의 파일, `queries-*.npz`는 보내지 않는다. 사용자가 Dataset 생성을 허가했으므로(2026-11-04) 이 범위의 확인을 지시서 확인으로 받는다
-2. **데이터 불러오기**: Dataset 저장소를 읽기 전용 볼륨으로 붙이고, 앱이 읽는 `data/` 경로에 맞춘다(사용자 결정 2026-11-04). 처음 지시는 커밋 해시를 고정해 시작할 때 내려받는 안이었다. 지금도 콜드 스타트가 약 1분이라 지연을 더 늘리고 싶지 않고, 데이터셋은 프로젝트를 마친 뒤 바뀌지 않아 revision 변화로 문제가 생기지 않는다고 사용자가 판단했다. 볼륨은 revision을 고정할 수 없어, 올린 커밋 해시를 결과 절에 기록만 한다. `basis.json` 대조는 모델·청킹·범위 설정만 보므로 같은 설정으로 파일이 바뀌면 걸리지 않는다. 입력→동작: 저장소에 새 커밋을 올리고 Space가 재시작하면 앱은 오류 없이 새 파일을 읽는다. 그래서 이 저장소에는 S38 업로드 뒤 커밋을 올리지 않고, 올려야 하면 사용자에게 먼저 묻는다 이후 변경: S39부터 볼륨을 떼고 시작할 때 커밋을 고정해 내려받는다(D-82). 재시작부터 실행까지 54\~58초다
+2. **데이터 불러오기**: Dataset 저장소를 읽기 전용 볼륨으로 붙이고, 앱이 읽는 `data/` 경로에 맞춘다(사용자 결정 2026-11-04). 처음 지시는 커밋 해시를 고정해 시작할 때 내려받는 안이었다. 지금도 콜드 스타트가 약 1분이라 지연을 더 늘리고 싶지 않고, 데이터셋은 프로젝트를 마친 뒤 바뀌지 않아 revision 변화로 문제가 생기지 않는다고 사용자가 판단했다. 볼륨은 revision을 고정할 수 없어, 올린 커밋 해시를 결과 절에 기록만 한다. `basis.json` 대조는 모델·청킹·범위 설정만 보므로 같은 설정으로 파일이 바뀌면 걸리지 않는다. 입력→동작: 저장소에 새 커밋을 올리고 Space가 재시작하면 앱은 오류 없이 새 파일을 읽는다. 그래서 이 저장소에는 S38 업로드 뒤 커밋을 올리지 않고, 올려야 하면 사용자에게 먼저 묻는다 이후 변경: S39부터 볼륨을 떼고 시작할 때 커밋을 고정해 내려받는다(D-84). 재시작부터 실행까지 54\~58초다
 3. **OpenRouter 호출**: 완료 기준 4·5의 지어낸 질의로 약 30번, $0.02 이하로 본다(호출당 약 $0.0004\~0.0006, D-37·S35 추정). Colab과 유료 HF 하드웨어는 쓰지 않는다
 4. **사전 확인에서 막힐 때**: 비공개가 안 되거나 메모리가 모자라면(로컬 앱 최고 약 2.8GB, S35) 데이터를 올리기 전에 멈추고, 값과 선택지(구독, 다른 호스팅, 인덱스 축소)를 비용과 함께 보고한다. 메인이 정하지 않는다
 
@@ -94,7 +94,7 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 - 구간 파일에 만든 설정 지문을 함께 뒀다(`src/CLAUDE.md`, `check_basis`)
 - Space 변수 `HF_HOME=/tmp/hf-home`, `PYTHONUNBUFFERED=1`, `LANGSMITH_TRACING=true`를 뒀다. `HF_HOME`이 없으면 임베딩 모델을 불러오는 단계에서 멈춘다(`rag.index.pinned`)
 - `deploy/space/requirements.txt`는 잠금 파일에서 내보내되 torch, CUDA 묶음을 빼고 `pydantic`을 2.12.5로 낮췄다. Space 빌드가 함께 설치하는 `gradio[mcp]`가 2.12.5 이하를 요구한다. 앱 동작은 완료 기준 4로 확인했고 평가 환경은 바뀌지 않는다
-- 볼륨 위치는 config가 아니라 Space 설정에 있다(`hf spaces volumes`). `deploy.space`, `deploy.dataset`은 이름 기록이고 코드가 읽지 않는다 이후 변경: S39부터 볼륨이 없고 진입점이 `deploy.space`, `deploy.dataset`을 읽는다(D-82)
+- 볼륨 위치는 config가 아니라 Space 설정에 있다(`hf spaces volumes`). `deploy.space`, `deploy.dataset`은 이름 기록이고 코드가 읽지 않는다 이후 변경: S39부터 볼륨이 없고 진입점이 `deploy.space`, `deploy.dataset`을 읽는다(D-84)
 - 첫 콜드 스타트 측정은 재시작이 적용되기 전 옛 컨테이너가 응답한 값(3초)이라 버리고, 실행 상태가 바뀌는 것을 본 값을 적었다
 
 ### 관찰

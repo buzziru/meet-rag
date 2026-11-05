@@ -214,7 +214,7 @@ deploy:
   speakers_from_file: false
   # Space가 시작할 때 내려받는 Dataset 커밋. 저장소에 새 커밋을 올려도 값이 조용히 바뀌지 않는다(S39)
   dataset_revision: 968be89c7ee6bfb1fb2bb8847805bda03190ed8f
-  token_env: HF_TOKEN  # 데이터 내려받기와 소유자 할당량 호출에 쓰는 토큰의 환경 변수(D-82)
+  token_env: HF_TOKEN  # 데이터 내려받기와 소유자 할당량 호출에 쓰는 토큰의 환경 변수(D-84)
   rerank:
     enabled: true  # false면 Space가 재정렬을 뺀 구성으로 시작한다
     api_name: score_pairs  # Space의 GPU 점수 함수 경로

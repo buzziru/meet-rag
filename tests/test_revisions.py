@@ -72,7 +72,7 @@ def test_pinned_stops_without_hf_home(monkeypatch):
 
 
 def test_space_dataset_revision_is_commit_hash():
-    """Space가 내려받는 Dataset도 커밋을 고정한다(D-82). 진입점은 src 밖이라 값으로 본다."""
+    """Space가 내려받는 Dataset도 커밋을 고정한다(D-84). 진입점은 src 밖이라 값으로 본다."""
     from rag.index import COMMIT, load_cfg
 
     assert COMMIT.fullmatch(load_cfg().deploy.dataset_revision)
