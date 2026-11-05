@@ -92,7 +92,9 @@ def test_many_commits_are_capped(repo):
     s.collect(str(main), "m")
     for i in range(s.MAX_COMMITS + 2):
         _commit(deploy, f"f{i}.txt", f"커밋{i}")
-    assert "외 커밋 2개" in s.collect(str(main), "m")
+    news = s.collect(str(main), "m")
+    assert "외 커밋 2개 (파일: f0.txt, f1.txt)" in news  # 오래된 커밋도 파일 이름은 남는다
+    assert "커밋0" not in news
 
 
 def test_hook_stays_silent_outside_git(tmp_path, monkeypatch, capsys):
