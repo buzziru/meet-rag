@@ -8,6 +8,8 @@
 """
 
 import json
+import time
+from collections.abc import Callable
 from json.decoder import scanstring
 from pathlib import Path
 
@@ -378,7 +380,10 @@ class Retriever:
         self.dirs = dense_dirs(cfg)
         for d, c in zip(self.dirs, dense_chunkings(cfg), strict=True):
             check_basis(d / "basis.json", index_basis(cfg, c))
+        start = time.perf_counter()
         self.dense_ids, self.chunk_emb = load_dense(self.dirs)
+        self.timings = {"임베딩": time.perf_counter() - start}
+        start = time.perf_counter()
         self.hybrid = r.type == "hybrid"
         self.depth = r.fusion.depth if self.hybrid else r.top_k
         if self.hybrid:
@@ -395,6 +400,7 @@ class Retriever:
             self.bm25_doc = np.searchsorted(self.doc_names, self.bm25_ids)
         if self.use_cond:
             self.cond_index = self._condition_index()
+        self.timings["BM25·조건 색인"] = time.perf_counter() - start
 
     def _condition_index(self) -> ConditionIndex:
         pos = {d: i for i, d in enumerate(self.doc_names)}
@@ -523,17 +529,21 @@ class Retriever:
     def explain(self, row: np.ndarray, tokens: list[int] | None = None,
                 conditions: dict | None = None,
                 rerank: dict[str, float] | None = None,
+                scorer: Callable[[list[str]], dict[str, float] | None] | None = None,
                 ) -> tuple[list[str], list[dict]]:
         """상위 top_k 문서와 문서마다 단계별 기록(목록별 순위, RRF·재정렬 점수, 최다 일치 여부).
 
         순위는 final로 정한다. 실패·성공 원인을 나중에 나눠 보려고 단계별 값을 남긴다(PR #71).
         rerank는 문서별 재정렬 점수이고, 주면 RRF 상위 retriever.rerank.depth개를 다시 줄 세운다.
+        scorer는 결합 후보로 그 점수를 실시간으로 만든다(S39). None을 돌려주면 재정렬하지 않는다.
         """
         named, matched, _ = self.lists(row, tokens, conditions)
         if not self.hybrid:
             return named["dense"], [{"dense_rank": i} for i in range(1, len(named["dense"]) + 1)]
         score = self._rrf_scores(named)
         fused = sorted(score, key=score.__getitem__, reverse=True)
+        if scorer is not None:
+            rerank = scorer(fused)
         docs = self.final(fused, matched, rerank)
         pos = {n: {d: i for i, d in enumerate(lst, 1)} for n, lst in named.items()}
         stages = []

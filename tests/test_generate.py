@@ -1,4 +1,5 @@
 import json
+import sys
 
 import numpy as np
 import pytest
@@ -7,7 +8,7 @@ from omegaconf import OmegaConf
 from rag.generate import build_messages, recipe
 from rag.index import load_cfg
 from rag.llm import answer_start, split_thought
-from rag.retrieve import ChunkStore, best_chunks
+from rag.retrieve import ChunkStore, Retriever, best_chunks
 from rag.speakers import render
 
 
@@ -216,3 +217,106 @@ def test_pipeline_rejects_bad_context_expand(monkeypatch, over):
     monkeypatch.setattr(g, "corpus_meta", lambda cfg: [])
     with pytest.raises(SystemExit, match="context_expand"):
         g.Pipeline(load_cfg(["index.scope=full", over]))
+
+
+def _live_pipe(tmp_path, score, depth=2):
+    """문서 a·b·c(RRF 순서)와 문서마다 청크 둘을 둔 실시간 재정렬 구성. 인덱스를 읽지 않으려고
+    생성자를 건너뛴다."""
+    import rag.generate as g
+    ret = object.__new__(Retriever)
+    ret.hybrid = True
+    ret.r = OmegaConf.create({"top_k": 3, "rerank": {"depth": depth}})
+    ret.chunk_emb = np.eye(6)
+    ret.query_tokens = lambda texts: None
+    ret.lists = lambda row, tokens, conds: ({"dense": ["a", "b", "c"]}, set(), False)
+    ret._rrf_scores = lambda named: {"a": 3.0, "b": 2.0, "c": 1.0}
+    pipe = object.__new__(g.Pipeline)
+    pipe.cfg = OmegaConf.create({"retriever": {"rerank": {"depth": depth}}})
+    pipe.retriever, pipe.extractor, pipe.rerank_scores = ret, None, None
+    pipe.doc_chunks = {"a": np.array([0, 1]), "b": np.array([2, 3]), "c": np.array([4, 5])}
+    pipe.store = _store(tmp_path, [(d, i, f"{d}{i}") for d in "abc" for i in range(2)])
+    pipe.now = [0.0]
+    pipe.gate = g.RerankGate(score, 3600, clock=lambda: pipe.now[0])
+    return pipe
+
+
+def test_live_rerank_scores_best_chunks_of_head_and_reorders(tmp_path):
+    seen = []
+
+    def score(pairs):
+        seen.extend(pairs)
+        return [0.1, 0.9]
+
+    # 질의 임베딩이 청크 1(a)과 2(b)에 가까워 문서마다 그 청크가 뽑힌다
+    _, docs, stages = _live_pipe(tmp_path, score).rank("질의", np.array([0, 1, 1, 0, 0, 0.0]))
+    assert seen == [["질의", "a1"], ["질의", "b0"]]
+    assert docs == ["b", "a", "c"]  # 상위 2개만 다시 줄 세운다
+    assert [s["rerank_score"] for s in stages] == [0.9, 0.1, None]
+
+
+def test_failed_rerank_keeps_rrf_order_pauses_then_retries(tmp_path, capsys):
+    calls = []
+
+    def score(pairs):
+        calls.append(len(pairs))
+        if len(calls) == 1:
+            raise RuntimeError("GPU 없음")
+        return [0.1, 0.9]
+
+    pipe = _live_pipe(tmp_path, score)
+    q = np.array([1, 0, 0, 0, 0, 0.0])
+    _, docs, stages = pipe.rank("질의", q)
+    assert docs == ["a", "b", "c"] and "rerank_score" not in stages[0]
+    assert "RuntimeError" in capsys.readouterr().out
+    pipe.now[0] = 3599
+    # 중단 중에는 부르지 않는다
+    assert pipe.rank("질의", q)[1] == ["a", "b", "c"] and len(calls) == 1
+    pipe.now[0] = 3600
+    assert pipe.rank("질의", q)[1] == ["b", "a", "c"] and len(calls) == 2
+
+
+@pytest.mark.parametrize("message, pause", [
+    ("You have exceeded your free ZeroGPU quota (10s requested vs. 2s left). "
+     "Try again in 0:03:12. Subscribe", 192),
+    ("exceeded. Try again in 1 day, 2:00:01.500000", 93601),
+    ("You have exceeded your ZeroGPU runs limit", 3600),
+    ("Space app has reached its GPU limit.", 3600),
+])
+def test_pause_uses_wait_in_quota_message_or_default(message, pause):
+    import rag.generate as g
+
+    def fail(pairs):
+        raise RuntimeError(message)
+
+    now = [100.0]
+    gate = g.RerankGate(fail, 3600, clock=lambda: now[0])
+    assert gate([["q", "t"]]) is None
+    assert gate.until == 100 + pause
+
+
+def test_embed_process_round_trips_query_and_vector_through_worker_protocol():
+    from rag.embed_worker import EmbedProcess
+    code = ("import sys, numpy as np; from rag.embed_worker import serve; "
+            "serve(lambda t: np.array([[len(t[0]), 0.5]]), sys.stdin, sys.stdout)")
+    embed = EmbedProcess([], command=[sys.executable, "-c", code])
+    assert embed("질의 하나").tolist() == [5.0, 0.5]  # 한글이 그대로 전달된다
+    assert embed("둘").tolist() == [1.0, 0.5]
+    embed.process.stdin.close()
+    embed.process.wait()
+    with pytest.raises((RuntimeError, ValueError, OSError)):
+        embed("끝난 뒤")
+
+
+def test_pipeline_embed_uses_embedder_when_given():
+    import rag.generate as g
+    pipe = object.__new__(g.Pipeline)
+    pipe.embedder = lambda q: np.array([len(q)])
+    assert pipe.embed("질의").tolist() == [2]
+
+
+def test_rank_without_scorer_keeps_rrf_order(tmp_path):
+    """Space에서 재정렬을 끈 구성(deploy.rerank.enabled=false)과 로컬 앱의 경로."""
+    pipe = _live_pipe(tmp_path, lambda pairs: pytest.fail("점수 함수를 부르면 안 된다"))
+    pipe.gate = None
+    _, docs, stages = pipe.rank("질의", np.array([1, 0, 0, 0, 0, 0.0]))
+    assert docs == ["a", "b", "c"] and "rerank_score" not in stages[0]

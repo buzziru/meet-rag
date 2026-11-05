@@ -1,14 +1,17 @@
 """채팅 화면. 자유 질의를 검색해 답변을 스트리밍으로 보여 주고 끝나면 근거를 붙인다.
 
-명세는 docs/slices/35-chat-app.md. 실시간 재정렬이 없어 재정렬을 끈 구성으로만 시작한다(S39에서
-만든다). 방문자 질의는 data/에 저장하지 않고 LangSmith 추적으로만 남는다.
+명세는 docs/slices/35-chat-app.md. 실시간 재정렬은 Space 진입점이 GPU 점수 함수를 넘길 때만 켠다
+(S39). 로컬에는 GPU가 없어 재정렬을 끈 구성으로 시작한다. 방문자 질의는 data/에 저장하지 않고
+LangSmith 추적으로만 남는다.
 """
 
+import logging
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from datetime import date
 
-from langsmith.run_trees import get_cached_client
+from langsmith.run_trees import configure, get_cached_client
 
 from rag.docs import Corpus, format_doc, readable
 from rag.generate import Pipeline, recipe
@@ -38,6 +41,38 @@ SCROLL_TO_CHUNK = """() => { setTimeout(() => {
 }, 200); }"""
 # 선택 칸의 긴 이름이 화살표와 겹치지 않게 오른쪽을 비운다
 CSS = ".browse input { padding-right: 2rem !important; text-overflow: ellipsis; }"
+
+
+class TracingSwitch(logging.Handler):
+    """LangSmith 월 한도를 넘으면 추적을 끄고 다음 달에 다시 켠다(D-71 자동화). 전송 실패는
+    클라이언트 경고 로그로만 알 수 있어 로그를 본다. 끈 상태는 저장하지 않는다. 재시작하면 켠
+    상태로 시작하고, 아직 한도를 넘었으면 첫 전송 실패로 다시 꺼진다."""
+
+    LIMIT = "Rate limit exceeded"
+
+    def __init__(self, today: Callable[[], date] = date.today):
+        super().__init__(logging.WARNING)
+        self.today = today
+        self.off_month = None
+
+    def month(self) -> tuple[int, int]:
+        d = self.today()
+        return d.year, d.month
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if self.off_month is None and self.LIMIT in record.getMessage():
+            self.off_month = self.month()
+            configure(enabled=False)
+            print("LangSmith 한도 초과로 추적을 끈다. 다음 달에 다시 켠다", flush=True)
+
+    def refresh(self) -> None:
+        if self.off_month is not None and self.off_month != self.month():
+            self.off_month = None
+            configure(enabled=True)
+            print("달이 바뀌어 LangSmith 추적을 다시 켠다", flush=True)
+
+
+TRACING = TracingSwitch()
 
 
 def search_query(message: str, history: list[dict]) -> str:
@@ -83,6 +118,7 @@ def respond(pipe, cfg, rec: dict, corpus, message: str,
     if not message:
         yield history
         return
+    TRACING.refresh()
     query = search_query(message, history[:-1])
     answer = {"role": "assistant", "content": ""}
     chat = [*history, answer]
@@ -98,8 +134,9 @@ def respond(pipe, cfg, rec: dict, corpus, message: str,
     get_cached_client().flush()
 
 
-def build(cfg, pipe, corpus):
-    """화면을 만든다. 평가·실험 환경에는 gradio가 없어 여기서 불러온다(pyproject의 app)."""
+def build(cfg, pipe, corpus, endpoint: Callable | None = None):
+    """화면을 만든다. 평가·실험 환경에는 gradio가 없어 여기서 불러온다(pyproject의 app). endpoint는
+    Space의 GPU 점수 함수로, 토큰 호출에 쓰도록 API 문서에 보이지 않는 경로로 연다(S39, D-74)."""
     import gradio as gr
 
     rec = recipe(cfg, pipe.index_meta, True)
@@ -170,21 +207,27 @@ def build(cfg, pipe, corpus):
                                      js=READ_EVIDENCE, api_name=False)
         opened.then(None, js=SCROLL_TO_CHUNK.replace("MARK", labels.chunk_start), api_name=False)
         demo.load(None, js=BIND_EVIDENCE_LINKS, api_name=False)
+        if endpoint is not None:
+            gr.api(endpoint, api_name=cfg.deploy.rerank.api_name,
+                   api_visibility="undocumented")
     return demo
 
 
-def main() -> None:
+def main(endpoint: Callable | None = None, scorer: Callable | None = None,
+         embedder: Callable | None = None) -> None:
     cfg = load_cfg(["index.scope=full", *sys.argv[1:]])
-    if cfg.retriever.get("rerank") and cfg.retriever.rerank.enabled:
-        raise SystemExit("앱에는 실시간 재정렬이 없다(S39). retriever.rerank.enabled=false로 "
-                         "실행한다")
+    if cfg.retriever.get("rerank") and cfg.retriever.rerank.enabled and scorer is None:
+        raise SystemExit("실시간 재정렬은 Space의 GPU 점수 함수가 있어야 한다(S39). 로컬은 "
+                         "retriever.rerank.enabled=false로 실행한다")
+    logging.getLogger("langsmith.client").addHandler(TRACING)
     start = time.perf_counter()
-    pipe = Pipeline(cfg)
+    pipe = Pipeline(cfg, scorer=scorer, embedder=embedder)
     loaded = time.perf_counter()
     pipe.embed(cfg.app.title)  # 임베딩 모델을 먼저 불러 첫 질의가 기다리지 않게 한다
-    print(f"시작: 인덱스·코퍼스 {loaded - start:.1f}초, 임베딩 모델 "
+    parts = ", ".join(f"{k} {v:.1f}초" for k, v in pipe.retriever.timings.items())
+    print(f"시작: 인덱스·코퍼스 {loaded - start:.1f}초({parts}), 임베딩 모델 "
           f"{time.perf_counter() - loaded:.1f}초", flush=True)
-    demo = build(cfg, pipe, Corpus(cfg))
+    demo = build(cfg, pipe, Corpus(cfg), endpoint)
     demo.queue(default_concurrency_limit=cfg.app.concurrency).launch(css=CSS)
 
 
