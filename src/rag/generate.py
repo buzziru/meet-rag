@@ -354,13 +354,10 @@ class Pipeline:
                reduce_fn=lambda items: items[-1])
     def stream(self, query: str, q_emb: np.ndarray) -> Iterator[str | dict]:
         """자유 질의의 검색 → 프롬프트 → 생성. 답변 조각을 내보내고 마지막에 근거를 더한 결과
-        dict를 내보낸다(S35). 재정렬 점수 파일이 있는 구성에서는 rank가 멈춘다. 실시간 재정렬을
-        건너뛰면 근거의 단계 기록에 재정렬 점수가 없어 rerank_skipped로 알린다(S39)."""
+        dict를 내보낸다(S35). 재정렬 점수 파일이 있는 구성에서는 rank가 멈춘다."""
         contexts = self.retrieve(query, q_emb, self.cfg.generator.context_docs)
-        skipped = self.gate is not None and "rerank_score" not in contexts[0]["stages"]
         for item in self.tokens(self.messages(contexts, query)):
-            yield ({"contexts": contexts, **item, "rerank_skipped": skipped}
-                   if isinstance(item, dict) else item)
+            yield {"contexts": contexts, **item} if isinstance(item, dict) else item
 
     def run(self, query: str, q_emb: np.ndarray, qid: str | None = None,
             stream: bool | None = None, echo: bool = True) -> dict:

@@ -125,8 +125,6 @@ def respond(pipe, cfg, rec: dict, corpus, message: str,
     for item in pipe.stream(query, pipe.embed(query), langsmith_extra={"metadata": rec}):
         if isinstance(item, dict):
             answer["content"] = item["answer"] or cfg.app.no_answer
-            if item.get("rerank_skipped"):
-                answer["content"] += f"\n\n{cfg.app.rerank_skipped}"
             chat.append({"role": "assistant",
                          "content": format_contexts(item["contexts"], corpus),
                          "metadata": {"title": cfg.app.contexts_title}})

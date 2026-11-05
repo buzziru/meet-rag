@@ -294,23 +294,6 @@ def test_pause_uses_wait_in_quota_message_or_default(message, pause):
     assert gate.until == 100 + pause
 
 
-def test_stream_reports_skip_only_when_live_rerank_was_skipped():
-    import rag.generate as g
-
-    def run(gate, stages):
-        pipe = object.__new__(g.Pipeline)
-        pipe.cfg = OmegaConf.create({"generator": {"context_docs": 1}})
-        pipe.gate = gate
-        pipe.retrieve = lambda query, q_emb, k: [{"stages": stages}]
-        pipe.messages = lambda contexts, query: []
-        pipe.tokens = lambda messages: iter(["답", {"answer": "답"}])
-        return list(g.Pipeline.stream.__wrapped__(pipe, "질의", None))[-1]["rerank_skipped"]
-
-    assert run(object(), {"rrf_score": 1.0}) is True
-    assert run(object(), {"rerank_score": None}) is False
-    assert run(None, {"rrf_score": 1.0}) is False  # 재정렬을 끈 구성
-
-
 def test_embed_process_round_trips_query_and_vector_through_worker_protocol():
     from rag.embed_worker import EmbedProcess
     code = ("import sys, numpy as np; from rag.embed_worker import serve; "

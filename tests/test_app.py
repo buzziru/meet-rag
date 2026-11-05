@@ -125,15 +125,6 @@ def test_respond_shows_notice_when_answer_is_empty(cfg):
     assert last[1]["content"] == cfg.app.no_answer
 
 
-def test_respond_shows_notice_when_rerank_skipped(cfg):
-    def stream(query, q_emb, langsmith_extra=None):
-        yield {"answer": "답", "contexts": [CTX], "rerank_skipped": True}
-
-    pipe = SimpleNamespace(embed=lambda q: q, stream=stream)
-    chat = list(app.respond(pipe, cfg, {}, *ASKED))[-1]
-    assert chat[1]["content"] == f"답\n\n{cfg.app.rerank_skipped}"
-
-
 def test_blank_message_keeps_history_and_skips_search(cfg):
     seen = []
     history, box, message = app.ask("  ", [])
