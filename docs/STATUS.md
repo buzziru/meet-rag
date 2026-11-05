@@ -18,7 +18,7 @@
 
 ## 다음 행동
 `main` 세션(그쪽 핸드오프에서 이 절을 고친다):
-1. [A] S42 이어서: v15 지시에 문단을 나눠도 문장마다 근거 번호를 붙이라는 문구를 더한 v16과 `configs/exp/exp026.yaml`을 만들어 gen-small로 인용을 확인한 뒤 gen-full과 `gen_eval.gen_rep=1` 재생성을 돌린다. 비용 비피크 약 $1.6 승인됨(사용자 2026-11-04). gen-small만 `LANGSMITH_TRACING=true`, 대량 실행은 `false`(D-71). 착수 전 `references/gen-exp.md` 실행 절을 읽는다. 결과를 새 노트북에 쓰고 기준 반영을 사용자에게 묻는다. 반영하면 D-번호, `current.yaml`, 머리 줄, EXPERIMENTS 줄을 쓰고, `docs/CLAUDE.md:76`의 `exp024` 사례를 실제 config로 고친다. 올리지 않은 config의 표 줄은 사용자에게 묻지 않고 규칙(기준을 바꾸는 config만)을 따른다
+1. [A] S42 이어서: v15 지시에 문단을 나눠도 문장마다 근거 번호를 붙이라는 문구를 더한 v16과 `configs/exp/exp026.yaml`을 만들어 gen-small로 인용을 확인한 뒤 gen-full과 `gen_eval.gen_rep=1` 재생성을 돌린다. 비용 비피크 약 $1.6 승인됨(사용자 2026-11-04). gen-small만 `LANGSMITH_TRACING=true`, 대량 실행은 `false`(D-71). 착수 전 `references/gen-exp.md` 실행 절을 읽는다. 결과를 새 노트북에 쓰고 기준 반영을 사용자에게 묻는다. 반영하면 D-번호, `current.yaml`, 머리 줄, EXPERIMENTS 줄을 쓴다. 올리지 않은 config의 표 줄은 사용자에게 묻지 않고 규칙(기준을 바꾸는 config만)을 따른다
 2. [A] 오차 분석: 판정 세트는 라벨·건수만 쓰고, 세트 밖 dev 약 100질의를 새로 생성·채점해 읽는다. 착수 때 호출 수와 비용을 보고한다(예상 생성 약 $0.04, judge 약 $0.6). 결과로 실험을 더할지 정한다(D-76 결정 6)
 3. 생성 단계 종료: SPEC·DECISIONS 정합 점검 → SPEC 미결 5(생성 test 질의 범위) 결정 → test 1회(`LANGSMITH_TRACING=false`, D-72). test 때 코드 집계(회의 표기, 인용 없는 답변)를 함께 낼지 그때 정한다
 
