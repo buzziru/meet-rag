@@ -19,7 +19,7 @@ from rag.eval.metrics import (
     read_run,
     to_markdown,
 )
-from rag.gen_eval.common import check_test_input, eval_qids, read_jsonl
+from rag.gen_eval.common import check_test_input, check_test_layer, eval_qids, read_jsonl
 from rag.index import ROOT, load_cfg, write_guarded
 
 
@@ -39,12 +39,13 @@ def check_contexts(gens: dict[str, dict], run, qids: list[str], k: int) -> None:
 def main() -> None:
     cfg = load_cfg(["index.scope=full", *sys.argv[1:]])
     g, ev = cfg.gen_eval, cfg.eval
-    qids = eval_qids(cfg)  # test 층이면 허용을 여기서 본다
     test = g.queries == "test"
-    if test:
+    if test:  # 라벨을 읽기 전에 본다
+        check_test_layer(cfg)
         check_test_input(cfg, "run")
     elif not g.retrieval_run:
         raise SystemExit("dev 층은 gen_eval.retrieval_run=<순위 파일>을 준다")
+    qids = eval_qids(cfg)
     path = g.test_inputs.run.path if test else g.retrieval_run
 
     keep = set(qids)

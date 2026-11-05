@@ -299,6 +299,8 @@ gen_eval:
     rerank_pairs: {path: data/rerank/test-full-ms256-k20.pairs.jsonl, sha256: 018f1544}
     rerank_scores: {path: data/rerank/test-full-ms256-k20-cross-encoder.scores.jsonl, sha256: c8dea3ee}
     run: {path: data/runs/snowflake-ko-fixed-512-64-hybrid-cond-filter-law-ms256-k20-ce-test.csv, sha256: d905a3d3}
+  # 인용이 전혀 없는 답변을 셀 때 본문에서 빼는 안내 문장의 문구(S44 노트북과 같다)
+  notice_key: 찾지 못
   # dev 층에서 rag.gen_eval.retrieval이 읽을 순위 파일. test 층은 test_inputs.run을 쓴다
   retrieval_run: null
   seed: ${seed}

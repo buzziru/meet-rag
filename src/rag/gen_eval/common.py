@@ -9,10 +9,11 @@ import os
 from pathlib import Path
 
 import numpy as np
+from langsmith.utils import tracing_is_enabled
 from omegaconf import OmegaConf
 
 from rag.eval.metrics import load_gold
-from rag.index import ROOT, file_sha256
+from rag.index import ROOT, file_sha256, load_cfg
 
 LAYERS = ("dev-small", "dev-full")
 VOLATILE = ("git_commit", "git_dirty")  # 같은 설정의 이어 쓰기에서 달라도 되는 레시피 값
@@ -55,14 +56,32 @@ def check_test_input(cfg, key: str) -> None:
                          "멈추고 보고한다(D-87 결정 6)")
 
 
+def check_test_baseline(cfg) -> None:
+    """test 1회는 지금 기준 설정 하나로 돈다(D-87 결정 2). 결과를 바꾸는 설정이 별칭 current와
+    다르거나 seed가 다르면 멈춘다. 기록 경로에 seed가 없어 다른 표본이 같은 파일에 이어 쓰인다."""
+    want = load_cfg(["index.scope=full", "+exp=current"])
+    keys = ("embedding", "retriever", "conditions", "prompt", "generator", "speakers", "judge")
+    diff = [k for k in keys if OmegaConf.to_container(cfg[k], resolve=True)
+            != OmegaConf.to_container(want[k], resolve=True)]
+    if cfg.gen_eval.seed != want.gen_eval.seed:
+        diff.append("gen_eval.seed")
+    if diff:
+        raise SystemExit(f"test 1회는 +exp=current 설정만 쓴다. 다른 설정: {', '.join(diff)}")
+
+
 def check_test_run(cfg) -> None:
-    """test 층이면 API를 부르기 전에 1회 실행의 제약을 본다. dev 층에서는 아무것도 하지 않는다."""
+    """test 층이면 API를 부르기 전에 1회 실행의 제약을 본다. dev 층에서는 test 산출물을 읽지 않게
+    search.queries만 본다."""
     g = cfg.gen_eval
     if g.queries != "test":
+        if cfg.search.queries == "test":
+            raise SystemExit("search.queries=test는 gen_eval.queries=test와 함께 쓴다")
         return
     check_test_layer(cfg)
-    if os.environ.get("LANGSMITH_TRACING") != "false":
-        raise SystemExit("test 1회는 LANGSMITH_TRACING=false로 실행한다(D-72, D-87 결정 7)")
+    # 라이브러리는 *_TRACING_V2를 먼저 읽어, 변수 하나만 보면 다른 이름으로 켜진 추적을 놓친다
+    if os.environ.get("LANGSMITH_TRACING") != "false" or tracing_is_enabled():
+        raise SystemExit("test 1회는 LANGSMITH_TRACING=false로 실행한다. 추적을 켜는 다른 환경 "
+                         "변수(*_TRACING_V2)도 없어야 한다(D-72, D-87 결정 7)")
     if g.gen_rep or cfg.judge.rep or g.contexts != "retrieved":
         raise SystemExit("test 1회는 반복 번호 0, gen_eval.contexts=retrieved로만 실행한다"
                          "(D-87 결정 2)")
@@ -71,6 +90,8 @@ def check_test_run(cfg) -> None:
             raise SystemExit(f"paths.{key}({cfg.paths[key]})가 S13 산출물이 아니다. "
                              "+exp=current로 실행한다")
         check_test_input(cfg, key)
+    check_test_input(cfg, "run")  # 유료 호출 뒤에 알면 늦다
+    check_test_baseline(cfg)
 
 
 def eval_qids(cfg) -> list[str]:

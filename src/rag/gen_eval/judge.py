@@ -518,7 +518,10 @@ def main() -> None:
     check_test_run(cfg)
     refuse_existing(ROOT / cfg.paths.gen_judge, cfg.search.overwrite)  # judge 호출 전에 본다
     gens = {r["qid"]: r for r in read_jsonl(ROOT / cfg.paths.gen_runs)}
-    qids = [q for q in eval_qids(cfg) if q in gens]  # 표본 순서. 아직 생성하지 않은 qid는 뺀다
+    sample = eval_qids(cfg)
+    qids = [q for q in sample if q in gens]  # 표본 순서. 아직 생성하지 않은 qid는 뺀다
+    if cfg.gen_eval.queries == "test" and len(qids) != len(sample):  # 결과 파일은 덮어쓰지 않는다
+        raise SystemExit(f"test 표본 {len(sample)}개 중 {len(qids)}개만 생성됐다. 생성을 마저 한다")
     refs = load_refs(cfg, qids)
     with (ROOT / cfg.paths.corpus).open(encoding="utf-8") as f:
         committees = {committee_base(json.loads(line)["committee_name"]) for line in f} - {""}
