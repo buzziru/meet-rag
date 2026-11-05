@@ -25,7 +25,7 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 | `processed/speaker_spans.json`, `processed/speaker_spans.json.basis.json` | 약 10MB |
 
 - **Space 저장소**: `deploy/space/`에 진입점 `app.py`, Space 카드 `README.md`, `requirements.txt`를 두고, `src/`, `configs/`와 함께 올린다. 데이터 파일은 넣지 않는다(D-74). 진입점은 `rag.app`과 같은 구성(`+exp=current`, `retriever.rerank.enabled=false`)으로 시작하고, 시작 시간과 최고 메모리를 로그에 남긴다 이후 변경: S39부터 재정렬을 켠 구성으로 시작한다(D-84)
-- **시크릿과 추적**: 생성 API 키와 LangSmith 값을 `doppler run -- hf …`와 `--secrets NAME`으로 넣어 값을 명령에 적지 않는다. 비공개 볼륨에 토큰이 따로 필요하면 Dataset 읽기 토큰도 같게 넣는다(문서에 적혀 있지 않아 완료 기준 1에서 본다). `LANGSMITH_TRACING=true`는 Space 변수로 둔다(D-71)
+- **시크릿과 추적**: 생성 API 키와 LangSmith 값을 `doppler run -- hf …`와 `--secrets NAME`으로 넣어 값을 명령에 적지 않는다. 비공개 볼륨에 토큰이 따로 필요하면 Dataset 읽기 토큰도 같게 넣는다(문서에 적혀 있지 않아 완료 기준 1에서 본다). `LANGSMITH_TRACING=true`는 Space 변수로 둔다(D-71) 이후 변경: S49부터 `COMMIT`도 함께 올린다. Space 코드를 `main`과 대조하려고 더했다
 - **설정**: 저장소 이름은 `configs/config.yaml`의 `deploy` 키에, 구간 파일 경로는 `paths`에 둔다. 코드에 직접 쓰지 않는다
 - **결정 기록**: 잰 값으로 호스팅과 벡터스토어(전수 검색 유지 여부)를 정해 DECISIONS에 적고, `docs/SPEC.md` 자원 제약의 "HF Spaces 무료 CPU"를 고친다
 
@@ -73,7 +73,7 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 - 완료 기준 1: 비공개 Dataset과 비공개 ZeroGPU Space를 무료 계정에서 만들었다. 컨테이너 메모리 한도 104GB(`memory.max`), 16GB 할당 성공, CPU 16코어 분량(`cpu.max`), `/tmp` 10GB 쓰기 성공(디스크 한도는 호스트 값만 보여 확인하지 못함), Python 3.12.12, torch 2.13.0+cu130. `@spaces.GPU` 함수가 없으면 `No @spaces.GPU function detected during startup`으로 멈추고, 부르지 않는 함수 하나를 두면 돌며 할당량이 줄지 않는다. 비공개 Dataset 볼륨은 토큰 없이 읽혔고 `/home/user/app/data`로 지정해 `/app/data`에 붙었다
 - 완료 기준 2: `tests/test_speakers.py` 통과. 실제 라벨로 만든 구간 파일이 문서 38,516개 모두 `doc_spans` 결과와 같다(구간이 빈 문서 6개 포함, 구간 80,292개). 파일 약 10MB, 키는 역할, 위치, 이름, 직책, 소속뿐이다
 - 완료 기준 3: 올리기 전과 뒤 모두 비공개다. 목록에 표 밖 파일, `queries`, `LAB_`, 시험 파일이 없다
-- 완료 기준 4: 지어낸 질의 3개의 근거 화면이 로컬과 글자까지 같다. 문서 탭은 문서 2개가 같다. 근거 탭은 25개 링크를 대조했고 6개만 끝의 빈 줄 2글자가 달라 화면에 영향이 없다(원인 확인하지 않음). 익명 접속은 404, 공개 API 목록은 비어 있고, 다운로드 버튼이 없고, 본문에 `splits`, `n_qa`, `summary_`가 없다. LangSmith에 호출이 남고 메타데이터 `git_commit`은 Space 저장소의 커밋이다
+- 완료 기준 4: 지어낸 질의 3개의 근거 화면이 로컬과 글자까지 같다. 문서 탭은 문서 2개가 같다. 근거 탭은 25개 링크를 대조했고 6개만 끝의 빈 줄 2글자가 달라 화면에 영향이 없다(원인 확인하지 않음). 익명 접속은 404, 공개 API 목록은 비어 있고, 다운로드 버튼이 없고, 본문에 `splits`, `n_qa`, `summary_`가 없다. LangSmith에 호출이 남고 메타데이터 `git_commit`은 Space 저장소의 커밋이다 이후 변경: S49부터 올릴 때 넣은 `COMMIT`의 GitHub 커밋이 `git_commit`이다. Hub 커밋으로는 `main`과 대조할 수 없어서다
 - 완료 기준 5: 아래 표(재정렬을 끈 구성). OpenRouter 26번, 비용은 재지 않았다(1,000질의당 약 $0.37로 어림해 약 $0.01)
 - 완료 기준 6: 사용자가 화면에서 작동을 확인했고, ZeroGPU 유지와 벡터스토어 미도입을 정했다(D-80)
 

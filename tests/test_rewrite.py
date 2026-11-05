@@ -7,7 +7,7 @@ from test_search import _tmp_cfg, _write_text_index
 
 from rag import rewrite
 from rag.index import load_cfg
-from rag.retrieve import Retriever, rank_docs, rrf
+from rag.retrieve import Retriever, rrf
 
 GATE = OmegaConf.create({"overlap_k": 2, "max_overlap": 0, "spread_ranks": [1, 3],
                          "max_spread": 0.1})
@@ -86,7 +86,7 @@ def test_retriever_adds_rewrite_lists_after_original(tmp_path):
     named, _, _ = ret.lists(row, tokens, rewrite=(rw_row, rw_tokens))
     assert list(named) == ["dense", "bm25", "dense_rw", "bm25_rw"]
     assert named["dense_rw"][0] == "c"
-    assert named["bm25_rw"] == rank_docs(ret.bm25.scores(rw_tokens), ret.bm25_ids, 3)
+    assert named["bm25_rw"] == ["c"]  # 0점 문서 제외(S49)
     fused, _, _ = ret.candidates(row, tokens, rewrite=(rw_row, rw_tokens))
     assert fused == rrf(list(named.values()), cfg.retriever.fusion.rrf_k, None)
     assert ret.lists(row, tokens)[0].keys() == {"dense", "bm25"}  # 재작성 없으면 그대로

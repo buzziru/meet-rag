@@ -392,6 +392,7 @@ class Retriever:
             if self.bm25.num_docs != len(self.bm25_ids):  # 행이 밀리면 다른 문서와 짝지어진다(S50)
                 raise SystemExit(f"{self.index_dir}: 청크 {len(self.bm25_ids)}개와 BM25 "
                                  f"{self.bm25.num_docs}행이 다르다")
+            self.bm25_doc_no = np.unique(self.bm25_ids, return_inverse=True)[1]
         self.use_cond = bool(self.hybrid and r.get("conditions") and r.conditions.enabled)
         # 재정렬 점수로 상위 후보를 다시 줄 세우는지. 평가와 생성이 이 값을 읽는다(S16)
         self.use_rerank = bool(self.hybrid and r.get("rerank") and r.rerank.enabled)
@@ -453,9 +454,11 @@ class Retriever:
         if not self.hybrid:
             return named, matched, full
         bm25_chunk = self.bm25.scores(tokens)
-        named["bm25"] = rank_docs(bm25_chunk, self.bm25_ids, self.depth, r.chunk_pool)
-        if self.score_fusion:
+        if self.score_fusion:  # 0점 문서도 정규화 점수 0으로 합쳐 지금 동작을 유지한다(EXP-015)
+            named["bm25"] = rank_docs(bm25_chunk, self.bm25_ids, self.depth, r.chunk_pool)
             named = {"cc": self._convex(named, row, bm25_chunk, dense_scores)}
+        else:
+            named["bm25"] = self._bm25_list(bm25_chunk)
         counts = self.cond_index.match_counts(conditions) if self.use_cond else {}
         if counts and max(counts.values()) >= r.conditions.min_fields:
             if self.weighted:  # doc_names는 dense_ids의 np.unique 결과다
@@ -478,9 +481,14 @@ class Retriever:
             if "dense" in r.rewrite.lists:
                 named["dense_rw"] = self._dense(rw_row)[0]
             if "bm25" in r.rewrite.lists:
-                named["bm25_rw"] = rank_docs(self.bm25.scores(rw_tokens), self.bm25_ids,
-                                             self.depth, r.chunk_pool)
+                named["bm25_rw"] = self._bm25_list(self.bm25.scores(rw_tokens))
         return named, matched, full
+
+    def _bm25_list(self, chunk_scores: np.ndarray) -> list[str]:
+        """BM25 상위 문서에서 점수가 0인 문서를 뺀다. 맞는 토큰이 없는 질의가 0점 문서에 RRF 점수를
+        주지 않게 한다(S49). 점수 내림차순이라 앞에서 자르면 나머지 순서는 그대로다."""
+        docs = rank_docs(chunk_scores, self.bm25_ids, self.depth, self.r.chunk_pool)
+        return docs[:np.unique(self.bm25_doc_no[chunk_scores > 0]).size]
 
     def _convex(self, named: dict[str, list[str]], row: np.ndarray, bm25_chunk: np.ndarray,
                 dense_scores: np.ndarray | None) -> list[str]:

@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable, Iterator
 from datetime import date
 
-from langsmith.run_trees import configure, get_cached_client
+from langsmith.run_trees import configure
 
 from rag.display import MeetingInfoMover, move_meeting_info
 from rag.docs import Corpus, doc_body, doc_name, readable
@@ -92,6 +92,9 @@ def chat_events(pipe, cfg, rec: dict, corpus, message: str) -> Iterator[dict]:
     불러 빈 질문을 보내면 생성을 부르지 않는다."""
     if not message.strip():
         return
+    if len(message) > cfg.app.max_query_chars:  # 검색과 유료 생성을 부르지 않는다(S49)
+        yield {"text": cfg.app.query_too_long, "done": True, "contexts": []}
+        return
     TRACING.refresh()
     query = search_query(message, [])
     text = ""
@@ -103,7 +106,6 @@ def chat_events(pipe, cfg, rec: dict, corpus, message: str) -> Iterator[dict]:
         else:
             text += item
             yield {"text": text, "done": False}
-    get_cached_client().flush()
 
 
 def doc_payload(pipe, cfg, corpus, doc_id: str, start: int, end: int) -> dict:
