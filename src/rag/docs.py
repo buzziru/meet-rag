@@ -79,9 +79,9 @@ class Corpus:
             return json.loads(f.readline())
 
 
-def format_doc(doc: dict, spans: list[dict], mode: str,
-               chunk: tuple[int, int] | None = None, marks: tuple[str, str] = ("", "")) -> str:
-    """문서 화면. 근거와 같은 렌더링으로 발언자 표시를 붙인다. 라벨과 분할 정보는 넣지 않는다.
+def doc_body(doc: dict, spans: list[dict], mode: str,
+             chunk: tuple[int, int] | None = None, marks: tuple[str, str] = ("", "")) -> str:
+    """문서 본문. 근거와 같은 렌더링으로 발언자 표시를 붙인다. 라벨과 분할 정보는 넣지 않는다.
     chunk를 주면 그 구간의 앞뒤에 marks를 보인다(근거 탭). 발언 구간도 그만큼 밀어 위치를 맞춘다."""
     text = doc["context"]
     if chunk:
@@ -93,6 +93,12 @@ def format_doc(doc: dict, spans: list[dict], mode: str,
     if mode != "off":
         c["speakers"] = chunk_speakers(doc, spans, 0, len(text), mode)
     body = readable(render(c)).replace(CHUNK_START, f"\n\n**{marks[0]}**\n\n")
-    body = body.replace(CHUNK_END, f"\n\n**{marks[1]}**\n\n")
+    return body.replace(CHUNK_END, f"\n\n**{marks[1]}**\n\n")
+
+
+def format_doc(doc: dict, spans: list[dict], mode: str,
+               chunk: tuple[int, int] | None = None, marks: tuple[str, str] = ("", "")) -> str:
+    """Gradio 문서 화면. 머리에 이름, 안건, 회의록 링크를 붙인다."""
+    body = doc_body(doc, spans, mode, chunk, marks)
     return (f"## {html.escape(doc_name(doc))}\n\n{html.escape(doc['agenda'])}\n\n"
             f"[회의록]({doc['original']})\n\n---\n\n{body}")

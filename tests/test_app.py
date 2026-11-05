@@ -204,3 +204,44 @@ def test_tracing_switch_leaves_tracing_alone_without_limit(cfg, clean_tracing, m
     monkeypatch.setattr(app, "TRACING", switch)
     list(app.respond(fake_pipe(["답"]), cfg, {}, *ASKED))
     assert tracing_is_enabled() is True
+
+
+def test_chat_events_send_growing_text_then_contexts_without_labels(cfg):
+    ctx = {**CTX, "splits": "test", "n_qa": 3, "summary_q": "질의", "summary_a": "답"}
+
+    def stream(query, q_emb, langsmith_extra=None):
+        yield "답"
+        yield "변"
+        yield {"answer": "답변", "contexts": [ctx]}
+
+    pipe = SimpleNamespace(embed=lambda q: q, stream=stream)
+    events = list(app.chat_events(pipe, cfg, {}, CORPUS, "질의"))
+    assert [e["text"] for e in events] == ["답", "답변", "답변"]
+    assert [e["done"] for e in events] == [False, False, True]
+    c = events[-1]["contexts"][0]
+    assert set(c) == {"n", "date", "committee_name", "original", "doc_id", "start", "end", "body"}
+    assert (c["start"], c["end"]) == (3, 3 + len(CTX["text"]))
+    assert "<b>굵게</b>" in c["body"]  # 이스케이프를 풀어 보내고 페이지가 글자로 넣는다
+
+
+def test_chat_events_show_no_answer_notice_when_empty(cfg):
+    def stream(query, q_emb, langsmith_extra=None):
+        yield {"answer": "", "contexts": [CTX]}
+
+    pipe = SimpleNamespace(embed=lambda q: q, stream=stream)
+    assert list(app.chat_events(pipe, cfg, {}, CORPUS, "질의"))[-1]["text"] == cfg.app.no_answer
+
+
+def test_doc_payload_returns_one_document_with_chunk_marks_and_no_labels(cfg):
+    doc = {"doc_id": "a1", "date": "2020-01-02", "committee_name": "법제사법위원회",
+           "meeting_number": "제1회", "session_number": "제2차", "agenda": "1. 안건",
+           "original": "http://example/1", "context": "앞 <b>근거</b> 뒤", "splits": "test",
+           "n_qa": 3, "summary_q": "질의", "summary_a": "답"}
+    pipe = SimpleNamespace(spans={}, speakers="off")
+    corpus = SimpleNamespace(read=lambda doc_id: doc)
+    labels = cfg.app.labels
+    out = app.doc_payload(pipe, cfg, corpus, "a1", 2, 12)
+    assert set(out) == {"name", "agenda", "original", "body"}
+    assert "2020-01-02 법제사법위원회 제1회 제2차" == out["name"]
+    assert f"**{labels.chunk_start}**" in out["body"] and "<b>근거</b>" in out["body"]
+    assert labels.chunk_start not in app.doc_payload(pipe, cfg, corpus, "a1", -1, -1)["body"]

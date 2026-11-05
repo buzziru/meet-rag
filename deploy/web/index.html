@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>국회 회의록 질의응답</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <aside id="sidebar" class="sidebar" aria-label="문서 찾기">
+    <div class="sidebar-head">
+      <span class="brand">국회 회의록</span>
+      <button id="close-sidebar" class="icon-button only-narrow" type="button" aria-label="사이드바 닫기">✕</button>
+    </div>
+    <p class="muted">적재한 회의록을 연도와 회의로 찾아 읽을 수 있습니다.</p>
+    <label class="field">연도
+      <select id="year" disabled><option value="">선택</option></select>
+    </label>
+    <div class="field">
+      <label for="meeting">회의</label>
+      <div class="combo">
+        <input id="meeting" type="text" autocomplete="off" placeholder="입력해 거르기" disabled>
+        <ul id="meeting-list" class="combo-list" hidden></ul>
+      </div>
+    </div>
+    <div class="field">
+      <label for="document">문서</label>
+      <div class="combo">
+        <input id="document" type="text" autocomplete="off" placeholder="입력해 거르기" disabled>
+        <ul id="document-list" class="combo-list" hidden></ul>
+      </div>
+    </div>
+    <button id="reset" class="ghost-button" type="button">선택 초기화</button>
+  </aside>
+  <div id="scrim" class="scrim" hidden></div>
+
+  <div class="main">
+    <header class="topbar">
+      <button id="open-sidebar" class="icon-button only-narrow" type="button" aria-label="문서 찾기 열기">☰</button>
+      <nav class="tabs" role="tablist">
+        <button class="tab" role="tab" data-tab="chat" aria-selected="true" type="button">대화</button>
+        <button class="tab" role="tab" data-tab="doc" aria-selected="false" type="button">문서</button>
+        <button class="tab" role="tab" data-tab="evidence" aria-selected="false" type="button">근거</button>
+      </nav>
+    </header>
+
+    <main id="panel-chat" class="panel chat-panel">
+      <div id="scroller" class="scroller">
+        <div id="intro" class="intro">
+          <h1>국회 회의록 질의응답</h1>
+          <p class="muted">질문마다 따로 답합니다. 앞 질문의 내용은 이어지지 않습니다.</p>
+        </div>
+        <div id="messages" class="messages"></div>
+      </div>
+      <form id="composer" class="composer">
+        <div class="composer-box">
+          <textarea id="input" rows="1" placeholder="국회 회의록에 대해 물어보세요" aria-label="질문"></textarea>
+          <button id="send" class="send" type="submit" aria-label="보내기">↑</button>
+        </div>
+        <p id="connection" class="connection muted" hidden></p>
+      </form>
+    </main>
+
+    <section id="panel-doc" class="panel doc-panel" hidden>
+      <article id="doc-view" class="doc"><p class="muted">왼쪽에서 연도, 회의, 문서를 차례로 고르세요.</p></article>
+    </section>
+    <section id="panel-evidence" class="panel doc-panel" hidden>
+      <article id="evidence-view" class="doc"><p class="muted">답변의 근거에서 회의 이름을 누르면 그 문서가 여기에 열립니다.</p></article>
+    </section>
+  </div>
+</body>
+</html>

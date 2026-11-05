@@ -5,6 +5,7 @@
 LangSmith 추적으로만 남는다.
 """
 
+import html
 import logging
 import sys
 import time
@@ -13,7 +14,7 @@ from datetime import date
 
 from langsmith.run_trees import configure, get_cached_client
 
-from rag.docs import Corpus, format_doc, readable
+from rag.docs import Corpus, doc_body, doc_name, format_doc, readable
 from rag.generate import Pipeline, recipe
 from rag.index import load_cfg
 from rag.speakers import render
@@ -134,6 +135,41 @@ def respond(pipe, cfg, rec: dict, corpus, message: str,
     get_cached_client().flush()
 
 
+def context_payload(c: dict, corpus) -> dict:
+    """정적 페이지(S39b)에 주는 근거 하나. 값을 골라 내 라벨·분할 정보가 나가지 않는다. 본문은
+    페이지가 글자로 넣으므로 이스케이프를 푼다."""
+    start, end = corpus.chunk_span(c["doc_id"], c["text"]) or (-1, -1)
+    return {"n": c["n"], "date": c["date"], "committee_name": c["committee_name"],
+            "original": c["original"], "doc_id": c["doc_id"], "start": start, "end": end,
+            "body": html.unescape(readable(render(c)))}
+
+
+def chat_events(pipe, cfg, rec: dict, corpus, message: str) -> Iterator[dict]:
+    """정적 페이지의 채팅. 지금까지의 답변을 조각마다 보내고 마지막에 근거를 붙인다."""
+    TRACING.refresh()
+    query = search_query(message, [])
+    text = ""
+    for item in pipe.stream(query, pipe.embed(query), langsmith_extra={"metadata": rec}):
+        if isinstance(item, dict):
+            yield {"text": item["answer"] or cfg.app.no_answer, "done": True,
+                   "contexts": [context_payload(c, corpus) for c in item["contexts"]]}
+        else:
+            text += item
+            yield {"text": text, "done": False}
+    get_cached_client().flush()
+
+
+def doc_payload(pipe, cfg, corpus, doc_id: str, start: int, end: int) -> dict:
+    """정적 페이지의 문서 한 건. start가 음수면 근거 위치 표시를 하지 않는다."""
+    doc = corpus.read(doc_id)
+    labels = cfg.app.labels
+    spans = pipe.spans.get(doc_id, []) if pipe.speakers != "off" else []
+    body = doc_body(doc, spans, pipe.speakers, (start, end) if start >= 0 else None,
+                    (labels.chunk_start, labels.chunk_end))
+    return {"name": doc_name(doc), "agenda": doc["agenda"], "original": doc["original"],
+            "body": html.unescape(body)}
+
+
 def build(cfg, pipe, corpus, endpoint: Callable | None = None):
     """화면을 만든다. 평가·실험 환경에는 gradio가 없어 여기서 불러온다(pyproject의 app). endpoint는
     Space의 GPU 점수 함수로, 토큰 호출에 쓰도록 API 문서에 보이지 않는 경로로 연다(S39, D-74)."""
@@ -210,6 +246,27 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
         if endpoint is not None:
             gr.api(endpoint, api_name=cfg.deploy.rerank.api_name,
                    api_visibility="undocumented")
+        api = {"api_visibility": "undocumented"}
+
+        def chat(message: str) -> Iterator[dict]:
+            yield from chat_events(pipe, cfg, rec, corpus, message)
+
+        def years() -> list[int]:
+            return corpus.years()
+
+        def meetings(year: int) -> list[list[str]]:
+            return [list(m) for m in corpus.meetings(year)]
+
+        def documents(conference: str) -> list[list[str]]:
+            return [list(d) for d in corpus.documents(conference)]
+
+        def document(doc_id: str, start: int, end: int) -> dict:
+            return doc_payload(pipe, cfg, corpus, doc_id, start, end)
+
+        # 답변 생성이 큐를 잡고 있어도 문서를 볼 수 있게 문서 함수는 큐를 거치지 않는다
+        gr.api(chat, api_name="chat", **api)
+        for fn in (years, meetings, documents, document):
+            gr.api(fn, api_name=fn.__name__, queue=False, **api)
     return demo
 
 
