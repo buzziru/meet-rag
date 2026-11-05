@@ -62,6 +62,21 @@ def test_tokens_join_to_generate_answer_and_hide_thought():
     assert out["thought"] == "생각" and out["finish_reason"] == "stop"
 
 
+@pytest.mark.parametrize(("prompt", "text", "answer"), [
+    ("v14", "- 장관은 답했다 [1].", "장관은 답했다 [1]."),
+    ("v14", "- 장관은 답했다 [1].\n\n나머지는 없다.", "장관은 답했다 [1].\n\n나머지는 없다."),
+    ("v14", "- 가 [1].\n- 나 [2].", "- 가 [1].\n- 나 [2]."),
+    ("v14", "문단 - 가운데 [1].", "문단 - 가운데 [1]."),
+    ("v12", "- 장관은 답했다 [1].", "- 장관은 답했다 [1]."),  # 켜지 않은 프롬프트는 그대로
+])
+def test_answer_strips_lone_bullet_only_when_prompt_asks(prompt, text, answer):
+    """S42. 생성 기록과 앱이 같이 쓰는 결과 dict의 답변을 본다."""
+    pipe = stream_pipe([text])
+    pipe.cfg = load_cfg(["index.scope=full", f"prompt={prompt}"])
+    assert list(pipe.tokens([]))[-1]["answer"] == answer
+    assert Pipeline.generate.__wrapped__(pipe, [], True, False)["answer"] == answer
+
+
 def test_generate_echo_prints_only_answer(capsys):
     Pipeline.generate.__wrapped__(stream_pipe(["<thought>생각</thought>", "답변"]), [], True, True)
     assert capsys.readouterr().out == "답변\n"
