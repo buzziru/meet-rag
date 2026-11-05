@@ -329,3 +329,11 @@ def test_pipeline_embed_uses_embedder_when_given():
     pipe = object.__new__(g.Pipeline)
     pipe.embedder = lambda q: np.array([len(q)])
     assert pipe.embed("질의").tolist() == [2]
+
+
+def test_rank_without_scorer_keeps_rrf_order(tmp_path):
+    """Space에서 재정렬을 끈 구성(deploy.rerank.enabled=false)과 로컬 앱의 경로."""
+    pipe = _live_pipe(tmp_path, lambda pairs: pytest.fail("점수 함수를 부르면 안 된다"))
+    pipe.gate = None
+    _, docs, stages = pipe.rank("질의", np.array([1, 0, 0, 0, 0, 0.0]))
+    assert docs == ["a", "b", "c"] and "rerank_score" not in stages[0]

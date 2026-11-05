@@ -21,7 +21,7 @@ from huggingface_hub import snapshot_download  # noqa: E402
 
 from rag.app import main  # noqa: E402
 from rag.embed_worker import EmbedProcess  # noqa: E402
-from rag.index import ROOT, load_cfg, require_env  # noqa: E402
+from rag.index import COMMIT, ROOT, load_cfg, require_env  # noqa: E402
 from rag.rerank import load_model  # noqa: E402
 
 OVERRIDES = ["+exp=current", "deploy.speakers_from_file=true", "retriever.rerank.device=cuda",
@@ -29,6 +29,10 @@ OVERRIDES = ["+exp=current", "deploy.speakers_from_file=true", "retriever.rerank
 PEAK = Path("/sys/fs/cgroup/memory.peak")
 
 CFG = load_cfg(["index.scope=full", *OVERRIDES])
+if not COMMIT.fullmatch(CFG.deploy.dataset_revision):
+    raise SystemExit(f"deploy.dataset_revision은 커밋 해시여야 한다: {CFG.deploy.dataset_revision}")
+if not CFG.deploy.rerank.enabled:
+    OVERRIDES.append("retriever.rerank.enabled=false")
 IMPORTED = time.perf_counter()
 RERANK = CFG.retriever.rerank
 MODEL = load_model(RERANK)
@@ -49,7 +53,7 @@ class OwnerScorer:
 
     def __init__(self):
         # 시크릿이 없으면 시작할 때 멈춘다. 호출 때 알면 모든 질의가 재정렬 없이 조용히 나간다
-        self.token = require_env(CFG.deploy.rerank.token_env)
+        self.token = require_env(CFG.deploy.token_env)
 
     def __call__(self, pairs: list[list[str]]) -> list[float]:
         d = CFG.deploy
@@ -65,7 +69,7 @@ def download_data() -> None:
     start = time.perf_counter()
     d = CFG.deploy
     snapshot_download(d.dataset, repo_type="dataset", revision=d.dataset_revision,
-                      local_dir=ROOT / "data", token=require_env(d.rerank.token_env))
+                      local_dir=ROOT / "data", token=require_env(d.token_env))
     print(f"시작: 데이터 내려받기 {time.perf_counter() - start:.1f}초", flush=True)
 
 
@@ -84,4 +88,5 @@ if __name__ == "__main__":
     # 모델 적재는 인덱스 적재와 함께 진행된다. 메인에서 임베딩하면 GPU 작업자가 멈춘다(embed_worker)
     embedder = EmbedProcess(["index.scope=full", *OVERRIDES])
     download_data()
-    main(endpoint=score_pairs, scorer=OwnerScorer(), embedder=embedder)
+    scorer = OwnerScorer() if CFG.deploy.rerank.enabled else None
+    main(endpoint=score_pairs, scorer=scorer, embedder=embedder)

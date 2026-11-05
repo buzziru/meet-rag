@@ -69,3 +69,10 @@ def test_pinned_stops_without_hf_home(monkeypatch):
     rev = "8b418a58414668e75532ed045c22d9ca018ae2b2"
     with pytest.raises(SystemExit, match="doppler run"):
         pinned(OmegaConf.create({"model_name": "m", "revision": rev}))
+
+
+def test_space_dataset_revision_is_commit_hash():
+    """Space가 내려받는 Dataset도 커밋을 고정한다(D-82). 진입점은 src 밖이라 값으로 본다."""
+    from rag.index import COMMIT, load_cfg
+
+    assert COMMIT.fullmatch(load_cfg().deploy.dataset_revision)
