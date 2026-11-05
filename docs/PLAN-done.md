@@ -46,6 +46,7 @@ S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를
 - [x] 잘못 귀속 평가 규칙 수정(D-67): 틀리더라도 이름을 내는 답변이 유리하지 않게 고친다. "발언자 불일치" 진술 비율 증가폭의 안전 조건을 더하고(SPEC 개정, 근거 노트북 → 초안 → 승인), 규칙 2의 "표기를 뺐을 때"를 고친 뒤 기준선을 다시 채점한다(재검증 겸함). EXP-020은 다시 채점하지 않는다 → slices/32-attribution-safety.md
 - [x] 동결 세트 대조를 score·compare·search 진입점에서 검증(일일 코드 리뷰 시험 지적, ADR-0081) → slices/33-frozen-entry-tests.md
 - [x] 회의 일자·위원회 불일치 오탐 수정(SLICE, D-75 결정 2): `metadata_mismatches`가 근거 날짜 형식(공백 든 형식)을 읽지 못하고, 약칭을 다른 위원회로 보고, 본문의 다른 날짜를 회의 일자로 본다. H23 v10 전에 끝낸다. `src/rag/gen_eval/checks.py`를 바꿔 병합 전 self-review 대상이다 → slices/37-metadata-false-positive.md
+  - [x] DECISIONS 정합 점검(생성 단계 test 1회 전): `docs/CLAUDE.md` "정합 점검" 절차로 DECISIONS 전체를 검토한다(사용자 결정 2026-10-28, ADR-0071) → D-87
 
 ## 리팩터링 (코드 리뷰 2026-10)
 
@@ -159,6 +160,8 @@ D-19. 조건 추출은 규칙·사전, 결합은 약한 필터로 한다.
 - [x] 벡터스토어 선정: S38에서 정한다. 지금은 청크 임베딩 행렬(118,039 × 1024, 404MB)을 메모리에 올려 전수 내적으로 검색하고 BM25는 bm25s 파일, 조건 목록은 파이썬 역색인이다. 먼저 전수 검색으로 충분한지(질의당 지연, 메모리)를 보고, 필요하면 저장 용량, 메타데이터 필터 지원, 문서 추가 비용, SPEC 자원 제약(상시 지출 0, HF Spaces 무료 CPU)으로 후보를 비교한다. late-interaction(KURE-v2)처럼 다중 벡터를 쓰면 MaxSim 지원 여부가 조건이 된다(`docs/research/embedding-candidates.md`) → D-80
 
 ## 지난 다음 순서 기록
+
+다음 순서(2026-11-05, D-86): DECISIONS·SPEC 정합 점검 → SPEC 미결 5 → 생성 test 1회. 배포·운영은 생성 실험과 병행한다
 
 다음 순서(2026-11-05, D-83): 사용자 경험 지시 묶음(S44) → DECISIONS·SPEC 정합 점검 → SPEC 미결 5 → 생성 test 1회. 배포·운영은 생성 실험과 병행한다
 
