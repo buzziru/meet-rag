@@ -17,6 +17,10 @@ CHUNK_START, CHUNK_END = "", ""
 
 
 def doc_name(d: dict) -> str:
+    """화면의 회의·문서 이름. 국정감사 원천은 회·차 대신 연도와 날짜를 넣어 이름에 날짜가 두 번
+    보였다(15,884건, 모두 국정감사). 국정감사는 회·차 대신 회의 종류를 붙인다(S41)."""
+    if d.get("meeting_name") == "국정감사":
+        return f"{shown_date(d)} {d['committee_name']} 국정감사"
     return f"{shown_date(d)} {d['committee_name']} {d['meeting_number']} {d['session_number']}"
 
 

@@ -102,3 +102,18 @@ def test_meeting_names_show_one_date_format(corpus):
     names = [n for n, _ in corpus.meetings(2000)]
     assert names == ["2000년 7월 2일(일) 법제사법위원회 제1회 제1차",
                      "2000년 6월 28일(수) 법제사법위원회 제1회 제1차"]
+
+
+def test_audit_meetings_drop_year_and_date_numbers(tmp_path):
+    """S41. 국정감사 원천은 회·차 칸에 연도와 날짜가 들어 있어 이름에 회의 종류를 대신 붙인다."""
+    _read_corpus_meta.cache_clear()
+    rows = [{**row("g1", "G", "2000년10월23일(월)"), "meeting_number": "2000",
+             "session_number": "2000년10월23일", "meeting_name": "국정감사"},
+            {**row("h1", "H", "2000년10월24일(화)"), "meeting_name": "소위원회"}]
+    path = tmp_path / "corpus.jsonl"
+    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+                    encoding="utf-8", newline="\n")
+    corpus = Corpus(OmegaConf.create({"paths": {"corpus": str(path)}}))
+    assert [n for n, _ in corpus.meetings(2000)] == [
+        "2000년 10월 24일(화) 법제사법위원회 제1회 제1차",
+        "2000년 10월 23일(월) 법제사법위원회 국정감사"]
