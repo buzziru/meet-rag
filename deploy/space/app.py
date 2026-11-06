@@ -59,6 +59,11 @@ class OwnerScorer:
         d = CFG.deploy
         if self.client is None:
             self.client = Client(d.space, token=self.token, verbose=False)
+            # Gradio 이벤트 안에서 부르면 클라이언트가 방문자 요청의 x-ip-token을 자기 헤더에
+            # 복사해 둔다. 그러면 소유자 토큰이 있어도 방문자(공개 뒤 익명) 할당량으로 매겨져
+            # 몇 번 뒤 "runs limit"으로 막혔다(S41 공개 직후). 소유자 할당량을 쓰려고(D-84
+            # 결정 2) 복사하지 않는다
+            self.client.add_zero_gpu_headers = lambda headers: headers
         job = self.client.submit(pairs, api_name=f"/{d.rerank.api_name}")
         return job.result(timeout=d.rerank.timeout_s)
 
