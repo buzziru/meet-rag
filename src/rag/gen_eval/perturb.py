@@ -52,24 +52,34 @@ def speaker_swap(gen: dict) -> str | None:
     return None
 
 
+def enough(pool: list[str], n: int, kind: str) -> list[str]:
+    """표본을 조용히 줄이지 않는다. 대상이 n보다 적으면 멈춘다."""
+    if len(pool) < n:
+        raise SystemExit(f"{kind} 대상 질의가 {len(pool)}개라 "
+                         f"gen_eval.perturb.n={n}개를 뽑을 수 없다")
+    return pool
+
+
 def build_cases(gens: dict, base: dict, p) -> list[tuple[str, str, str]]:
     """(변형, qid, 바꾼 답변). 표본은 충실성과 관련성이 계산된 기준 질의에서 변형마다
     seed로 뽑는다."""
     eligible = sorted(q for q, r in base.items()
                       if (r.get("faithfulness") or {}).get("score") is not None
                       and (r.get("relevance") or {}).get("score") is not None)
+    if p.n < 2:  # off_topic은 표본 안에서 답변을 돌려 쓰므로 하나면 자기 답변이 들어간다
+        raise SystemExit(f"gen_eval.perturb.n은 2 이상이다: {p.n}")
     cases = []
     for i, kind in enumerate(p.kinds):
         rng = random.Random(p.seed + i)
         if kind == "unsupported":
-            for q in rng.sample(eligible, min(p.n, len(eligible))):
+            for q in rng.sample(enough(eligible, p.n, kind), p.n):
                 cases.append((kind, q, unsupported(gens[q]["answer"], p.unsupported_sentence)))
         elif kind == "speaker_swap":
             pool = [q for q in eligible if speaker_swap(gens[q]) is not None]
-            for q in rng.sample(pool, min(p.n, len(pool))):
+            for q in rng.sample(enough(pool, p.n, kind), p.n):
                 cases.append((kind, q, speaker_swap(gens[q])))
         elif kind == "off_topic":
-            picked = rng.sample(eligible, min(p.n, len(eligible)))
+            picked = rng.sample(enough(eligible, p.n, kind), p.n)
             for q, other in zip(picked, picked[1:] + picked[:1], strict=True):
                 cases.append((kind, q, gens[other]["answer"]))
         else:
@@ -111,7 +121,8 @@ def main() -> None:
         raise SystemExit(f"변형 시험은 gen_eval.queries=dev-full로만 한다: {cfg.gen_eval.queries}")
     p = cfg.gen_eval.perturb
     out = ROOT / cfg.paths.gen_perturb
-    refuse_existing(out, cfg.search.overwrite)  # judge 호출 전에 본다
+    for path in (out, out.with_suffix(".summary.json")):  # judge 호출 전에 본다
+        refuse_existing(path, cfg.search.overwrite)
     gens = {r["qid"]: r for r in read_jsonl(ROOT / cfg.paths.gen_runs)}
     base = {r["qid"]: r for r in read_jsonl(ROOT / cfg.paths.gen_judge)}
     rec = judge_recipe(cfg, [gens[q]["recipe"] for q in base])

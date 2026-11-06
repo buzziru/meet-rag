@@ -126,3 +126,21 @@ def test_main_stops_when_baseline_judge_differs(run):
     with pytest.raises(SystemExit, match="judge 설정"):
         go(base_recipe={**rec, "prompt_sha256": "다른 지시"})
     assert called == []
+
+
+def test_main_stops_before_judge_when_summary_exists(run):
+    go, out, called, _ = run
+    out.with_suffix(".summary.json").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        go()
+    assert called == []
+
+
+@pytest.mark.parametrize("n, match", [(1, "2 이상"), (4, "speaker_swap 대상 질의가 3개")])
+def test_main_stops_when_sample_cannot_be_drawn(run, n, match):
+    """n이 1이면 off_topic이 자기 답변을 넣고, 대상보다 크면 표본이 조용히 준다.
+    둘 다 judge 전에 멈춘다."""
+    go, _, called, _ = run
+    with pytest.raises(SystemExit, match=match):
+        go([f"gen_eval.perturb.n={n}"])
+    assert called == []
