@@ -28,9 +28,7 @@ function connect() {
   connecting ??= (async () => {
     for (;;) {
       try {
-        // 공개 전 점검용 토큰(D-88 결정 3). S41에서 지우고 토큰을 폐기한다.
-        const token = localStorage.getItem("hf_token") ?? undefined;
-        client = await Client.connect(SPACE, { events: ["data", "status"], token });
+        client = await Client.connect(SPACE, { events: ["data", "status"] });
         $("connection").hidden = true;
         loadYears().catch(() => findStatus("회의록 목록을 불러오지 못했습니다. 페이지를 새로 고쳐 주세요."));
         loadExamples().catch(() => {}); // 추천 질문이 없어도 입력칸으로 물을 수 있다
