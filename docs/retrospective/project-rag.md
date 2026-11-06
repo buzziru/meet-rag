@@ -165,7 +165,7 @@ dev-full Recall@5, 기준 대비 차이와 95% 구간. multi-doc 값은 보조(�
 | 016 | 점수 결합에서 조건 목록 제거 | 0.9456 | +0.43 | 보류 |
 | 017 | 014 + 재정렬(GPU) | **0.9566** | +1.53 [+0.91, +2.15] | 채택, 최종 기준 |
 
-출처: `docs/EXPERIMENTS.md`, `docs/search-stage-summary.md`, 각 `docs/experiments/EXP-NNN.md`, D-17\~D-36. 검색 단계 test 1회: Recall@5 **0.9577**(D-39).
+출처: `docs/EXPERIMENTS.md`, `docs/search-stage-summary.md`, 각 `docs/experiments/EXP-NNN.md`, D-17\~D-36. 검색 단계 test 1회(최종 기준 EXP-017): Recall@5 **0.9577**, Recall@1 0.9104, Recall@10 0.9657, MRR@10 0.9308(D-39).
 
 ### 기각·보류에서 배운 것
 
@@ -273,6 +273,5 @@ flowchart LR
 
 ## 확인하지 못한 것
 
-- 검색 test의 Recall@1·@10·MRR은 기록에 없다(Recall@5만 기록)
 - 생성 실험 수치는 opencode worker가 EXP 문서와 EXPERIMENTS에서 옮긴 것이다. 메인은 검색 기준·최종·test, multi-doc 기준·최종, 생성 test 표를 원문과 대조했다
 - 배포 지연과 공개 주소는 S41 뒤 보강한다
