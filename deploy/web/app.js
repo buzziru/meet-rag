@@ -208,19 +208,27 @@ function sync() {
   $("open-sidebar").hidden = isOpen(sidebar) && !narrow.matches;
 }
 
+/** 보이는 첫 대상에 초점을 둔다. 연 곳이 접힌 패널 안이면 다음 후보로 간다. */
+function focusFirst(...targets) {
+  const target = targets.find((t) => t?.isConnected && !t.disabled && t.getClientRects().length);
+  target?.focus();
+}
+
 function openPanel(panel) {
+  const lost = sidebar.contains(document.activeElement);
   if (narrow.matches) for (const other of [sidebar, viewer]) other.classList.remove("open");
   else if (panel === viewer) sidebar.classList.remove("open");
   panel.classList.add("open");
   sync();
-  if (narrow.matches) panel.querySelector(".panel-head button").focus();
+  // 서랍이거나, 문서 찾기에서 열어 초점이 접힌 칸에 남으면 뷰어 안으로 옮긴다
+  if (narrow.matches || (lost && !isOpen(sidebar))) panel.querySelector(".panel-head button").focus();
 }
 
 function closePanel(panel) {
   panel.classList.remove("open");
   sync();
-  const back = panel === sidebar ? $("open-sidebar") : viewerOpener;
-  if (back?.isConnected && !back.hidden && !back.disabled) back.focus();
+  const back = panel === sidebar ? [] : [viewerOpener];
+  focusFirst(...back, $("open-sidebar"), $("input"));
 }
 
 $("open-sidebar").addEventListener("click", () => openPanel(sidebar));
