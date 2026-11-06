@@ -24,7 +24,7 @@
   | `crouton-alpha-free` | `opencode-go/`, `opencode/` | 1,048,576 | 270,000 | 0 |
   | `pulse-alpha-free` | `opencode/`에만 | 1,048,576 | 131,072 | 0 |
 
-  - 공개 웹·공개 저장소 조사: 스텔스 모델 `opencode-go/crouton-alpha-free`. crouton을 쓸 수 없을 때(목록에 없음 등)만 `opencode/pulse-alpha-free`. Go 한도를 아낀다. 이 저장소(meet-rag)는 GitHub에 공개돼 있어도 여기에 넣지 않고 아래 저장소 문서 기준을 따른다
+  - 공개 웹·공개 저장소 조사: 스텔스 모델 `opencode-go/crouton-alpha-free`. crouton이 `opencode models` 목록에 없을 때만 `opencode/pulse-alpha-free`. Go 한도를 아낀다. 이 저장소(meet-rag)는 GitHub에 공개돼 있어도 여기에 넣지 않고 아래 저장소 문서 기준을 따른다
   - 저장소 문서를 복사해 넘기는 일: `opencode-go/deepseek-v4.1-flash`. 문서는 공개돼 있어도 입력 처리 조건(학습 미사용·보존 0일, D-38)이 확인된 쪽을 쓴다. 스텔스 모델의 입력 처리 조건은 확인하지 않았다
   - 스텔스 모델이 실패하면(아래 일시 오류 재시도 뒤에도) 같은 지시로 `deepseek-v4.1-flash`를 부른다. deepseek도 실패하면 멈추고 보고한다. 결과가 모자란 것은 실패가 아니라 아래처럼 같은 모델에 `-s`로 이어서 지시한다
   - AI Hub 데이터: 세 모델 모두 처리처 승인 전에는 쓰지 않는다
