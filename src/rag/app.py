@@ -8,17 +8,20 @@ LangSmith 추적으로만 남는다.
 
 import html
 import logging
+import re
 import sys
 import time
 from collections.abc import Callable, Iterator
 from datetime import date
 
 from langsmith.run_trees import configure
+from omegaconf import OmegaConf
 
 from rag.display import MeetingInfoMover, move_meeting_info
 from rag.docs import Corpus, doc_body, doc_name, readable
 from rag.generate import Pipeline, recipe
 from rag.index import load_cfg
+from rag.rewrite import FollowUpRewriter
 from rag.speakers import render
 
 
@@ -54,9 +57,22 @@ class TracingSwitch(logging.Handler):
 TRACING = TracingSwitch()
 
 
-def search_query(message: str, history: list[dict]) -> str:
-    """검색에 쓸 질의. 지금은 싱글턴이라 이력을 쓰지 않는다. 멀티턴은 여기서 이력으로 재작성한다."""
-    return message
+CITATION = re.compile(r"\s*(?:\[\d+\])+")
+
+
+def clean_history(history, cfg) -> list[dict]:
+    """페이지가 보낸 앞 대화(S40). 방문자가 고칠 수 있어 믿지 않는다. 질문·답변이 글자가 아닌 턴은
+    버리고, 최근 max_turns턴만 남기고, 앞 답변의 인용 번호를 지운 뒤 길이를 자른다. 번호를 지우는
+    것은 지난 근거의 [1]과 이번 근거의 [1]이 섞이지 않게 하려는 것이다(결정 사항 2)."""
+    m = cfg.app.multiturn
+    if not isinstance(history, list):
+        return []
+    turns = [{"question": h["question"].strip()[:cfg.app.max_query_chars],
+              "answer": CITATION.sub("", h["answer"]).strip()[:m.max_answer_chars]}
+             for h in history
+             if isinstance(h, dict) and isinstance(h.get("question"), str)
+             and isinstance(h.get("answer"), str) and h["question"].strip() and h["answer"].strip()]
+    return turns[max(0, len(turns) - m.max_turns):]
 
 
 def shown(stream: Iterator[str | dict], max_name: int) -> Iterator[str | dict]:
@@ -67,7 +83,8 @@ def shown(stream: Iterator[str | dict], max_name: int) -> Iterator[str | dict]:
     logged = False
     for item in stream:
         if isinstance(item, dict):
-            out = {**item, "answer": move_meeting_info(item["answer"], max_name)}
+            out = {**item, "answer": move_meeting_info(item["answer"], max_name),
+                   "raw": item["answer"]}
         else:
             raw_at = raw_at or time.perf_counter()
             out = mover.feed(item)
@@ -87,21 +104,32 @@ def context_payload(c: dict, corpus) -> dict:
             "body": html.unescape(readable(render(c)))}
 
 
-def chat_events(pipe, cfg, rec: dict, corpus, message: str) -> Iterator[dict]:
-    """정적 페이지의 채팅. 지금까지의 답변을 조각마다 보내고 마지막에 근거를 붙인다. API를 직접
-    불러 빈 질문을 보내면 생성을 부르지 않는다."""
+def chat_events(pipe, cfg, rec: dict, corpus, message: str, history=None,
+                rewriter: Callable[[str, list[dict]], tuple[str, dict]] | None = None,
+                ) -> Iterator[dict]:
+    """정적 페이지의 채팅. 지금까지의 답변을 조각마다 보내고 마지막에 근거와 생성 원문(raw)을
+    붙인다. 페이지는 raw를 앞 대화로 들고 있다가 다음 질문에 보낸다(S40). 앞 대화가 없으면
+    재작성하지 않고 지금과 같은 프롬프트로 처리한다. API를 직접 불러 빈 질문을 보내면 생성을
+    부르지 않는다."""
     if not message.strip():
         return
     if len(message) > cfg.app.max_query_chars:  # 검색과 유료 생성을 부르지 않는다(S49)
-        yield {"text": cfg.app.query_too_long, "done": True, "contexts": []}
+        yield {"text": cfg.app.query_too_long, "done": True, "contexts": [], "raw": ""}
         return
     TRACING.refresh()
-    query = search_query(message, [])
+    turns = clean_history(history, cfg)
+    turn = len(turns) + 1
+    search, meta = (message, {}) if not turns else rewriter(message, turns)
+    if meta:  # 질의 원문은 로그에 남기지 않는다
+        print(f"턴 {turn}: 재작성 {meta['rewrite_s']:.3f}초({meta['rewrite_status']})", flush=True)
     text = ""
-    stream = pipe.stream(query, pipe.embed(query), langsmith_extra={"metadata": rec})
+    stream = pipe.stream(message, pipe.embed(search), turns, search,
+                         langsmith_extra={"metadata": {**rec, **meta, "turn": turn}})
     for item in shown(stream, cfg.app.meeting_info_max_name):
         if isinstance(item, dict):
-            yield {"text": item["answer"] or cfg.app.no_answer, "done": True,
+            if item.get("first_token_s") is not None:
+                print(f"턴 {turn}: 첫 토큰 {item['first_token_s']:.3f}초", flush=True)
+            yield {"text": item["answer"] or cfg.app.no_answer, "done": True, "raw": item["raw"],
                    "contexts": [context_payload(c, corpus) for c in item["contexts"]]}
         else:
             text += item
@@ -125,11 +153,16 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
     연다(S39, D-74)."""
     import gradio as gr
 
-    rec = recipe(cfg, pipe.index_meta, True)
+    # 대화 이어 가기 설정은 첫 질문 동작을 바꾸지 않아 생성 레시피 밖의 추적 메타데이터로 남긴다
+    # (S40)
+    rec = {**recipe(cfg, pipe.index_meta, True),
+           "multiturn": OmegaConf.to_container(cfg.app.multiturn)}
+    rewriter = FollowUpRewriter(cfg)
     api = {"api_visibility": "undocumented"}
 
-    def chat(message: str) -> Iterator[dict]:
-        yield from chat_events(pipe, cfg, rec, corpus, message)
+    def chat(message: str, history: list | None = None) -> Iterator[dict]:
+        # history는 앞 대화(S40). 기본값이 있어 앞 대화를 보내지 않는 페이지도 그대로 동작한다
+        yield from chat_events(pipe, cfg, rec, corpus, message, history, rewriter)
 
     def years() -> list[int]:
         return corpus.years()

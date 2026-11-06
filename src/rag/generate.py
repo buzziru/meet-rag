@@ -51,14 +51,19 @@ CONTEXT_META = ["date", "committee_name", "meeting_number", "session_number", "o
 RETRY_AFTER = re.compile(r"Try again in (?:(\d+) days?, )?(\d+):(\d+):(\d+)")
 
 
-def build_messages(prompt, contexts: list[dict], query: str) -> list[dict]:
+def build_messages(prompt, contexts: list[dict], query: str,
+                   history: list[dict] = ()) -> list[dict]:
     """근거에 번호와 회의 정보를 붙여 메시지를 만든다. URL은 넣지 않는다. 발언자 표시(speakers)가
-    있으면 text 자리에 렌더링한 문자열을 넣는다(S29, judge의 format_contexts와 같은 함수)."""
+    있으면 text 자리에 렌더링한 문자열을 넣는다(S29, judge의 format_contexts와 같은 함수).
+    history(앱의 앞 대화, S40)는 질문·답변을 그대로 앞에 넣고 근거는 이번 검색 결과만 넣는다."""
     blocks = [prompt.context.format(n=c["n"], text=render(c),
                                     **{k: c[k] for k in CONTEXT_META if k != "original"})
               for c in contexts]
     user = prompt.user.format(contexts="\n\n".join(blocks), query=query)
-    return [{"role": "system", "content": prompt.system}, {"role": "user", "content": user}]
+    turns = [m for t in history for m in ({"role": "user", "content": t["question"]},
+                                          {"role": "assistant", "content": t["answer"]})]
+    return [{"role": "system", "content": prompt.system}, *turns,
+            {"role": "user", "content": user}]
 
 
 def strip_lone_bullet(answer: str) -> str:
@@ -287,8 +292,8 @@ class Pipeline:
         return out
 
     @traceable(name="build_messages", process_inputs=lambda i: {"query": i["query"]})
-    def messages(self, contexts: list[dict], query: str) -> list[dict]:
-        return build_messages(self.cfg.prompt, contexts, query)
+    def messages(self, contexts: list[dict], query: str, history: list[dict] = ()) -> list[dict]:
+        return build_messages(self.cfg.prompt, contexts, query, history)
 
     @traceable(name="generate", process_inputs=lambda i: {"stream": i["stream"]})
     def generate(self, messages: list[dict], stream: bool, echo: bool = True) -> dict:
@@ -350,13 +355,17 @@ class Pipeline:
                 "finish_reason": finish, "first_token_s": first,
                 "total_s": time.perf_counter() - t0}
 
-    @traceable(name="rag", process_inputs=lambda i: {"query": i["query"]},
+    @traceable(name="rag", process_inputs=lambda i: {"query": i["query"],
+                                                     "search": i.get("search")},
                reduce_fn=lambda items: items[-1])
-    def stream(self, query: str, q_emb: np.ndarray) -> Iterator[str | dict]:
+    def stream(self, query: str, q_emb: np.ndarray, history: list[dict] = (),
+               search: str | None = None) -> Iterator[str | dict]:
         """자유 질의의 검색 → 프롬프트 → 생성. 답변 조각을 내보내고 마지막에 근거를 더한 결과
-        dict를 내보낸다(S35). 재정렬 점수 파일이 있는 구성에서는 rank가 멈춘다."""
-        contexts = self.retrieve(query, q_emb, self.cfg.generator.context_docs)
-        for item in self.tokens(self.messages(contexts, query)):
+        dict를 내보낸다(S35). 재정렬 점수 파일이 있는 구성에서는 rank가 멈춘다. 앞 대화가 있으면
+        재작성한 검색 질의(search)로 찾고 q_emb는 그 임베딩이다. 프롬프트의 질문은 query다(S40)."""
+        search = search or query
+        contexts = self.retrieve(search, q_emb, self.cfg.generator.context_docs)
+        for item in self.tokens(self.messages(contexts, query, history)):
             yield {"contexts": contexts, **item} if isinstance(item, dict) else item
 
     def run(self, query: str, q_emb: np.ndarray, qid: str | None = None,

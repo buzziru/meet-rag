@@ -4,6 +4,8 @@
 재작성 응답은 만든 기준(모델, 경로, 사고 과정, 지시, 판단 규칙)과 함께 paths.rewrites에
 남겨 다시 쓰고, 읽을 때 지금 config와 다르면 멈춘다. 호출은 LangSmith로 추적한다(입력 메시지,
 출력 원문, 토큰, 지연). 명세는 docs/experiments/EXP-013.md.
+
+앱의 후속 질문 재작성(FollowUpRewriter, S40)도 여기 둔다. 파일에 남기지 않고 질문마다 부른다.
 """
 
 import hashlib
@@ -92,6 +94,45 @@ class Rewriter:
         return {"raw": r.choices[0].message.content or "",
                 "seconds": round(time.perf_counter() - start, 3),
                 "usage": r.usage.model_dump() if r.usage else None}
+
+
+class FollowUpRewriter:
+    """앞 대화가 있는 후속 질문을 혼자 읽히는 검색 질의 한 줄로 고친다(S40). 생성과 같은
+    모델·제공자를 쓴다. 실패하거나 시간을 넘기면 질문 그대로 검색한다. 앱 채팅 경로라 flush를
+    부르지 않는다(S49)."""
+
+    def __init__(self, cfg):
+        g, m = cfg.generator, cfg.app.multiturn.rewrite
+        self.prompt = OmegaConf.load(ROOT / m.prompt)
+        self.client = wrap_openai(OpenAI(base_url=g.base_url, api_key=require_env(g.api_key_env),
+                                         timeout=m.timeout_s, max_retries=0))
+        self.kwargs = {"model": g.model, **OmegaConf.to_container(g.params),
+                       "max_tokens": m.max_tokens,
+                       "extra_body": (OmegaConf.to_container(g.extra_body)
+                                      if g.get("extra_body") else None)}
+        self.max_chars = m.max_chars
+
+    def __call__(self, message: str, turns: list[dict]) -> tuple[str, dict]:
+        """검색 질의와 추적·로그에 남길 값(상태, 시간, 지시 버전)."""
+        start = time.perf_counter()
+        try:
+            query = self._traced(message, turns)
+            status = "ok" if query else "invalid"
+        except Exception as e:  # 재작성이 실패해도 답변은 나가야 한다
+            query, status = None, type(e).__name__
+        return query or message, {"rewrite_status": status,
+                                  "rewrite_s": round(time.perf_counter() - start, 3),
+                                  "rewrite_prompt": self.prompt.version}
+
+    @traceable(name="rewrite_followup",
+               process_inputs=lambda i: {"message": i["message"], "turns": i["turns"]})
+    def _traced(self, message: str, turns: list[dict]) -> str | None:
+        p = self.prompt
+        history = "\n\n".join(p.turn.format(**t) for t in turns)
+        messages = [{"role": "system", "content": p.system},
+                    {"role": "user", "content": p.user.format(history=history, query=message)}]
+        r = self.client.chat.completions.create(messages=messages, **self.kwargs)
+        return parse(r.choices[0].message.content or "", self.max_chars)
 
 
 def load_rewrites(cfg) -> dict[str, dict]:

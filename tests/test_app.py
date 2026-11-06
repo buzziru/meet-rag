@@ -11,7 +11,7 @@ from langsmith.utils import tracing_is_enabled
 
 import rag.index
 from rag import app
-from rag.generate import Pipeline
+from rag.generate import Pipeline, build_messages
 from rag.index import load_cfg
 
 CTX = {"n": 1, "doc_id": "a1", "date": "2020-01-02", "committee_name": "법제사법위원회",
@@ -34,7 +34,7 @@ def stream_pipe(parts):
 
 
 def fake_pipe(parts, seen=None):
-    def stream(query, q_emb, langsmith_extra=None):
+    def stream(query, q_emb, history=(), search=None, langsmith_extra=None):
         if seen is not None:
             seen.append(query)
         yield from parts
@@ -80,7 +80,7 @@ def test_generate_echo_prints_only_answer(capsys):
 def test_stream_ends_with_contexts():
     pipe = stream_pipe(["답", "변"])
     pipe.retrieve = lambda query, q_emb, k: [CTX]
-    pipe.messages = lambda contexts, query: []
+    pipe.messages = lambda contexts, query, history: []
     items = list(Pipeline.stream.__wrapped__(pipe, "질의", None))
     assert items[:-1] == ["답", "변"]
     assert items[-1]["contexts"] == [CTX] and items[-1]["answer"] == "답변"
@@ -152,7 +152,7 @@ def test_tracing_switch_leaves_tracing_alone_without_limit(cfg, clean_tracing, m
 def test_chat_events_send_growing_text_then_contexts_without_labels(cfg):
     ctx = {**CTX, "splits": "test", "n_qa": 3, "summary_q": "질의", "summary_a": "답"}
 
-    def stream(query, q_emb, langsmith_extra=None):
+    def stream(query, q_emb, history=(), search=None, langsmith_extra=None):
         yield "답"
         yield "변"
         yield {"answer": "답변", "contexts": [ctx]}
@@ -183,7 +183,7 @@ def test_shown_logs_delay_at_final_answer_when_nothing_was_released(capsys):
     """전부 잡아 둔 채 끝나면 마지막 답변이 첫 글자다."""
     raw = "2018년 10월 10일 국방"
     items = list(app.shown(iter([raw, {"answer": raw}]), 40))
-    assert items == [{"answer": raw}]
+    assert items == [{"answer": raw, "raw": raw}]
     assert capsys.readouterr().out.count("첫 글자 지연:") == 1
 
 
@@ -195,7 +195,7 @@ def test_shown_keeps_raw_answer_for_pipeline(cfg):
 
 
 def test_chat_events_show_no_answer_notice_when_empty(cfg):
-    def stream(query, q_emb, langsmith_extra=None):
+    def stream(query, q_emb, history=(), search=None, langsmith_extra=None):
         yield {"answer": "", "contexts": [CTX]}
 
     pipe = SimpleNamespace(embed=lambda q: q, stream=stream)
@@ -222,7 +222,7 @@ def test_chat_events_refuse_too_long_message_without_search(cfg):
     seen = []
     limit = cfg.app.max_query_chars
     events = list(app.chat_events(fake_pipe(["답"], seen), cfg, {}, CORPUS, "가" * (limit + 1)))
-    assert events == [{"text": cfg.app.query_too_long, "done": True, "contexts": []}]
+    assert events == [{"text": cfg.app.query_too_long, "done": True, "contexts": [], "raw": ""}]
     assert seen == []
     assert list(app.chat_events(fake_pipe(["답"], seen), cfg, {}, CORPUS, "가" * limit))
     assert len(seen) == 1
@@ -240,3 +240,93 @@ def test_chat_events_skip_blank_message(cfg):
     seen = []
     assert list(app.chat_events(fake_pipe(["답"], seen), cfg, {}, CORPUS, "  ")) == []
     assert seen == []
+
+
+# 대화 이어 가기(S40) ---------------------------------------------------------------
+
+FULL_CTX = {**CTX, "meeting_number": "제1회", "session_number": "제2차"}
+
+
+def recording_pipe(cfg):
+    """Pipeline.stream을 그대로 지나며 검색 질의, 임베딩한 질의, 생성 메시지를 기록한다."""
+    seen = {}
+    pipe = stream_pipe(["답", "변 [1]."])
+    pipe.cfg = cfg
+
+    def create(**kw):
+        seen["messages"] = kw["messages"]
+        return iter([chunk("답"), chunk("변 [1]."), chunk(finish="stop")])
+
+    pipe.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    pipe.embed = lambda q: seen.setdefault("embedded", q)
+    pipe.retrieve = lambda query, q_emb, k: seen.setdefault("search", query) and [FULL_CTX]
+    return pipe, seen
+
+
+def no_rewrite(message, turns):
+    raise AssertionError("앞 대화가 없으면 재작성을 부르지 않는다")
+
+
+TURN = {"question": "2019년 국토위에서 광역버스 얘기가 나왔나요?",
+        "answer": "차관은 단계적으로 도입하겠다고 답했습니다 [1][3]. "
+                  "예산은 언급하지 않았습니다 [2]."}
+
+
+@pytest.mark.parametrize("history", [None, [], "문자열", [{"question": "질문만"}]])
+def test_first_question_keeps_messages_and_search_without_rewrite(cfg, history):
+    pipe, seen = recording_pipe(cfg)
+    events = list(app.chat_events(pipe, cfg, {}, CORPUS, "질의", history, no_rewrite))
+    assert seen["search"] == seen["embedded"] == "질의"
+    assert seen["messages"] == build_messages(cfg.prompt, [FULL_CTX], "질의")
+    assert [m["role"] for m in seen["messages"]] == ["system", "user"]
+    assert events[-1]["raw"] == "답변 [1]."  # 페이지가 앞 대화로 들고 있을 생성 원문
+
+
+def test_follow_up_searches_rewritten_query_and_puts_turns_before_contexts(cfg, capsys):
+    pipe, seen = recording_pipe(cfg)
+    calls = []
+
+    def rewriter(message, turns):
+        calls.append((message, turns))
+        return "2019년 국토교통위원회 광역버스 예산", {"rewrite_status": "ok", "rewrite_s": 0.5}
+
+    list(app.chat_events(pipe, cfg, {}, CORPUS, "예산은?", [TURN], rewriter))
+    clean = {"question": TURN["question"],
+             "answer": "차관은 단계적으로 도입하겠다고 답했습니다. 예산은 언급하지 않았습니다."}
+    assert calls == [("예산은?", [clean])]
+    assert seen["search"] == seen["embedded"] == "2019년 국토교통위원회 광역버스 예산"
+    msgs = seen["messages"]
+    assert [m["role"] for m in msgs] == ["system", "user", "assistant", "user"]
+    assert msgs[1]["content"] == clean["question"] and msgs[2]["content"] == clean["answer"]
+    # 질문은 원문, 근거는 이번 검색 결과
+    assert msgs[3] == build_messages(cfg.prompt, [FULL_CTX], "예산은?")[1]
+    log = capsys.readouterr().out
+    assert "턴 2: 재작성 0.500초(ok)" in log and "턴 2: 첫 토큰" in log
+    assert "예산" not in log and "광역버스" not in log  # 로그에 질의 원문이 없다
+
+
+def test_clean_history_strips_citations_and_caps_turns_and_length(cfg):
+    m = cfg.app.multiturn
+    turns = [{"question": f"질문{i}", "answer": f"답{i} [1]."} for i in range(m.max_turns + 2)]
+    out = app.clean_history(turns, cfg)
+    assert out == [{"question": f"질문{i}", "answer": f"답{i}."}
+                   for i in range(2, m.max_turns + 2)]
+    long = [{"question": "가" * (cfg.app.max_query_chars + 5),
+             "answer": "나 [2]" * m.max_answer_chars}]
+    out = app.clean_history(long, cfg)[0]
+    assert len(out["question"]) == cfg.app.max_query_chars
+    assert len(out["answer"]) == m.max_answer_chars and "[" not in out["answer"]
+
+
+@pytest.mark.parametrize("history", [
+    None, "질문", {"question": "q", "answer": "a"}, [1, None, "턴"],
+    [{"question": "q"}, {"answer": "a"}, {"question": 1, "answer": "a"},
+     {"question": "q", "answer": ["a"]}, {"question": " ", "answer": "a"}],
+])
+def test_clean_history_drops_malformed_turns(cfg, history):
+    assert app.clean_history(history, cfg) == []
+
+
+def test_clean_history_keeps_valid_turns_among_malformed(cfg):
+    history = [{"question": "q"}, {"question": "앞", "answer": "답", "extra": "x"}, 3]
+    assert app.clean_history(history, cfg) == [{"question": "앞", "answer": "답"}]
