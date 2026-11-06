@@ -317,19 +317,38 @@ function picker(input, list, onPick) {
   };
 }
 
+/** 마지막 요청의 응답만 쓰게 한다. Windows의 선택 칸은 화살표를 누를 때마다 change가 나서 목록 요청이
+ *  겹치고 응답이 순서를 바꿔 도착한다. 늦게 온 다른 연도의 응답이 목록을 덮고 고르던 값을 지웠다(사용자 확인
+ *  2026-11-06, PR #251). turn()은 새 요청을 시작하고, 돌려준 함수는 그 요청이 아직 마지막인지 알려 준다. */
+function latestOnly() {
+  let last = 0;
+  return () => {
+    const mine = ++last;
+    return () => mine === last;
+  };
+}
+
+const yearTurn = latestOnly();
+const meetingTurn = latestOnly();
+
 const documents = picker($("document"), $("document-options"), (docId) => openDocument(docId, -1, -1, $("document")));
 const meetings = picker($("meeting"), $("meeting-options"), async (conference) => {
+  const current = meetingTurn();
   findStatus("");
   try {
-    documents.set(await call("documents", [conference]));
+    const list = await call("documents", [conference]);
+    if (!current()) return;
+    documents.set(list);
   } catch {
-    findStatus("문서 목록을 불러오지 못했습니다. 회의를 다시 골라 주세요.");
+    if (current()) findStatus("문서 목록을 불러오지 못했습니다. 회의를 다시 골라 주세요.");
     return;
   }
   $("document").focus();
 });
 
 function resetSelection() {
+  yearTurn();
+  meetingTurn();
   $("year").value = "";
   meetings.set([]);
   documents.set([]);
@@ -351,14 +370,17 @@ function findStatus(text) {
 }
 
 $("year").addEventListener("change", async () => {
+  const current = yearTurn();
+  meetingTurn(); // 앞 연도의 문서 목록 요청도 버린다
   const year = Number($("year").value);
   documents.set([]);
+  meetings.set([]);
   findStatus("");
   try {
-    meetings.set(year ? await call("meetings", [year]) : []);
+    const list = year ? await call("meetings", [year]) : [];
+    if (current()) meetings.set(list);
   } catch {
-    meetings.set([]);
-    findStatus("회의 목록을 불러오지 못했습니다. 연도를 다시 골라 주세요.");
+    if (current()) findStatus("회의 목록을 불러오지 못했습니다. 연도를 다시 골라 주세요.");
   }
 });
 
