@@ -35,6 +35,7 @@ function connect() {
         $("connection").hidden = true;
         loadYears().catch(() => findStatus("회의록 목록을 불러오지 못했습니다. 페이지를 새로 고쳐 주세요."));
         loadExamples().catch(() => {}); // 추천 질문이 없어도 입력칸으로 물을 수 있다
+        loadMeetingIndex().catch(() => {}); // 받지 못하면 연도를 고를 때마다 요청한다
         return client;
       } catch {
         $("connection").textContent = CONNECTING_TEXT;
@@ -435,6 +436,13 @@ function resetSelection() {
   documents.set([]);
 }
 
+// 모든 연도의 회의 목록(S41). API 호출마다 계산과 무관하게 약 3초가 들어, 연결할 때 한 번 받아 둔다
+let meetingIndex = null;
+
+async function loadMeetingIndex() {
+  meetingIndex ??= await call("meeting_index");
+}
+
 async function loadYears() {
   if ($("year").options.length > 1) return; // 다시 연결해도 두 번 넣지 않는다
   const years = await call("years");
@@ -472,8 +480,11 @@ $("year").addEventListener("change", async () => {
   meetings.set([]);
   findStatus("");
   loading($("document"), false);
-  loading($("meeting"), Boolean(year));
-  if (!year) return;
+  // 미리 받은 목록이 있으면 요청 없이 바로 켠다(S41). 받기 전에 고르면 아래처럼 그 연도만 요청한다
+  const ready = meetingIndex?.[year];
+  if (ready) meetings.set(ready);
+  loading($("meeting"), Boolean(year) && !ready);
+  if (!year || ready) return;
   // 화살표로 연도를 넘기는 동안은 요청하지 않는다. Space가 목록 요청을 하나씩(약 4초) 처리해, 중간 연도마다
   // 요청하면 마지막 목록까지 오래 걸렸다(일곱 번 넘기면 약 20초)
   await new Promise((done) => setTimeout(done, YEAR_SETTLE_MS));
