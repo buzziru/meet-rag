@@ -14,7 +14,7 @@ description: meet-rag(국회 회의록 RAG) 작업의 오케스트레이터. SLI
 | `exp-judge` | dev-full(검색)·gen-full(생성) 결과를 SPEC 규칙으로 판정하고 기록 초안 작성 | EXP 실행 후 |
 | `pr-briefer` | diff로 PR 본문의 리뷰 가이드(위험도, 판단할 곳, 구조) 작성 | `docs/`만 바꾼 PR이 아니면 PR 전 |
 
-**작업자 풀과 opencode worker.** 항목 여러 개를 작업자 여러 개에 나눠 맡길 때(G 항목의 일괄 판단 등)와, 판단이 없는 조사·탐색을 맡길 때는 `references/worker-pool.md`를 읽고 따른다. 판단이 없는 일은 opencode worker(`doppler run -- opencode run`)로, 기획·검증·감사·판정은 Claude 서브에이전트로 한다(사용자 결정 2026-11-06, ADR-0105). 동시 수, 범위를 좁히는 프롬프트, 결과 대조, `scripts/worker_queue.py` 큐 기록, 중단 절차가 있다.
+**작업자 풀과 opencode worker.** 항목 여러 개를 작업자 여러 개에 나눠 맡길 때(G 항목의 일괄 판단 등)와, 판단이 없는 조사·탐색을 맡길 때는 `references/worker-pool.md`를 읽고 따른다. 판단이 없는 일은 opencode worker(`doppler run -- opencode run`)로, 기획·검증·감사·판정은 Claude 서브에이전트로 한다(사용자 결정 2026-11-06, ADR-0105). AI Hub 데이터(코퍼스·질의·라벨·분할)와 그 산출물을 다루는 일은 처리처 승인 없이 opencode로 보내지 않는다. 동시 수, 범위를 좁히는 프롬프트, 결과 대조, `scripts/worker_queue.py` 큐 기록, 중단 절차가 있다.
 
 **PR 전 감사·가이드** (ADR-0016·0026·0033)
 
