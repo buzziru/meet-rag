@@ -10,7 +10,9 @@
 
 import hashlib
 import json
+import re
 import time
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
@@ -113,26 +115,67 @@ class FollowUpRewriter:
         self.max_chars = m.max_chars
 
     def __call__(self, message: str, turns: list[dict]) -> tuple[str, dict]:
-        """검색 질의와 추적·로그에 남길 값(상태, 시간, 지시 버전)."""
+        """검색 질의와 추적·로그에 남길 값(상태, 시간, 지시 버전). 지시에 flag가 있으면 응답의
+        "앞 근거 필요" 표시를 needs_prev로 더한다(S51, 표시가 없으면 None)."""
         start = time.perf_counter()
+        flag = self.prompt.get("flag")
         try:
-            query = self._traced(message, turns)
+            raw = self._traced(message, turns)
+            first = parse(raw, self.max_chars)
+            query = None if first is None or (flag and first.startswith(flag)) else first
             status = "ok" if query else "invalid"
         except Exception as e:  # 재작성이 실패해도 답변은 나가야 한다
-            query, status = None, type(e).__name__
-        return query or message, {"rewrite_status": status,
-                                  "rewrite_s": round(time.perf_counter() - start, 3),
-                                  "rewrite_prompt": self.prompt.version}
+            raw, query, status = "", None, type(e).__name__
+        meta = {"rewrite_status": status, "rewrite_s": round(time.perf_counter() - start, 3),
+                "rewrite_prompt": self.prompt.version}
+        if flag:
+            m = re.search(rf"{re.escape(flag)}\s*(불필요|필요)", raw)
+            meta["needs_prev"] = None if m is None else m.group(1) == "필요"
+        return query or message, meta
 
     @traceable(name="rewrite_followup",
                process_inputs=lambda i: {"message": i["message"], "turns": i["turns"]})
-    def _traced(self, message: str, turns: list[dict]) -> str | None:
+    def _traced(self, message: str, turns: list[dict]) -> str:
         p = self.prompt
         history = "\n\n".join(p.turn.format(**t) for t in turns)
         messages = [{"role": "system", "content": p.system},
                     {"role": "user", "content": p.user.format(history=history, query=message)}]
         r = self.client.chat.completions.create(messages=messages, **self.kwargs)
-        return parse(r.choices[0].message.content or "", self.max_chars)
+        return r.choices[0].message.content or ""
+
+
+class PrevDecider:
+    """후속 질문에 답하려면 직전 답변의 근거를 다시 봐야 하는지 판단 모델로 정한다(S51, reuse
+    decision). 재작성과 병렬로 부른다. 실패하거나 시간을 넘기면 앞 근거를 넣지 않는다. 앱 채팅
+    경로라 flush를 부르지 않는다(S49)."""
+
+    def __init__(self, cfg):
+        self.d = cfg.app.multiturn.reuse.decision
+        self.prompt = OmegaConf.load(ROOT / self.d.prompt)
+        self.key = require_env(cfg.generator.api_key_env)
+
+    def __call__(self, message: str, turns: list[dict]) -> dict:
+        start = time.perf_counter()
+        try:
+            prob, status = self._traced(message, turns), "ok"
+        except Exception as e:  # 판단이 실패해도 답변은 나가야 한다
+            prob, status = None, type(e).__name__
+        return {"decision_status": status, "decision_s": round(time.perf_counter() - start, 3),
+                "decision_prob": prob,
+                "needs_prev": prob is not None and prob >= self.d.min_prob}
+
+    @traceable(name="decide_prev",
+               process_inputs=lambda i: {"message": i["message"], "turns": i["turns"]})
+    def _traced(self, message: str, turns: list[dict]) -> float:
+        p = self.prompt
+        history = "\n\n".join(p.turn.format(**t) for t in turns)
+        body = {"model": self.d.model, "state": {"앞 대화": history, "후속 질문": message},
+                "questions": {"prev": {"type": "noul", "instructions": p.instructions,
+                                       "criteria": OmegaConf.to_container(p.criteria)}}}
+        req = urllib.request.Request(self.d.url, data=json.dumps(body).encode("utf-8"), headers={
+            "Authorization": f"Bearer {self.key}", "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=self.d.timeout_s) as r:
+            return float(json.loads(r.read().decode("utf-8"))["answers"]["prev"]["noul"])
 
 
 def load_rewrites(cfg) -> dict[str, dict]:

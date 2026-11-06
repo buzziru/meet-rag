@@ -15,7 +15,8 @@ from rag.generate import Pipeline, build_messages
 from rag.index import load_cfg
 
 CTX = {"n": 1, "doc_id": "a1", "date": "2020-01-02", "committee_name": "법제사법위원회",
-       "original": "http://example/1", "text": "본문 <b>굵게</b>"}
+       "original": "http://example/1", "text": "본문 <b>굵게</b>", "index": "idx", "chunk_id": 0}
+STORE = SimpleNamespace(names=["idx"], bounds=[0, 10])  # 인용한 근거의 청크 번호(S51)
 CORPUS = SimpleNamespace(chunk_span=lambda doc_id, text: (3, 3 + len(text)))
 
 
@@ -28,19 +29,21 @@ def chunk(content=None, finish=None, usage=None):
 def stream_pipe(parts):
     pipe = object.__new__(Pipeline)
     pipe.cfg = load_cfg(["index.scope=full"])
+    pipe.block = None
     pipe.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
         create=lambda **kw: iter([chunk(p) for p in parts] + [chunk(finish="stop")]))))
     return pipe
 
 
 def fake_pipe(parts, seen=None):
-    def stream(query, q_emb, history=(), search=None, langsmith_extra=None):
+    def stream(query, q_emb, history=(), search=None, prev=(), langsmith_extra=None):
         if seen is not None:
             seen.append(query)
         yield from parts
         yield {"answer": "".join(parts), "contexts": [CTX]}
 
-    return SimpleNamespace(embed=lambda q: q, stream=stream)
+    return SimpleNamespace(embed=lambda q: q, stream=stream, store=STORE,
+                           index_meta={"n_chunks": 10})
 
 
 @pytest.fixture
@@ -79,7 +82,7 @@ def test_generate_echo_prints_only_answer(capsys):
 
 def test_stream_ends_with_contexts():
     pipe = stream_pipe(["답", "변"])
-    pipe.retrieve = lambda query, q_emb, k: [CTX]
+    pipe.retrieve = lambda query, q_emb, k, prev=(): [CTX]
     pipe.messages = lambda contexts, query, history: []
     items = list(Pipeline.stream.__wrapped__(pipe, "질의", None))
     assert items[:-1] == ["답", "변"]
@@ -153,7 +156,7 @@ def test_tracing_switch_leaves_tracing_alone_without_limit(cfg, clean_tracing, m
 def test_chat_events_send_growing_text_then_contexts_without_labels(cfg):
     ctx = {**CTX, "splits": "test", "n_qa": 3, "summary_q": "질의", "summary_a": "답"}
 
-    def stream(query, q_emb, history=(), search=None, langsmith_extra=None):
+    def stream(query, q_emb, history=(), search=None, prev=(), langsmith_extra=None):
         yield "답"
         yield "변"
         yield {"answer": "답변", "contexts": [ctx]}
@@ -196,7 +199,7 @@ def test_shown_keeps_raw_answer_for_pipeline(cfg):
 
 
 def test_chat_events_show_no_answer_notice_when_empty(cfg):
-    def stream(query, q_emb, history=(), search=None, langsmith_extra=None):
+    def stream(query, q_emb, history=(), search=None, prev=(), langsmith_extra=None):
         yield {"answer": "", "contexts": [CTX]}
 
     pipe = SimpleNamespace(embed=lambda q: q, stream=stream)
@@ -223,7 +226,8 @@ def test_chat_events_refuse_too_long_message_without_search(cfg):
     seen = []
     limit = cfg.app.max_query_chars
     events = list(app.chat_events(fake_pipe(["답"], seen), cfg, {}, CORPUS, "가" * (limit + 1)))
-    assert events == [{"text": cfg.app.query_too_long, "done": True, "contexts": [], "raw": ""}]
+    assert events == [{"text": cfg.app.query_too_long, "done": True, "contexts": [], "raw": "",
+                       "rows": []}]
     assert seen == []
     assert list(app.chat_events(fake_pipe(["답"], seen), cfg, {}, CORPUS, "가" * limit))
     assert len(seen) == 1
@@ -260,7 +264,8 @@ def recording_pipe(cfg):
 
     pipe.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     pipe.embed = lambda q: seen.setdefault("embedded", q)
-    pipe.retrieve = lambda query, q_emb, k: seen.setdefault("search", query) and [FULL_CTX]
+    pipe.retrieve = lambda query, q_emb, k, prev=(): seen.setdefault("search", query) and [FULL_CTX]
+    pipe.store, pipe.index_meta = STORE, {"n_chunks": 10}
     return pipe, seen
 
 
@@ -283,7 +288,10 @@ def test_first_question_keeps_messages_and_search_without_rewrite(cfg, history):
     assert events[-1]["raw"] == "답변 [1]."  # 페이지가 앞 대화로 들고 있을 생성 원문
 
 
-def test_follow_up_searches_rewritten_query_and_puts_turns_before_contexts(cfg, capsys):
+def test_follow_up_searches_rewritten_query_and_puts_turns_before_contexts(capsys):
+    # S40의 turns 형식을 본다. 기본값(S51 block, rule)의 형식은 tests/test_multiturn.py가 본다
+    cfg = load_cfg(["index.scope=full", "app.multiturn.format=turns",
+                    "app.multiturn.reuse.mode=off"])
     pipe, seen = recording_pipe(cfg)
     calls = []
 
