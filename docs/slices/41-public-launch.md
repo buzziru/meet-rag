@@ -58,6 +58,7 @@ PR 1 병합 뒤 Space를 다시 올린다(`CLAUDE.md` Space 배포 명령, 재�
 
 ### 3. 공개 뒤 정리 (PR 2)
 
+- 병합 전 production 페이지를 위해 남긴 압축 안 된 회의 목록 API `meetings`를 지운다(PR 1에 더한 것, `meetings_packed`)
 - S47 토큰 연결 코드(`deploy/web/app.js:33-34`)를 지운다. 공개 Space는 토큰이 필요 없다(D-88 결정 3). 병합·배포 뒤 사용자에게 토큰 폐기 시점을 알린다
 - `meet-rag` 스킬 "화면 검증" 절의 토큰 옮기기 문장을 지운다. 하네스 변경이라 ADR을 하나 더한다(`docs/harness/adr/`)
 - `docs/SPEC.md` 미결 3 줄에 3초는 대화의 첫 질문에만 적용한다는 표시를 붙인다(사용자 결정 2026-11-06)
@@ -117,7 +118,7 @@ PR 1 병합 뒤 Space를 다시 올린다(`CLAUDE.md` Space 배포 명령, 재�
 
 ## 수정 허용 파일
 
-PR 1: `deploy/web/index.html`, `deploy/web/style.css`, `deploy/web/app.js`, `deploy/space/app.py`, `deploy/space/README.md`, `src/rag/app.py`, `configs/config.yaml`(`app` 절), `tests/test_app.py`, 이 문서, `docs/PLAN.md`.
+PR 1: `deploy/web/index.html`, `deploy/web/style.css`, `deploy/web/app.js`, `deploy/space/app.py`, `deploy/space/README.md`, `src/rag/app.py`, `configs/config.yaml`(`app` 절), `tests/test_app.py`, 이 문서, `docs/PLAN.md`. 사용자가 지시서 확인 뒤 PR 1에 더한 범위(아래 "PR 1에 더한 것")로 `src/rag/docs.py`, `tests/test_docs.py`, `docs/slices/39-zerogpu-rerank.md`(보강 한 줄)를 더한다.
 PR 2: `deploy/web/app.js`, `.claude/skills/meet-rag/SKILL.md`("화면 검증" 절), `docs/harness/adr/`, `docs/SPEC.md`(미결 3 표시만), `docs/DECISIONS.md`(D-74·D-79·D-80·D-84 표시, 이 조각의 결정), `README.md`(새 파일, 결정 5), 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/STATUS.md`는 핸드오프 때.
 점검 문서(`docs/reviews/2026-11-design-review.md`)는 스냅샷이라 고치지 않는다.
 
@@ -137,15 +138,33 @@ PR 2: `deploy/web/app.js`, `.claude/skills/meet-rag/SKILL.md`("화면 검증" �
 
 ## 결과 (2026-11-06, PR 1)
 
-커밋: 구현 8371bb8, 화면 리뷰 반영 5c07d79. Space 코드 커밋은 Hub의 bb65f1d(비공개, `COMMIT`은 8371bb8. 그 뒤 바뀐 것은 페이지뿐이다)
+커밋: 구현 8371bb8, 화면 리뷰 반영 5c07d79, 날짜 형식 b7ea1e8, 근거 번호 링크 c157c9a, 국정감사 이름 658d993, 회의 목록 압축 fbbe584. Space 코드 커밋은 Hub의 3bcce22(비공개, `COMMIT`은 fbbe584)
 
 | # | 결과 |
 | --- | --- |
-| 1 | `uv run pytest -q` 680개 통과, `uv run ruff check .` 통과. `length`로 끝난 답변만 `notice`를 받고 답변 글에는 붙지 않는다(`tests/test_app.py`) |
+| 1 | `uv run pytest -q` 683개 통과, `uv run ruff check .` 통과. `length`로 끝난 답변만 `notice`를 받고 답변 글에는 붙지 않는다, 압축 응답을 풀면 같은 값이다(`tests/test_app.py`). 한자·공백 날짜가 한 형식으로, 국정감사 이름에 회·차 대신 "국정감사"(`tests/test_docs.py`) |
 | 2 | 미리보기(`aside repl`, 값으로 판정). 1280px: 빈 화면에 범위 "1996\~2023년 …"(`years` 값), 추천 질문 3개, 지연 안내. 연도를 고르면 회의 칸 아래 `role="status"` 칸에 "회의 목록을 불러오고 있습니다"와 스피너, 회의 칸 `cursor: progress`, 약 2.6초 뒤 비고 칸이 켜진다. 움직임 줄이기 에뮬레이션에서 스피너 `animation: none`. 문서 칸도 같고, 회의를 다시 고르면 새 목록이 올 때까지 문서 칸이 비활성이다. 추천 질문을 누르면 질문이 보내져 근거 5개가 붙은 답이 나오고 안내가 사라지며, "새 채팅"으로 안내와 추천 질문 3개가 다시 나온다. 820px: 추천 질문 칸이 가로로 넘치지 않는다. 오류 때 질문 되살리기와 길이 제한 알림은 질문을 망가뜨려야 볼 수 있어 코드와 시험으로만 봤다 |
 | 3 | `better-interface` 화면 리뷰(subagent): HIGH 0(Approve), MEDIUM 2, LOW 5. 모두 고쳤다(아래) |
 
-OpenRouter 4번, 약 $0.0022(추천 질문 로컬 확인 3번, 미리보기 1번). Space 재시작 1번.
+OpenRouter 5번, 약 $0.003(추천 질문 로컬 확인 3번, 미리보기 2번. 화면 리뷰의 1번은 아래에 더한다). Space 재시작 4번(사용자 승인: 처음 1번, 날짜 형식 1번, 회의 목록 방안 2번).
+
+### PR 1에 더한 것 (사용자 결정 2026-11-06, 대화)
+
+지시서 확인 뒤 미리보기를 본 사용자가 더했다.
+
+- **근거 번호 링크**: 답변의 `[n]`을 버튼으로 바꾼다. 마우스를 올리면 근거 제목이 나오고, 누르면 접힌 근거 목록을 열어 그 근거로 옮겨 초점을 주고 잠깐 강조한다(움직임 줄이기면 테두리만). 근거가 온 뒤에만 버튼이 되고 스트리밍 중에는 글자다. 미리보기 확인: 번호 3개가 버튼이 되고 이름은 "근거 1, 2001년 9월 17일(월) 행정자치위원회-제2반", 누르면 목록이 열리고 그 근거가 화면 안에 초점과 함께 온다
+- **인용한 근거와 참고만 한 근거**: 답변 글에 나온 번호로 나눈다. 미리보기: "근거 2개, 참고만 한 근거 3개"
+- **원문에서 보기**: 근거 항목의 문서 뷰어 버튼 이름. 새 탭으로 여는 바깥 링크는 이름이 겹치지 않게 "회의록 원문"에서 "회의록 PDF"로 바꿨다(메인 판단, 점검 UI-12의 의도인 구별되는 이름과 새 탭 알림은 그대로다. 링크 대상은 `fileType=PDF`다)
+- **날짜 형식**: 화면 날짜를 `2001년 9월 17일(월)` 하나로 맞춘다(`rag.docs.shown_date`). 원천에 `2000年6月28日(水)`, `2018년4월9일(월)`, 공백이 섞여 있다. 모델 입력은 그대로다
+- **국정감사 이름**: 국정감사 원천은 회·차 칸에 연도와 날짜를 넣어(15,884건, 모두 `meeting_name` 국정감사, 조사는 subagent, 집합 일치는 메인 확인) 이름에 날짜가 두 번 나왔다. 회·차 대신 "국정감사"를 붙인다. 같은 날 같은 위원회의 국정감사가 여럿인 회의 1,167개는 전처럼 회의 번호가 붙는다(구별할 메타데이터가 없다)
+- **회의 목록 지연**: 연도 하나의 회의 목록이 44\~72KB이고 Space 응답이 압축되지 않아 전송이 지연의 대부분이었다. 처음 방안(연결 때 전체 목록 1.5MB를 받기, eaa69ce)은 미리보기에서 그 응답이 98초 넘게 끝나지 않고 연도별 응답도 10.5초로 늦어져 되돌렸다(614b013). 회의 목록만 gzip+base64로 보낸다(`meetings_packed`, 2016년 4KB). 문서 목록과 문서 본문은 이미 0.3\~1.9초라 그대로 둔다. 병합 전 production 페이지를 위해 `meetings`도 열어 두고 PR 2에서 지운다
+
+| 연도 선택 → 회의 칸 활성(연도 대기 0.4초 포함) | 압축 전 | 압축 뒤 |
+| --- | --- | --- |
+| 2016, 2005, 2019 | 1.50, 4.02, 1.87초 | 0.94, 0.81, 0.80초 |
+| 2017, 2001, 2022 | 재지 않음 | 0.96, 1.07, 0.80초 |
+
+문서 목록 0.27\~0.54초, 문서 열기 0.27\~1.87초는 압축 전후 같은 경로다(미리보기, Aside 브라우저 한 번씩).
 
 ### 지시서와 다르게 하거나 더한 것
 
