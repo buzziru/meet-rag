@@ -16,10 +16,25 @@
   - 표준 입력을 `< /dev/null`로 닫는다. 닫지 않으면 입력을 기다리며 멈춘다(2026-11-06, 20분 동안 모델 호출 0건)
   - `--dir`은 저장소 밖 스크래치 폴더로 두고 `--auto`를 쓰지 않는다. 비대화형 `run`은 `--dir` 밖 접근(`external_directory`)을 자동 거부해 worker가 저장소 `data/`를 읽지 못한다(2026-11-06 시험: `--dir` 밖 파일 읽기가 거부됨). `--auto`는 이 거부를 풀어 쓰지 않는다. 저장소 파일이 필요하면 메인이 필요한 파일만 `--dir`에 복사해 넘긴다. `data/` 아래 파일(worktree의 `data` 링크 아래 포함)과 그것으로 만든 파일은 복사하지 않는다(저장소에 커밋된 파일은 이미 공개다). `--agent plan`은 파일을 고치지 않는다. 쓰기가 필요한 일은 출력 파일만 메인이 받아 둔다
   - 멈춤 확인: `~/.local/share/opencode/log/opencode.log`에 `init` 뒤 기록이 없으면 멈춘 것으로 보고 프로세스를 끝낸 뒤 원인을 본다
-- 모델: `opencode-go/deepseek-v4.1-flash`(Go 구독, judge와 같은 경로), `opencode-go/crouton-alpha-free`, `opencode/pulse-alpha-free`(무료 스텔스 모델, pulse는 `opencode/` 제공자에만 있다). `opencode/`는 Console 종량제 경로이므로 무료 모델만 쓰고, `pulse-alpha-free`를 처음 쓴 뒤 Console 사용량에 과금이 없는지 본다(2026-11-06 `opencode models`)
+- 모델과 고르는 기준(사용자 동의 2026-11-06, ADR-0107). 사양은 `opencode models <제공자> --verbose`(models.dev)로 본다
+
+  | 모델 | 제공자 | 컨텍스트 | 최대 출력 | 가격(100만 토큰 입력/출력) |
+  | --- | --- | ---: | ---: | --- |
+  | `deepseek-v4.1-flash` | `opencode-go/` | 1,000,000 | 384,000 | $0.15 / $0.60, Go 구독 한도에서 차감(judge와 같이 씀) |
+  | `crouton-alpha-free` | `opencode-go/`, `opencode/` | 1,048,576 | 270,000 | 0 |
+  | `pulse-alpha-free` | `opencode/`에만 | 1,048,576 | 131,072 | 0 |
+
+  - 공개 웹·공개 저장소 조사: 스텔스 모델(`opencode-go/crouton-alpha-free` 먼저, 다음 `opencode/pulse-alpha-free`). Go 한도를 아낀다
+  - 저장소 문서를 복사해 넘기는 일: `opencode-go/deepseek-v4.1-flash`. 문서는 공개돼 있어도 입력 처리 조건(학습 미사용·보존 0일, D-38)이 확인된 쪽을 쓴다. 스텔스 모델의 입력 처리 조건은 확인하지 않았다
+  - 스텔스 모델이 실패하거나 결과가 모자라면 같은 지시로 `deepseek-v4.1-flash`를 다시 부른다
+  - AI Hub 데이터: 세 모델 모두 처리처 승인 전에는 쓰지 않는다
+  - `opencode/`는 Console 종량제 경로라 가격이 0인 모델만 쓴다. pulse를 처음 쓴 뒤 Console 사용량에 과금이 없는지 본다(메타데이터 가격은 0)
+  - 입력→동작: GitHub trending 디자인 스킬 조사는 crouton, DECISIONS·EXP 문서에서 실험표를 모으는 일은 deepseek
 - 동시 실행은 서브에이전트와 같이 3개(최대 4개)까지 둔다
 - 데이터: opencode Go는 루트 `CLAUDE.md` 허용 처리처에 judge용(D-38)으로만 있다. AI Hub 데이터(코퍼스·질의·라벨·분할)와 그 산출물을 넘기는 일은 처리처 확대 승인을 먼저 받는다. 스텔스 모델은 입력 처리 조건을 확인하지 않았다
 - 결과: 출력 파일을 읽고, 판단에 걸리는 근거(수치, 출처, 라이선스)는 메인이 직접 확인한다. worker가 열지 못했다고 적은 것은 확인된 것으로 쓰지 않는다
+- 한 번에 맡기는 범위를 나눈다. 큰 문서 하나(26만 자 DECISIONS)에서 표 여러 개를 한꺼번에 뽑게 했더니 출력이 5.6KB, 27KB에서 끊겼다(2026-11-06 회고 자료). 모델 최대 출력보다 훨씬 작아 원인은 확인하지 못했다. 표 하나나 범위 하나(결정 번호 구간 등)씩 따로 부르고, 결과 끝이 지시한 마지막 항목까지 왔는지 본다
+- 제공자 쪽 일시 오류(`prefill_cap_refused` 등 다시 시도하라는 안내)는 한 번만 다시 부른다
 - 한 번 부르고 끝나는 방식만 쓴다. 결과가 모자라면 `-s <세션 id>`로 같은 세션에 이어서 지시한다. Orca 감독 worker(작업 중 질문·보고)는 시험하지 않아 쓰지 않는다
 
 ## 서브에이전트 띄우기
