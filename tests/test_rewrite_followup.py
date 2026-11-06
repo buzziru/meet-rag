@@ -4,8 +4,9 @@ from types import SimpleNamespace
 
 import openai
 import pytest
+from omegaconf import OmegaConf
 
-from rag.index import load_cfg
+from rag.index import ROOT, load_cfg
 from rag.rewrite import FollowUpRewriter
 
 TURNS = [{"question": "2019년 국토위에서 광역버스 얘기가 나왔나요?",
@@ -37,7 +38,8 @@ def test_rewrite_uses_generator_model_and_turns(cfg):
     rw, sent = rewriter_with(cfg, "2019년 국토교통위원회 광역버스 예산\n설명")
     query, meta = rw("예산은?", TURNS)
     assert query == "2019년 국토교통위원회 광역버스 예산"
-    assert meta["rewrite_status"] == "ok" and meta["rewrite_prompt"] == "rwmt_v1"
+    assert meta["rewrite_status"] == "ok"
+    assert meta["rewrite_prompt"] == OmegaConf.load(ROOT / cfg.app.multiturn.rewrite.prompt).version
     g = cfg.generator
     kw = sent[0]
     assert kw["model"] == g.model and kw["extra_body"]["provider"] == dict(g.extra_body.provider)
