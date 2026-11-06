@@ -7,7 +7,7 @@
 사용자 메시지는 JSON 하나다.
 
 - `prs`: 그날 병합된 PR의 번호와 제목
-- `diffs`: PR별 `src/`, `tests/`, `deploy/`의 코드(`.py`, `.js`, `.html`) diff. `deploy/`와 `src/rag/app.py`는 방문자가 쓰는 배포 앱(Hugging Face Space, Vercel 페이지)이다
+- `diffs`: PR별 `src/`, `tests/`, `deploy/`의 코드(`.py`, `.js`, `.html`) diff. `deploy/`와 `src/rag/`의 `app.py`, `docs.py`, `display.py`, `embed_worker.py`(그 테스트 포함)는 방문자가 쓰는 배포 앱(Hugging Face Space, Vercel 페이지)이다
 - `files`: 바뀐 코드 파일 전체(병합 뒤 main 기준). 각 줄 앞에 줄 번호가 있다
 - `omitted`: 크기 상한으로 넣지 못한 항목. 없는 파일에 대한 추측으로 지적하지 않는다
 
