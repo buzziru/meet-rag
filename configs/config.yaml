@@ -218,7 +218,8 @@ app:
     # "앞 대화는 이해에만 쓰고 답과 인용은 이번 근거로" 지시를 붙인다. 앞 대화가 없으면 둘 다 첫 질문과 같다
     format: block  # S51 개발용 비교로 골랐다(docs/slices/51-evidence-reuse.md 결정 사항 3)
     block: configs/multiturn/block_v1.yaml
-    # 앞 근거 다시 쓰기(S51). 직전 답변이 인용한 청크(최대 max_chunks개)를 근거 칸 안에 다시 넣는다.
+    # 앞 근거 다시 쓰기(S51). 직전 답변이 인용한 청크(최대 max_chunks개)를 근거 칸의 뒤 칸에 다시 넣는다(이번 1위와
+    # 그 확장은 1번 칸에 둔다, PR #249).
     # 넣을지 판단: "off" 넣지 않음, rule 그 문서가 이번 후보에 다시 나올 때, rewrite 재작성 응답의 표시
     # (rewrite.prompt가 flag를 내는 지시여야 한다), decision 판단 모델을 재작성과 병렬로 부름
     reuse:
