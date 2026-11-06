@@ -24,11 +24,11 @@
   | `crouton-alpha-free` | `opencode-go/`, `opencode/` | 1,048,576 | 270,000 | 0 |
   | `pulse-alpha-free` | `opencode/`에만 | 1,048,576 | 131,072 | 0 |
 
-  - 공개 웹·공개 저장소 조사: 스텔스 모델(`opencode-go/crouton-alpha-free` 먼저, 다음 `opencode/pulse-alpha-free`). Go 한도를 아낀다. 이 저장소(meet-rag)는 GitHub에 공개돼 있어도 여기에 넣지 않고 아래 저장소 문서 기준을 따른다
+  - 공개 웹·공개 저장소 조사: 스텔스 모델 `opencode-go/crouton-alpha-free`. crouton을 쓸 수 없을 때(목록에 없음 등)만 `opencode/pulse-alpha-free`. Go 한도를 아낀다. 이 저장소(meet-rag)는 GitHub에 공개돼 있어도 여기에 넣지 않고 아래 저장소 문서 기준을 따른다
   - 저장소 문서를 복사해 넘기는 일: `opencode-go/deepseek-v4.1-flash`. 문서는 공개돼 있어도 입력 처리 조건(학습 미사용·보존 0일, D-38)이 확인된 쪽을 쓴다. 스텔스 모델의 입력 처리 조건은 확인하지 않았다
-  - 스텔스 모델이 실패하거나 결과가 모자라면 같은 지시로 `deepseek-v4.1-flash`를 다시 부른다
+  - 스텔스 모델이 실패하면(아래 일시 오류 재시도 뒤에도) 같은 지시로 `deepseek-v4.1-flash`를 부른다. deepseek도 실패하면 멈추고 보고한다. 결과가 모자란 것은 실패가 아니라 아래처럼 같은 모델에 `-s`로 이어서 지시한다
   - AI Hub 데이터: 세 모델 모두 처리처 승인 전에는 쓰지 않는다
-  - `opencode/`는 Console 종량제 경로라 가격이 0인 모델만 쓴다. pulse를 처음 쓴 뒤 Console 사용량에 과금이 없는지 본다(메타데이터 가격은 0)
+  - `opencode/`는 Console 종량제 경로라 가격이 0인 모델만 쓴다. 메타데이터 가격은 0이지만 처음 쓴 뒤 실제로 확인한다: crouton(`opencode-go/`)은 Go 사용량이 줄지 않았는지, pulse는 Console 사용량에 과금이 없는지
   - 입력→동작: GitHub trending 디자인 스킬 조사는 crouton, DECISIONS·EXP 문서에서 실험표를 모으는 일은 deepseek
 - 동시 실행은 서브에이전트와 같이 3개(최대 4개)까지 둔다
 - 데이터: opencode Go는 루트 `CLAUDE.md` 허용 처리처에 judge용(D-38)으로만 있다. AI Hub 데이터(코퍼스·질의·라벨·분할)와 그 산출물을 넘기는 일은 처리처 확대 승인을 먼저 받는다. 스텔스 모델은 입력 처리 조건을 확인하지 않았다
