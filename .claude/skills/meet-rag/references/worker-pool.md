@@ -1,6 +1,6 @@
 # 작업자 풀
 
-항목 여러 개(질의, 검수 행 등)를 작업자 여러 개에 나눠 맡길 때(G2 오답 검토, G3 재판정 등)와, 판단이 없는 조사 하나를 opencode worker에 맡길 때 쓴다. 근거는 ADR-0020·0024·0025·0105다.
+항목 여러 개(질의, 검수 행 등)를 작업자 여러 개에 나눠 맡길 때(G2 오답 검토, G3 재판정 등)와, 판단이 없는 조사 하나를 opencode worker에 맡길 때 쓴다. 근거는 ADR-0020·0024·0025·0105·0107이다.
 
 ## 누구에게 맡기나
 
@@ -24,7 +24,7 @@
   | `crouton-alpha-free` | `opencode-go/`, `opencode/` | 1,048,576 | 270,000 | 0 |
   | `pulse-alpha-free` | `opencode/`에만 | 1,048,576 | 131,072 | 0 |
 
-  - 공개 웹·공개 저장소 조사: 스텔스 모델(`opencode-go/crouton-alpha-free` 먼저, 다음 `opencode/pulse-alpha-free`). Go 한도를 아낀다
+  - 공개 웹·공개 저장소 조사: 스텔스 모델(`opencode-go/crouton-alpha-free` 먼저, 다음 `opencode/pulse-alpha-free`). Go 한도를 아낀다. 이 저장소(meet-rag)는 GitHub에 공개돼 있어도 여기에 넣지 않고 아래 저장소 문서 기준을 따른다
   - 저장소 문서를 복사해 넘기는 일: `opencode-go/deepseek-v4.1-flash`. 문서는 공개돼 있어도 입력 처리 조건(학습 미사용·보존 0일, D-38)이 확인된 쪽을 쓴다. 스텔스 모델의 입력 처리 조건은 확인하지 않았다
   - 스텔스 모델이 실패하거나 결과가 모자라면 같은 지시로 `deepseek-v4.1-flash`를 다시 부른다
   - AI Hub 데이터: 세 모델 모두 처리처 승인 전에는 쓰지 않는다
