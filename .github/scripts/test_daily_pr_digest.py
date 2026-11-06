@@ -144,6 +144,21 @@ def test_review_input_over_limit_omits_files_before_diffs(digest, monkeypatch, c
     assert omitted == ["diff tests/test_a.py", "파일 src/a.py"]
 
 
+def test_review_input_includes_deploy_code_but_not_styles(digest, monkeypatch, tmp_path):
+    """ADR-0104. deploy/의 .py·.js·.html은 diff와 파일 전체를 넣고, .css·.json은 넣지 않는다."""
+    for p in ["deploy/web/app.js", "deploy/web/style.css", "deploy/space/app.py"]:
+        (tmp_path / p).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / p).write_text("a\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(digest, "gh", lambda *a: "".join(
+        f"diff --git a/{p} b/{p}\n@@ -1 +1 @@\n-z\n+a\n"
+        for p in ["deploy/web/app.js", "deploy/web/style.css", "deploy/web/vercel.json",
+                  "deploy/space/app.py"]))
+    data, _ = digest.review_input([MERGED])
+    assert sorted(d["path"] for d in data["diffs"]) == ["deploy/space/app.py", "deploy/web/app.js"]
+    assert [f["path"] for f in data["files"]] == ["deploy/space/app.py", "deploy/web/app.js"]
+
+
 def test_review_input_without_code_change_is_none(digest, monkeypatch, code_tree):
     monkeypatch.setattr(digest, "gh", lambda *a: "diff --git a/docs/d.md b/docs/d.md\n")
     assert digest.review_input([MERGED]) == (None, [])
