@@ -339,3 +339,16 @@ def test_clean_history_drops_malformed_turns(cfg, history):
 def test_clean_history_keeps_valid_turns_among_malformed(cfg):
     history = [{"question": "q"}, {"question": "앞", "answer": "답", "extra": "x"}, 3]
     assert app.clean_history(history, cfg) == [{"question": "앞", "answer": "답"}]
+
+
+def test_shown_replaces_refusal_words_only_on_screen(cfg):
+    """S52. 화면 글만 바꾸고 생성 원문(raw)과 Pipeline 결과 dict는 그대로 둔다. S45 회의 정보 변환과
+    함께 써도 글자가 사라지지 않는다."""
+    words = dict(cfg.app.shown_words)
+    raw = MOVED_RAW + [" 나머지는 제공", "된 회의록에서 답을 찾지 못했습니다."]
+    result = {"answer": "".join(raw), "contexts": []}
+    items = list(app.shown(iter([*raw, result]), cfg.app.meeting_info_max_name, words))
+    want = MOVED + " 나머지는 검색된 회의록에서 답을 찾지 못했습니다."
+    assert "".join(i for i in items if isinstance(i, str)) == want
+    assert items[-1]["answer"] == want and items[-1]["raw"] == "".join(raw)
+    assert result["answer"] == "".join(raw)

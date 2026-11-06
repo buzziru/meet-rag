@@ -125,3 +125,26 @@ class MeetingInfoMover:
 def move_meeting_info(answer: str, max_name: int) -> str:
     mover = MeetingInfoMover(max_name)
     return mover.feed(answer) + mover.finish()
+
+
+def replace_words(text: str, pairs: dict[str, str]) -> str:
+    """화면 글에서 바꿀 말을 바꾼다(S52). 생성 원문은 바꾸지 않는다."""
+    for old, new in pairs.items():
+        text = text.replace(old, new)
+    return text
+
+
+class WordReplacer:
+    """조각으로 오는 화면 글에서 바꿀 말을 바꾼다(S52). 조각 끝이 바꿀 말의 앞부분일 수 있으면 그
+    글자만 다음 조각까지 잡아 둔다. 조각을 어떻게 나눠도 결과가 같다."""
+
+    def __init__(self, pairs: dict[str, str]):
+        self.pairs = pairs
+        self.held = ""
+
+    def feed(self, piece: str) -> str:
+        text = self.held + piece
+        keep = max((n for old in self.pairs for n in range(1, len(old))
+                    if text.endswith(old[:n])), default=0)
+        self.held = text[len(text) - keep:]
+        return replace_words(text[:len(text) - keep], self.pairs)
