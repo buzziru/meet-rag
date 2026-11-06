@@ -71,7 +71,10 @@ class UsageLimit:
 
     def __init__(self, limits, now: Callable[[], float] = time.time,
                  today: Callable[[], date] = date.today):
-        self.limits, self.now, self.today = limits, now, today
+        # 설정 값을 시작할 때 읽어, 키가 빠지면 첫 질문이 아니라 앱 시작에서 멈춘다
+        self.per_ip_hour, self.per_day = int(limits.per_ip_hour), int(limits.per_day)
+        self.per_ip_text, self.per_day_text = str(limits.per_ip_text), str(limits.per_day_text)
+        self.now, self.today = now, today
         self.by_ip: dict[str, deque] = defaultdict(deque)
         self.day, self.count = None, 0
         self.lock = threading.Lock()
@@ -80,13 +83,13 @@ class UsageLimit:
         with self.lock:
             if self.day != self.today():
                 self.day, self.count = self.today(), 0
-            if self.count >= self.limits.per_day:
-                return self.limits.per_day_text
+            if self.count >= self.per_day:
+                return self.per_day_text
             t, seen = self.now(), self.by_ip[ip]
             while seen and seen[0] <= t - 3600:
                 seen.popleft()
-            if len(seen) >= self.limits.per_ip_hour:
-                return self.limits.per_ip_text
+            if len(seen) >= self.per_ip_hour:
+                return self.per_ip_text
             seen.append(t)
             self.count += 1
             return None
