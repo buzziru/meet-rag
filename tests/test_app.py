@@ -394,3 +394,38 @@ def test_packed_round_trips_korean_json():
     value = [["2019년 10월 25일(금) 정무위원회 제371회 제1차", "049488"]]
     raw = gzip.decompress(base64.b64decode(app.packed(value))).decode("utf-8")
     assert json.loads(raw) == value
+
+
+def limits(**kw):
+    return SimpleNamespace(**{"per_ip_hour": 2, "per_day": 3, "per_ip_text": "IP 한도",
+                              "per_day_text": "하루 한도", **kw})
+
+
+def test_usage_limit_counts_per_ip_hour_and_per_day():
+    """S41. 같은 IP는 1시간에 per_ip_hour개, 전체는 하루 per_day개까지. 날이 바뀌면 처음부터."""
+    now, today = [0.0], [date(2026, 11, 7)]
+    limit = app.UsageLimit(limits(), now=lambda: now[0], today=lambda: today[0])
+    assert [limit.check("a"), limit.check("a"), limit.check("a")] == [None, None, "IP 한도"]
+    now[0] = 3601.0  # 1시간이 지나면 같은 IP도 다시 받는다
+    assert limit.check("a") is None
+    assert limit.check("b") == "하루 한도"  # 전체 3개를 다 썼다
+    today[0] = date(2026, 11, 8)
+    assert limit.check("b") is None
+
+
+def test_chat_events_gate_blocks_without_search(cfg):
+    """한도에 걸린 질문은 검색과 생성을 부르지 않고 안내만 보낸다. 빈 질문은 세지 않는다."""
+    calls = []
+    pipe = SimpleNamespace(embed=lambda q: calls.append(q), stream=None)
+    events = list(app.chat_events(pipe, cfg, {}, CORPUS, "질의", gate=lambda: "IP 한도"))
+    assert events == [{"text": "IP 한도", "done": True, "contexts": [], "raw": "", "rows": []}]
+    assert calls == []
+    assert list(app.chat_events(pipe, cfg, {}, CORPUS, " ", gate=lambda: 1 / 0)) == []
+
+
+def test_client_ip_uses_first_forwarded_address():
+    req = SimpleNamespace(headers={"x-forwarded-for": "1.2.3.4, 10.0.0.1"},
+                          client=SimpleNamespace(host="10.0.0.9"))
+    assert app.client_ip(req) == "1.2.3.4"
+    direct = SimpleNamespace(headers={}, client=SimpleNamespace(host="5.6.7.8"))
+    assert app.client_ip(direct) == "5.6.7.8"
