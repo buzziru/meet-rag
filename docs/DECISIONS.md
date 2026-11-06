@@ -1032,6 +1032,6 @@
   2. 직전 답변이 인용한 청크(최대 3개)를 페이지가 번호로 들고 보내고, 그 문서가 이번 검색 후보(top_k)에 다시 나오면 근거 5칸 앞자리에 다시 넣는다(`app.multiturn.reuse.mode: rule`). 근거 수는 그대로이고, 이번 검색이 고른 같은 회의록의 다른 청크는 남긴다. 미리 정한 기준(라벨 일치, 2개 차이 안이면 호출이 적은 쪽)으로 메인이 골랐다(사용자 진행 지시)
   3. 판단 모델(`microsoft/microsoft-decision-1`), 재작성 표시(`rwmt_v2`), `block_v2`는 config로 남기되 쓰지 않는다
 - 이유: 지어낸 대화 개발용 10개(후속 20개)에서 `turns`는 3번째 턴 인용 누락이 다시 나왔고 `block`은 확인한 위반이 없었다. 판단 방식의 라벨 일치는 `rule` 18, `rewrite` 16, `decision` 10, `off` 8이다. `block_v2`는 답이 있는 지시어 질문(c06)을 전부 거부해 개발용이 나빠졌다. 근거: `notebooks/51_01_후속답변방식.ipynb`, `docs/slices/51-evidence-reuse.md` 결과 절
-- 바뀌는 것: D-76 결정 4에 보강 표시. `configs/config.yaml`의 `app.multiturn` 기본값. 생성 기준(`configs/exp/current.yaml`)과 평가 경로의 메시지·레시피는 바뀌지 않는다
+- 바뀌는 것: D-76 결정 4에 보강 표시. `docs/slices/40-multiturn.md`의 생성 줄과 감수하는 것 줄에 이후 변경 표시. `configs/config.yaml`의 `app.multiturn` 기본값. 생성 기준(`configs/exp/current.yaml`)과 평가 경로의 메시지·레시피는 바뀌지 않는다
 - 감수하는 것: 표본은 메인이 지은 20개라 방문자 질문 분포를 대표하지 않고 라벨에 애매한 칸이 있다. 로컬은 재정렬을 꺼 `rule`이 보는 후보가 Space와 다르다. 더 파고드는 질문에 근거가 같은 회의뿐일 때 앞 답을 되풀이하는 사례(사용자 대화 2번째 턴)는 Space에서 남았다
 - 날짜: 2026-11-06

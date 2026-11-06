@@ -86,6 +86,8 @@ def main() -> None:
     refuse_existing(doc, cfg.search.overwrite)
     with (ROOT / cfg.paths.multiturn_set).open(encoding="utf-8") as f:
         convs = [c for c in map(json.loads, f) if c["split"] == split]
+    if not convs:  # 빈 기록을 남기면 같은 경로로 다시 돌릴 때 막힌다
+        raise SystemExit(f"{cfg.paths.multiturn_set}에 split={split}인 대화가 없다")
     pipe = Pipeline(cfg)
     rec = {**recipe(cfg, pipe.index_meta, True),
            "multiturn": OmegaConf.to_container(cfg.app.multiturn), "multiturn_split": split}
