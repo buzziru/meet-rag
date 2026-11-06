@@ -14,7 +14,7 @@
   - 키는 Doppler의 `OPENCODE_API_KEY`로 넘긴다. `opencode auth login`은 키를 평문 `auth.json`에 저장해 쓰지 않는다
   - 지시는 파일로 첨부한다. 여러 줄을 메시지 인자로 넘기면 첫 줄에서 잘린다(npm 실행 파일이 cmd.exe를 거친다). 메시지는 `-f`보다 앞에 둔다. 뒤에 두면 파일 이름으로 읽혀 `File not found`가 난다
   - 표준 입력을 `< /dev/null`로 닫는다. 닫지 않으면 입력을 기다리며 멈춘다(2026-11-06, 20분 동안 모델 호출 0건)
-  - `--dir`은 저장소 밖 스크래치 폴더로 두고 `--auto`를 쓰지 않는다. 비대화형 `run`은 `--dir` 밖 접근(`external_directory`)을 자동 거부해 worker가 저장소 `data/`를 읽지 못한다(2026-11-06 시험: `--dir` 밖 파일 읽기가 거부됨). `--auto`는 이 거부를 풀어 쓰지 않는다. 저장소 파일이 필요하면 메인이 필요한 파일만 `--dir`에 복사해 넘긴다. `data/` 아래 파일과 그것으로 만든 파일은 복사하지 않는다(저장소에 커밋된 파일은 이미 공개다). `--agent plan`은 파일을 고치지 않는다. 쓰기가 필요한 일은 출력 파일만 메인이 받아 둔다
+  - `--dir`은 저장소 밖 스크래치 폴더로 두고 `--auto`를 쓰지 않는다. 비대화형 `run`은 `--dir` 밖 접근(`external_directory`)을 자동 거부해 worker가 저장소 `data/`를 읽지 못한다(2026-11-06 시험: `--dir` 밖 파일 읽기가 거부됨). `--auto`는 이 거부를 풀어 쓰지 않는다. 저장소 파일이 필요하면 메인이 필요한 파일만 `--dir`에 복사해 넘긴다. `data/` 아래 파일(worktree의 `data` 링크 아래 포함)과 그것으로 만든 파일은 복사하지 않는다(저장소에 커밋된 파일은 이미 공개다). `--agent plan`은 파일을 고치지 않는다. 쓰기가 필요한 일은 출력 파일만 메인이 받아 둔다
   - 멈춤 확인: `~/.local/share/opencode/log/opencode.log`에 `init` 뒤 기록이 없으면 멈춘 것으로 보고 프로세스를 끝낸 뒤 원인을 본다
 - 모델: `opencode-go/deepseek-v4.1-flash`(Go 구독, judge와 같은 경로), `opencode-go/crouton-alpha-free`, `opencode/pulse-alpha-free`(무료 스텔스 모델, pulse는 `opencode/` 제공자에만 있다). `opencode/`는 Console 종량제 경로이므로 무료 모델만 쓰고, `pulse-alpha-free`를 처음 쓴 뒤 Console 사용량에 과금이 없는지 본다(2026-11-06 `opencode models`)
 - 동시 실행은 서브에이전트와 같이 3개(최대 4개)까지 둔다
@@ -31,7 +31,7 @@
 
 ## 프롬프트
 
-- 서브에이전트는 정의된 작업자가 없으면 general-purpose를 쓴다. opencode worker도 같은 경로 한정을 지시 파일에 적고, 금지 경로는 `data/` 전체와 `.claude/worktrees/`로 적는다(AI Hub 데이터는 opencode에 보낼 수 없다). 훅이 없어 범위 밖 읽기를 막지 못하므로, 프롬프트에 읽기·쓰기 경로를 항목 목록으로 한정하고 "항목마다 지시를 처음부터 읽는다"를 넣는다(G3 재판정에서 다른 항목 입력을 읽었고, 두 번째 입력부터 지시를 건너뛰었다)
+- 서브에이전트는 정의된 작업자가 없으면 general-purpose를 쓴다. opencode worker도 같은 경로 한정을 지시 파일에 적고, 금지 경로는 `data/` 전체로 적는다. worktree 세션이면 자기 체크아웃의 `data`(원본 `data/`로 이어지는 링크)도 같다. worktree의 나머지 파일은 막지 않는다(AI Hub 데이터는 opencode에 보낼 수 없다). 훅이 없어 범위 밖 읽기를 막지 못하므로, 프롬프트에 읽기·쓰기 경로를 항목 목록으로 한정하고 "항목마다 지시를 처음부터 읽는다"를 넣는다(G3 재판정에서 다른 항목 입력을 읽었고, 두 번째 입력부터 지시를 건너뛰었다)
 - 금지 경로를 이름으로 적는다: `data/processed/`의 질의 파일, `data/splits/`, `data/runs/`(검색 결과), 다른 작업의 출력. 평가 질의나 검색 결과를 읽은 작업자 출력은 결과를 그쪽으로 기울인다(SPEC 누수 방지)
 - 일회성 작업은 이대로 두고, 반복해 쓰는 작업자만 F 흐름으로 정의(`.claude/agents/`)를 만든다(PR #43 코멘트). 정의에 frontmatter 훅을 달면 IDE 확장(Cursor·VS Code) 세션에서 Agent 도구로 부른 작업자에는 훅이 적용되지 않으니, 훅 동작은 CLI 세션에서 확인하고 그 작업자는 CLI 메인 세션에서 띄운다(ADR-0021)
 
