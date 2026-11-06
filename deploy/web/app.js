@@ -66,6 +66,10 @@ function fillParagraphs(parent, text, onMark) {
 // 대화 ---------------------------------------------------------------------
 
 let busy = false;
+// 앞 대화(S40). 페이지 메모리에만 두어 새로 고치거나 "새 채팅"을 누르면 지워진다.
+// 답변은 화면 글이 아니라 생성 원문(raw)을 들고, 최근 HISTORY_TURNS턴만 보낸다(서버도 같은 수로 자른다)
+const HISTORY_TURNS = 3;
+let history = [];
 
 function renderSources(contexts) {
   const details = el("details", "sources");
@@ -116,15 +120,19 @@ async function ask(message) {
   };
 
   try {
-    const job = (await connect()).submit("/chat", [message]);
+    const job = (await connect()).submit("/chat", [message, history.slice(-HISTORY_TURNS)]);
+    let raw = "";
     for await (const event of job) {
       if (event.type === "status" && event.stage === "error") throw new Error(event.message);
       if (event.type !== "data") continue;
       const item = event.data[0];
       showText(item.text);
+      if (item.done) raw = item.raw;
       // 클라이언트가 마지막 값을 한 번 더 보내므로 근거는 처음 한 번만 붙인다
       if (item.done && item.contexts.length && !answer.querySelector(".sources")) answer.append(renderSources(item.contexts));
     }
+    // 답을 만들지 못한 질문은 앞 대화에 넣지 않는다
+    if (raw) history = [...history, { question: message, answer: raw }].slice(-HISTORY_TURNS);
   } catch {
     showText("답변을 만들지 못했습니다. 다시 시도해 주세요.");
     // Space가 재시작했을 수 있어 다음 요청 전에 새로 연결한다
@@ -140,7 +148,17 @@ async function ask(message) {
 
 const updateSend = () => {
   $("send").disabled = busy || !$("input").value.trim();
+  $("new-chat").disabled = busy;
 };
+
+/** 대화 칸과 앞 대화를 비운다. 문서 탭과 사이드바 선택은 그대로 둔다. Space를 부르지 않는다. */
+$("new-chat").addEventListener("click", () => {
+  if (busy) return;
+  history = [];
+  $("messages").replaceChildren();
+  $("intro").hidden = false;
+  showTab("chat");
+});
 
 function submit() {
   const message = $("input").value.trim();

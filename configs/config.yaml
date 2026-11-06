@@ -199,6 +199,18 @@ app:
   concurrency: 1
   # 화면에서 문장 끝 괄호로 옮기는 회의 이름의 길이 상한(S45). 넘으면 첫머리를 그대로 둔다
   meeting_info_max_name: 40
+  # 대화 이어 가기(S40). 페이지가 보낸 앞 대화는 믿지 않고 최근 max_turns턴만 쓴다. 앞 질문은
+  # max_query_chars, 앞 답변은 인용 번호를 지운 뒤 max_answer_chars로 자른다(생성 max_tokens 1024의 답변이 든다)
+  multiturn:
+    max_turns: 3
+    max_answer_chars: 3000
+    # 앞 대화가 있을 때만 후속 질문을 검색 질의 한 줄로 고친다. 모델·제공자·파라미터는 generator를 따르고
+    # max_tokens만 바꾼다. 실패하거나 timeout_s를 넘기면(재시도 없음) 질문 그대로 검색한다
+    rewrite:
+      prompt: configs/rewriter/prompt/rwmt_v1.yaml
+      timeout_s: 10
+      max_tokens: 256
+      max_chars: 300  # 재작성 질의 길이 상한. 넘으면 질문 그대로 검색한다
 
 # Space 배포(S38, S39). 진입점 deploy/space/app.py가 speakers_from_file을 켜고 rerank를 쓴다
 deploy:
