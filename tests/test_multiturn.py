@@ -86,11 +86,14 @@ def reuse_pipe(mode):
 
 
 @pytest.mark.parametrize(("mode", "prev", "docs", "chunks", "reused"), [
-    # 앞 근거를 앞자리에 넣고 같은 문서의 이번 근거는 빼고 남은 칸을 채운다. 근거 수는 3 그대로다
+    # 앞 근거를 앞자리에 넣고 남은 칸을 이번 근거 순서대로 채운다. 근거 수는 3 그대로다
     ("decision", [2], ["b", "c", "a"], [2, 3, 1], [True, False, False]),
-    ("decision", [0], ["a", "c", "d"], [0, 3, 4], [True, False, False]),
+    # 같은 회의록이어도 이번 검색이 고른 다른 청크(a의 1)는 남긴다(확인용 c10)
+    ("decision", [0], ["a", "c", "a"], [0, 3, 1], [True, False, False]),
+    # 같은 청크는 한 번만 넣는다
+    ("decision", [1], ["a", "c", "d"], [1, 3, 4], [True, False, False]),
     # rule은 그 문서가 이번 후보에 다시 나올 때만 넣는다(b는 후보 밖)
-    ("rule", [2, 0], ["a", "c", "d"], [0, 3, 4], [True, False, False]),
+    ("rule", [2, 0], ["a", "c", "a"], [0, 3, 1], [True, False, False]),
     ("rule", [2], ["c", "a", "d"], [3, 1, 4], [False, False, False]),
 ])
 def test_retrieve_puts_previous_chunks_first_and_renumbers(mode, prev, docs, chunks, reused):
