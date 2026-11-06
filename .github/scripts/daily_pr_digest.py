@@ -21,7 +21,9 @@ NO_ITEMS = "NO_ITEMS"
 REVIEW_PROMPT = Path(".github/prompts/daily-code-review.md")
 NO_FINDINGS = "NO_FINDINGS"
 REVIEW_HEADING = "## 코드 리뷰"
-CODE_DIRS = ("src/", "tests/")
+CODE_DIRS = ("src/", "tests/", "deploy/")
+# deploy/의 화면 코드까지 보고, 스타일·설정 파일은 보지 않는다(ADR-0104)
+CODE_EXTS = (".py", ".js", ".html")
 REVIEW_MAX_CHARS = 300_000  # 시험한 날 중 최대 약 27만 자, 약 15만 토큰(ADR-0081)
 REVIEW_MAX_TOKENS = 32000
 
@@ -107,11 +109,11 @@ def ask_with_fallback(client: anthropic.Anthropic, content: str, call=ask):
 
 
 def code_diffs(number: int) -> list[dict]:
-    """PR diff에서 `src/`, `tests/` 파일만 남긴다."""
+    """PR diff에서 `CODE_DIRS` 아래 코드 파일(`CODE_EXTS`)만 남긴다."""
     out = []
     for part in re.split(r"(?m)^(?=diff --git )", gh("pr", "diff", str(number), "-R", REPO)):
         m = re.match(r"diff --git a/\S+ b/(\S+)", part)
-        if m and m[1].startswith(CODE_DIRS):
+        if m and m[1].startswith(CODE_DIRS) and m[1].endswith(CODE_EXTS):
             out.append({"pr": number, "path": m[1], "diff": part})
     return out
 
@@ -130,7 +132,7 @@ def review_input(prs: list[dict]) -> tuple[dict | None, list[str]]:
     diffs = [d for p in merged for d in code_diffs(p["number"])]
     if not diffs:
         return None, []
-    paths = {d["path"] for d in diffs if d["path"].endswith(".py") and Path(d["path"]).is_file()}
+    paths = {d["path"] for d in diffs if Path(d["path"]).is_file()}
     files = [{"path": p, "text": numbered(p)} for p in sorted(paths)]
 
     room, kept, omitted = REVIEW_MAX_CHARS, {"diff": [], "text": []}, []
