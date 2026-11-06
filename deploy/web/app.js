@@ -80,11 +80,8 @@ function renderSources(contexts) {
     const head = el("div", "source-head");
     const open = el("button", "source-open", `[${c.n}] ${c.date} ${c.committee_name}`);
     open.type = "button";
-    open.addEventListener("click", () => openDocument("evidence", c.doc_id, c.start, c.end));
-    const link = el("a", "muted", "회의록");
-    link.href = c.original;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
+    open.addEventListener("click", () => openDocument(c.doc_id, c.start, c.end, open));
+    const link = originalLink(c.original, `${c.date} ${c.committee_name}`);
     head.append(open, link);
     source.append(head);
     fillParagraphs(source, c.body);
@@ -106,6 +103,7 @@ async function ask(message) {
   answer.append(status);
   $("messages").append(question, answer);
   question.scrollIntoView({ block: "start" });
+  $("announce").textContent = "답변을 준비하고 있습니다.";
 
   // 첫 토큰이 늦으면 답변 밖 표시만 바꾼다. 답변 글에는 넣지 않는다
   const timer = setTimeout(() => {
@@ -143,6 +141,7 @@ async function ask(message) {
     connect();
   } finally {
     clearTimeout(timer);
+    $("announce").textContent = "답변을 마쳤습니다.";
     busy = false;
     updateSend();
   }
@@ -153,13 +152,12 @@ const updateSend = () => {
   $("new-chat").disabled = busy;
 };
 
-/** 대화 칸과 앞 대화를 비운다. 문서 탭과 사이드바 선택은 그대로 둔다. Space를 부르지 않는다. */
+/** 대화 칸과 앞 대화를 비운다. 문서 뷰어와 문서 찾기 선택은 그대로 둔다. Space를 부르지 않는다. */
 $("new-chat").addEventListener("click", () => {
   if (busy) return;
   history = [];
   $("messages").replaceChildren();
   $("intro").hidden = false;
-  showTab("chat");
 });
 
 function submit() {
@@ -190,91 +188,124 @@ $("input").addEventListener("input", () => {
   updateSend();
 });
 
-// 탭 -----------------------------------------------------------------------
+// 패널 ---------------------------------------------------------------------
+// 넓은 화면: 문서 찾기와 문서 뷰어가 대화 옆에 붙는다. 뷰어를 열면 문서 찾기가 접힌다(S52).
+// 좁은 화면(태블릿 세로): 두 패널이 화면을 덮는 서랍이다. 열면 초점을 서랍 안으로 옮기고 뒤 화면을
+// inert로 막는다. Esc나 닫기로 닫으면 연 곳으로 초점을 돌린다(점검 UI-3).
 
-function showTab(name) {
-  for (const tab of document.querySelectorAll(".tab")) {
-    tab.setAttribute("aria-selected", String(tab.dataset.tab === name));
-  }
-  for (const panel of ["chat", "doc", "evidence"]) {
-    $(`panel-${panel}`).hidden = panel !== name;
-  }
+const narrow = window.matchMedia("(max-width: 1023.98px)");
+const sidebar = $("sidebar");
+const viewer = $("viewer");
+let viewerOpener = null;
+
+const isOpen = (panel) => panel.classList.contains("open");
+const drawer = () => (narrow.matches ? [sidebar, viewer].find(isOpen) ?? null : null);
+
+function sync() {
+  const open = drawer();
+  $("scrim").hidden = !open;
+  for (const node of [sidebar, $("chat"), viewer]) node.inert = Boolean(open) && node !== open;
+  $("open-sidebar").hidden = isOpen(sidebar) && !narrow.matches;
 }
 
-for (const tab of document.querySelectorAll(".tab")) {
-  tab.addEventListener("click", () => showTab(tab.dataset.tab));
+function openPanel(panel) {
+  if (narrow.matches) for (const other of [sidebar, viewer]) other.classList.remove("open");
+  else if (panel === viewer) sidebar.classList.remove("open");
+  panel.classList.add("open");
+  sync();
+  if (narrow.matches) panel.querySelector(".panel-head button").focus();
 }
 
-// 문서 ---------------------------------------------------------------------
+function closePanel(panel) {
+  panel.classList.remove("open");
+  sync();
+  const back = panel === sidebar ? $("open-sidebar") : viewerOpener;
+  if (back?.isConnected && !back.hidden && !back.disabled) back.focus();
+}
 
-async function openDocument(tab, docId, start = -1, end = -1) {
-  const view = $(tab === "doc" ? "doc-view" : "evidence-view");
-  showTab(tab);
-  closeSidebar();
+$("open-sidebar").addEventListener("click", () => openPanel(sidebar));
+$("close-sidebar").addEventListener("click", () => closePanel(sidebar));
+$("close-viewer").addEventListener("click", () => closePanel(viewer));
+$("scrim").addEventListener("click", () => closePanel(drawer()));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && drawer()) closePanel(drawer());
+});
+narrow.addEventListener("change", () => {
+  if (narrow.matches) sidebar.classList.remove("open");
+  sync();
+});
+if (narrow.matches) sidebar.classList.remove("open");
+sync();
+
+// 문서 뷰어 -----------------------------------------------------------------
+
+/** 새 탭으로 여는 회의록 원문 링크. 어느 회의의 원문인지 이름에 넣는다(점검 UI-12). */
+function originalLink(href, meeting) {
+  const link = el("a", "muted", "회의록 원문");
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.setAttribute("aria-label", `${meeting} 회의록 원문(새 탭)`);
+  return link;
+}
+
+/** 안건 문자열을 번호(숫자.) 앞에서 나눈 목록으로 넣는다. 번호가 없으면 문단 하나다(점검 UI-7). */
+function agendaBlock(text) {
+  // 번호로 시작하는 안건만 나눈다. 본문 속 날짜("2020. 1.")에서 나누지 않게 하려는 것이다
+  if (!/^\s*\d{1,2}\.(?!\d)/.test(text)) return el("p", "", text);
+  const items = text.split(/(?:^|(?<=[\s)]))(?=\d{1,2}\.(?!\d))/).map((s) => s.trim()).filter(Boolean);
+  if (items.length < 2) return el("p", "", text);
+  const list = el("ul", "agenda");
+  for (const item of items) list.append(el("li", "", item));
+  return list;
+}
+
+async function openDocument(docId, start = -1, end = -1, opener = document.activeElement) {
+  const view = $("viewer-body");
+  viewerOpener = opener;
+  openPanel(viewer);
+  $("viewer-original").hidden = true;
   view.replaceChildren(el("p", "muted", "문서를 불러오고 있습니다."));
   try {
     const doc = await call("document", [docId, start, end]);
-    const link = el("a", "", "회의록");
+    const link = $("viewer-original");
     link.href = doc.original;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    const original = el("p");
-    original.append(link);
-    view.replaceChildren(el("h2", "", doc.name), el("p", "", doc.agenda), original, el("hr"));
+    link.setAttribute("aria-label", `${doc.name} 회의록 원문(새 탭)`);
+    link.hidden = false;
+    view.replaceChildren(el("h2", "", doc.name), agendaBlock(doc.agenda), el("hr"));
     fillParagraphs(view, doc.body, (text) => text.startsWith("▼") || text.startsWith("▲"));
     if (start >= 0) {
       const first = [...view.querySelectorAll("strong.mark")].find((s) => s.textContent === CHUNK_START);
       first?.scrollIntoView({ block: "start" });
     } else {
-      view.parentElement.scrollTop = 0;
+      view.scrollTop = 0;
     }
   } catch {
     view.replaceChildren(el("p", "muted", "문서를 불러오지 못했습니다. 다시 시도해 주세요."));
   }
 }
 
-/** 입력해 거르는 선택 칸. 조합 중인 한글도 input 이벤트로 거른다. */
-function combobox(input, list, onPick) {
-  let items = [];
-  const render = () => {
-    const query = input.value.trim().toLowerCase();
-    const shown = items.filter(([name]) => name.toLowerCase().includes(query));
-    list.replaceChildren();
-    for (const [name, value] of shown) {
-      const li = el("li", "", name);
-      li.addEventListener("mousedown", (event) => {
-        event.preventDefault(); // 입력칸의 blur가 먼저 목록을 닫지 않게 한다
-        input.value = name;
-        list.hidden = true;
-        onPick(value);
-      });
-      list.append(li);
-    }
-    if (!shown.length) list.append(el("li", "empty", "일치하는 항목이 없습니다"));
-  };
-  input.addEventListener("focus", () => {
-    render();
-    list.hidden = false;
-  });
+// 문서 찾기 -----------------------------------------------------------------
+
+/** 입력해 거르는 선택 칸. 브라우저 목록(datalist)이라 키보드로 고를 수 있다(점검 UI-1). 이름이 목록의
+ *  항목과 같아지면 고른 것으로 본다. */
+function picker(input, list, onPick) {
+  let byName = new Map();
   input.addEventListener("input", () => {
-    render();
-    list.hidden = false;
-  });
-  input.addEventListener("blur", () => {
-    list.hidden = true;
+    if (byName.has(input.value)) onPick(byName.get(input.value));
   });
   return {
-    set(next) {
-      items = next;
+    set(items) {
+      byName = new Map(items);
+      list.replaceChildren(...items.map(([name]) => Object.assign(el("option"), { value: name })));
       input.value = "";
-      input.disabled = !next.length;
-      list.hidden = true;
+      input.disabled = !items.length;
     },
   };
 }
 
-const documents = combobox($("document"), $("document-list"), (docId) => openDocument("doc", docId));
-const meetings = combobox($("meeting"), $("meeting-list"), async (conference) => {
+const documents = picker($("document"), $("document-options"), (docId) => openDocument(docId, -1, -1, $("document")));
+const meetings = picker($("meeting"), $("meeting-options"), async (conference) => {
   documents.set(await call("documents", [conference]));
   $("document").focus();
 });
@@ -302,20 +333,6 @@ $("year").addEventListener("change", async () => {
 });
 
 $("reset").addEventListener("click", resetSelection);
-
-// 좁은 화면의 사이드바 -------------------------------------------------------
-
-function closeSidebar() {
-  $("sidebar").classList.remove("open");
-  $("scrim").hidden = true;
-}
-
-$("open-sidebar").addEventListener("click", () => {
-  $("sidebar").classList.add("open");
-  $("scrim").hidden = false;
-});
-$("close-sidebar").addEventListener("click", closeSidebar);
-$("scrim").addEventListener("click", closeSidebar);
 
 updateSend();
 connect();
