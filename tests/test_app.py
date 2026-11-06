@@ -18,7 +18,8 @@ from rag.index import load_cfg
 CTX = {"n": 1, "doc_id": "a1", "date": "2020-01-02", "committee_name": "법제사법위원회",
        "original": "http://example/1", "text": "본문 <b>굵게</b>", "index": "idx", "chunk_id": 0}
 STORE = SimpleNamespace(names=["idx"], bounds=[0, 10])  # 인용한 근거의 청크 번호(S51)
-CORPUS = SimpleNamespace(chunk_span=lambda doc_id, text: (3, 3 + len(text)))
+CORPUS = SimpleNamespace(chunk_span=lambda doc_id, text: (3, 3 + len(text)),
+                         meta={"a1": {**CTX, "meeting_name": "국정감사"}})
 
 
 def chunk(content=None, finish=None, usage=None):
@@ -167,7 +168,9 @@ def test_chat_events_send_growing_text_then_contexts_without_labels(cfg):
     assert [e["text"] for e in events] == ["답", "답변", "답변"]
     assert [e["done"] for e in events] == [False, False, True]
     c = events[-1]["contexts"][0]
-    assert set(c) == {"n", "date", "committee_name", "original", "doc_id", "start", "end", "body"}
+    assert set(c) == {"n", "date", "committee_name", "name", "original", "doc_id", "start", "end",
+                      "body"}
+    assert c["name"] == "2020년 1월 2일(목) 법제사법위원회 국정감사"
     assert (c["start"], c["end"]) == (3, 3 + len(CTX["text"]))
     assert "<b>굵게</b>" in c["body"]  # 이스케이프를 풀어 보내고 페이지가 글자로 넣는다
 
@@ -207,6 +210,19 @@ def test_chat_events_show_no_answer_notice_when_empty(cfg):
     assert list(app.chat_events(pipe, cfg, {}, CORPUS, "질의"))[-1]["text"] == cfg.app.no_answer
 
 
+@pytest.mark.parametrize(("finish", "expected"), [("length", True), ("stop", False), (None, False)])
+def test_chat_events_notice_only_when_cut_by_length(cfg, finish, expected):
+    """S41. 길이 제한으로 끝난 답변만 페이지가 알릴 글을 받는다."""
+    def stream(query, q_emb, history=(), search=None, prev=(), langsmith_extra=None):
+        yield "답변"
+        yield {"answer": "답변", "contexts": [CTX], "finish_reason": finish}
+
+    pipe = SimpleNamespace(embed=lambda q: q, stream=stream)
+    last = list(app.chat_events(pipe, cfg, {}, CORPUS, "질의"))[-1]
+    assert last["notice"] == (cfg.app.cut_notice if expected else "")
+    assert last["text"] == "답변"  # 답변 글에는 붙이지 않는다
+
+
 def test_doc_payload_returns_one_document_with_chunk_marks_and_no_labels(cfg):
     doc = {"doc_id": "a1", "date": "2020-01-02", "committee_name": "법제사법위원회",
            "meeting_number": "제1회", "session_number": "제2차", "agenda": "1. 안건",
@@ -217,7 +233,7 @@ def test_doc_payload_returns_one_document_with_chunk_marks_and_no_labels(cfg):
     labels = cfg.app.labels
     out = app.doc_payload(pipe, cfg, corpus, "a1", 2, 12)
     assert set(out) == {"name", "agenda", "original", "body"}
-    assert "2020-01-02 법제사법위원회 제1회 제2차" == out["name"]
+    assert "2020년 1월 2일(목) 법제사법위원회 제1회 제2차" == out["name"]
     assert f"**{labels.chunk_start}**" in out["body"] and "<b>근거</b>" in out["body"]
     assert labels.chunk_start not in app.doc_payload(pipe, cfg, corpus, "a1", -1, -1)["body"]
 
@@ -367,3 +383,14 @@ def test_shown_words_refuses_empty_word():
         cfg.app.shown_words = {"제공된 회의록": None}  # 새 말을 비우면 None이 된다
     with pytest.raises(SystemExit, match="shown_words"):
         app.shown_words(cfg)
+
+
+def test_packed_round_trips_korean_json():
+    """S41. 페이지가 gzip을 풀어 같은 값을 얻는다(base64 → gzip → UTF-8 JSON)."""
+    import base64
+    import gzip
+    import json
+
+    value = [["2019년 10월 25일(금) 정무위원회 제371회 제1차", "049488"]]
+    raw = gzip.decompress(base64.b64decode(app.packed(value))).decode("utf-8")
+    assert json.loads(raw) == value

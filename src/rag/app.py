@@ -6,7 +6,10 @@
 LangSmith 추적으로만 남는다.
 """
 
+import base64
+import gzip
 import html
+import json
 import logging
 import re
 import sys
@@ -19,7 +22,7 @@ from langsmith.run_trees import configure
 from omegaconf import OmegaConf
 
 from rag.display import MeetingInfoMover, WordReplacer, move_meeting_info, replace_words
-from rag.docs import Corpus, doc_body, doc_name, readable
+from rag.docs import Corpus, doc_body, doc_name, readable, shown_date, source_name
 from rag.gen_eval.checks import CITE
 from rag.generate import Pipeline, recipe
 from rag.index import load_cfg
@@ -155,7 +158,8 @@ def context_payload(c: dict, corpus) -> dict:
     """정적 페이지(S39b)에 주는 근거 하나. 값을 골라 내 라벨·분할 정보가 나가지 않는다. 본문은
     페이지가 글자로 넣으므로 이스케이프를 푼다."""
     start, end = corpus.chunk_span(c["doc_id"], c["text"]) or (-1, -1)
-    return {"n": c["n"], "date": c["date"], "committee_name": c["committee_name"],
+    return {"n": c["n"], "date": shown_date(c), "committee_name": c["committee_name"],
+            "name": source_name(corpus.meta[c["doc_id"]]),
             "original": c["original"], "doc_id": c["doc_id"], "start": start, "end": end,
             "body": html.unescape(readable(render(c)))}
 
@@ -201,11 +205,20 @@ def chat_events(pipe, cfg, rec: dict, corpus, message: str, history=None,
             # 페이지가 다음 질문에 보낼 청크 번호: 이 답변이 인용한 근거만(S51). 끄면 보내지 않는다
             cited = sorted({int(n) for n in CITE.findall(item["raw"]) if 1 <= int(n) <= len(ctx)})
             rows = [chunk_row(pipe, ctx[n - 1]) for n in cited] if mode != "off" else []
+            # 길이 제한으로 끝난 답변은 페이지가 답변 아래에 알린다(S41)
+            notice = cfg.app.cut_notice if item.get("finish_reason") == "length" else ""
             yield {"text": item["answer"] or cfg.app.no_answer, "done": True, "raw": item["raw"],
-                   "rows": rows, "contexts": [context_payload(c, corpus) for c in ctx]}
+                   "rows": rows, "notice": notice,
+                   "contexts": [context_payload(c, corpus) for c in ctx]}
         else:
             text += item
             yield {"text": text, "done": False}
+
+
+def packed(value) -> str:
+    """JSON을 gzip으로 줄여 base64 글자로 보낸다. 페이지가 DecompressionStream으로 푼다(S41)."""
+    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return base64.b64encode(gzip.compress(raw)).decode("ascii")
 
 
 def doc_payload(pipe, cfg, corpus, doc_id: str, start: int, end: int) -> dict:
@@ -240,8 +253,17 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
     def years() -> list[int]:
         return corpus.years()
 
+    def examples() -> list[str]:
+        return list(cfg.app.examples)
+
     def meetings(year: int) -> list[list[str]]:
         return [list(m) for m in corpus.meetings(year)]
+
+    def meetings_packed(year: int) -> str:
+        # 연도 하나의 회의 목록은 44~72KB이고 Space 응답은 압축되지 않아 전송이 회의 칸
+        # 지연의 대부분이다(S41). 페이지가 풀어 쓴다. 병합 전 페이지가 meetings를 부르므로
+        # 둘 다 연다
+        return packed(meetings(year))
 
     def documents(conference: str) -> list[list[str]]:
         return [list(d) for d in corpus.documents(conference)]
@@ -255,7 +277,7 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
         # 동시 처리 수(app.concurrency)를 chat 그룹에 건다
         gr.api(chat, api_name="chat", concurrency_id="answer", **api)
         # 답변 생성이 큐를 잡고 있어도 문서를 볼 수 있게 문서 함수는 큐를 거치지 않는다
-        for fn in (years, meetings, documents, document):
+        for fn in (years, examples, meetings, meetings_packed, documents, document):
             gr.api(fn, api_name=fn.__name__, queue=False, **api)
     return demo
 

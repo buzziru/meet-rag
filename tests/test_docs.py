@@ -38,7 +38,7 @@ def test_years_and_meetings_are_latest_first(corpus):
     assert corpus.years() == [2018, 2017, 2000]
     assert [c for _, c in corpus.meetings(2000)] == ["F", "E"]
     assert [c for _, c in corpus.meetings(2018)] == ["B", "A"]
-    assert corpus.meetings(2018)[1][0] == "2018년4월9일(월) 법제사법위원회 제1회 제1차"
+    assert corpus.meetings(2018)[1][0] == "2018년 4월 9일(월) 법제사법위원회 제1회 제1차"
 
 
 def test_same_named_meetings_are_told_apart(corpus):
@@ -48,9 +48,9 @@ def test_same_named_meetings_are_told_apart(corpus):
 
 def test_documents_are_named_by_meeting_and_numbered_only_when_needed(corpus):
     assert corpus.documents("A") == [
-        ("2018년4월9일(월) 법제사법위원회 제1회 제1차 #1", "a1"),
-        ("2018년4월9일(월) 법제사법위원회 제1회 제1차 #2", "a2")]
-    assert corpus.documents("B") == [("2018년11월7일(수) 법제사법위원회 제1회 제1차", "b1")]
+        ("2018년 4월 9일(월) 법제사법위원회 제1회 제1차 #1", "a1"),
+        ("2018년 4월 9일(월) 법제사법위원회 제1회 제1차 #2", "a2")]
+    assert corpus.documents("B") == [("2018년 11월 7일(수) 법제사법위원회 제1회 제1차", "b1")]
 
 
 def test_read_returns_the_chosen_document_from_file(corpus):
@@ -95,3 +95,25 @@ def test_doc_body_adds_speakers_when_on(corpus):
     assert "**〈답변 김철수 장관〉**" in out and "둘째" in out and "〈/" not in out
     head = doc_body(corpus.read("a2"), spans, "head")
     assert "질의자: 홍길동 위원" in head and "〈답변" not in head
+
+
+def test_meeting_names_show_one_date_format(corpus):
+    """S41. 한자·공백 날짜도 화면에서는 `2000년 6월 28일(수)` 하나로 보인다."""
+    names = [n for n, _ in corpus.meetings(2000)]
+    assert names == ["2000년 7월 2일(일) 법제사법위원회 제1회 제1차",
+                     "2000년 6월 28일(수) 법제사법위원회 제1회 제1차"]
+
+
+def test_audit_meetings_drop_year_and_date_numbers(tmp_path):
+    """S41. 국정감사 원천은 회·차 칸에 연도와 날짜가 들어 있어 이름에 회의 종류를 대신 붙인다."""
+    _read_corpus_meta.cache_clear()
+    rows = [{**row("g1", "G", "2000년10월23일(월)"), "meeting_number": "2000",
+             "session_number": "2000년10월23일", "meeting_name": "국정감사"},
+            {**row("h1", "H", "2000년10월24일(화)"), "meeting_name": "소위원회"}]
+    path = tmp_path / "corpus.jsonl"
+    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+                    encoding="utf-8", newline="\n")
+    corpus = Corpus(OmegaConf.create({"paths": {"corpus": str(path)}}))
+    assert [n for n, _ in corpus.meetings(2000)] == [
+        "2000년 10월 24일(화) 법제사법위원회 제1회 제1차",
+        "2000년 10월 23일(월) 법제사법위원회 국정감사"]
