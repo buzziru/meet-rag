@@ -249,11 +249,6 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
     def meetings(year: int) -> list[list[str]]:
         return [list(m) for m in corpus.meetings(year)]
 
-    def meeting_index() -> dict[str, list[list[str]]]:
-        # 모든 연도의 회의 목록. API 호출 한 번에 계산과 무관하게 약 3초가 들어, 페이지가
-        # 연결할 때 한 번 받아 두고 연도를 고를 때 요청하지 않는다(S41, 회의 9,662개 약 0.9MB)
-        return {str(y): meetings(y) for y in corpus.years()}
-
     def documents(conference: str) -> list[list[str]]:
         return [list(d) for d in corpus.documents(conference)]
 
@@ -266,7 +261,7 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
         # 동시 처리 수(app.concurrency)를 chat 그룹에 건다
         gr.api(chat, api_name="chat", concurrency_id="answer", **api)
         # 답변 생성이 큐를 잡고 있어도 문서를 볼 수 있게 문서 함수는 큐를 거치지 않는다
-        for fn in (years, examples, meetings, meeting_index, documents, document):
+        for fn in (years, examples, meetings, documents, document):
             gr.api(fn, api_name=fn.__name__, queue=False, **api)
     return demo
 
