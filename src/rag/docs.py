@@ -24,6 +24,13 @@ def doc_name(d: dict) -> str:
     return f"{shown_date(d)} {d['committee_name']} {d['meeting_number']} {d['session_number']}"
 
 
+def source_name(d: dict) -> str:
+    """근거 제목(S41). 날짜와 위원회, 국정감사면 회의 종류를 붙인다. 회의 목록 이름(doc_name)과
+    같은 회의가 다른 이름으로 보이지 않게 한다."""
+    kind = " 국정감사" if d.get("meeting_name") == "국정감사" else ""
+    return f"{shown_date(d)} {d['committee_name']}{kind}"
+
+
 def date_key(d: dict) -> tuple[int, ...]:
     """(연, 월, 일). 원천 날짜에 `2018년4월9일(월)`, `2000年6月28日(水)`, 공백이 섞여 있다."""
     return tuple(map(int, re.match(r"(\d{4})\D+(\d+)\D+(\d+)", d["date"]).groups()))
@@ -54,6 +61,7 @@ class Corpus:
             while f.readline():
                 offsets.append(f.tell())
         self.offset = {d["doc_id"]: o for d, o in zip(meta, offsets, strict=False)}
+        self.meta = {d["doc_id"]: d for d in meta}
         self.docs: dict[str, list[dict]] = defaultdict(list)
         for d in meta:
             self.docs[d["conference_number"]].append(d)

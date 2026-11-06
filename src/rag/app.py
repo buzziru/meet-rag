@@ -22,7 +22,7 @@ from langsmith.run_trees import configure
 from omegaconf import OmegaConf
 
 from rag.display import MeetingInfoMover, WordReplacer, move_meeting_info, replace_words
-from rag.docs import Corpus, doc_body, doc_name, readable, shown_date
+from rag.docs import Corpus, doc_body, doc_name, readable, shown_date, source_name
 from rag.gen_eval.checks import CITE
 from rag.generate import Pipeline, recipe
 from rag.index import load_cfg
@@ -159,6 +159,7 @@ def context_payload(c: dict, corpus) -> dict:
     페이지가 글자로 넣으므로 이스케이프를 푼다."""
     start, end = corpus.chunk_span(c["doc_id"], c["text"]) or (-1, -1)
     return {"n": c["n"], "date": shown_date(c), "committee_name": c["committee_name"],
+            "name": source_name(corpus.meta[c["doc_id"]]),
             "original": c["original"], "doc_id": c["doc_id"], "start": start, "end": end,
             "body": html.unescape(readable(render(c)))}
 

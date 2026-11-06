@@ -2,6 +2,7 @@
 
 import io
 import json
+from collections import defaultdict
 from types import SimpleNamespace
 
 import numpy as np
@@ -137,7 +138,7 @@ def fake_pipe(seen):
 
 
 HISTORY = [{"question": "앞 질문", "answer": "앞 답변 [1].", "rows": [12, 99]}]
-CORPUS = SimpleNamespace(chunk_span=lambda doc_id, text: (0, 1))
+CORPUS = SimpleNamespace(chunk_span=lambda doc_id, text: (0, 1), meta=defaultdict(lambda: CTX))
 
 
 @pytest.mark.parametrize(("mode", "needs", "prev"), [

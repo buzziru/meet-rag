@@ -190,6 +190,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* 답변 글의 근거 번호(S41). 글자 흐름 안의 링크처럼 보이고, 누르면 근거 목록의 그 항목으로 간다 */
 .cite {
+  position: relative;
   padding: 0 1px;
   background: none;
   border: 0;
@@ -197,6 +198,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
+}
+/* 태블릿에서 누르기가 주 경로라 글줄 높이를 바꾸지 않고 누르는 영역만 위아래로 넓힌다. 붙은 번호끼리
+   겹치지 않게 좌우는 넓히지 않는다(화면 리뷰) */
+.cite::after { content: ""; position: absolute; inset: -8px 0; }
+@media (forced-colors: active) {
+  .source.flash { outline: 3px solid CanvasText; outline-offset: -3px; }
 }
 @media (hover: hover) {
   .cite:hover { background: var(--bubble); border-radius: 4px; }

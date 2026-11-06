@@ -18,7 +18,8 @@ from rag.index import load_cfg
 CTX = {"n": 1, "doc_id": "a1", "date": "2020-01-02", "committee_name": "법제사법위원회",
        "original": "http://example/1", "text": "본문 <b>굵게</b>", "index": "idx", "chunk_id": 0}
 STORE = SimpleNamespace(names=["idx"], bounds=[0, 10])  # 인용한 근거의 청크 번호(S51)
-CORPUS = SimpleNamespace(chunk_span=lambda doc_id, text: (3, 3 + len(text)))
+CORPUS = SimpleNamespace(chunk_span=lambda doc_id, text: (3, 3 + len(text)),
+                         meta={"a1": {**CTX, "meeting_name": "국정감사"}})
 
 
 def chunk(content=None, finish=None, usage=None):
@@ -167,7 +168,9 @@ def test_chat_events_send_growing_text_then_contexts_without_labels(cfg):
     assert [e["text"] for e in events] == ["답", "답변", "답변"]
     assert [e["done"] for e in events] == [False, False, True]
     c = events[-1]["contexts"][0]
-    assert set(c) == {"n", "date", "committee_name", "original", "doc_id", "start", "end", "body"}
+    assert set(c) == {"n", "date", "committee_name", "name", "original", "doc_id", "start", "end",
+                      "body"}
+    assert c["name"] == "2020년 1월 2일(목) 법제사법위원회 국정감사"
     assert (c["start"], c["end"]) == (3, 3 + len(CTX["text"]))
     assert "<b>굵게</b>" in c["body"]  # 이스케이프를 풀어 보내고 페이지가 글자로 넣는다
 

@@ -7,7 +7,6 @@ const WAIT_MS = 5000; // 첫 토큰이 이 시간 안에 오지 않으면 대기
 const WAIT_TEXT = "근거를 찾아 답변을 준비하고 있습니다.";
 const CONNECTING_TEXT = "서버에 연결하고 있습니다. 잠시만 기다려 주세요.";
 const RETRY_MS = 5000;
-const CONTEXTS_TITLE = "근거";
 const FAILED_TEXT = "답변을 만들지 못했습니다. 다시 시도해 주세요.";
 const CHUNK_START = "▼ 답변에 쓴 근거";
 const YEAR_SETTLE_MS = 400; // 연도가 이 시간 동안 그대로면 회의 목록을 요청한다
@@ -71,7 +70,9 @@ function fillParagraphs(parent, text, onMark, cite) {
     const bold = line.match(/^\*\*([^*]+)\*\*$/);
     const p = el("p");
     if (bold) {
-      p.append(el("strong", onMark?.(bold[1]) ? "mark" : "", bold[1]));
+      const strong = el("strong", onMark?.(bold[1]) ? "mark" : "");
+      appendText(strong, bold[1], cite);
+      p.append(strong);
     } else {
       for (const [i, piece] of line.split("**").entries()) {
         if (i % 2) {
@@ -103,16 +104,16 @@ function renderSources(contexts, text) {
   const used = contexts.filter((c) => cited.has(c.n));
   const rest = contexts.filter((c) => !cited.has(c.n));
   const details = el("details", "sources");
-  const summary = rest.length && used.length
-    ? `${CONTEXTS_TITLE} ${used.length}개, 참고만 한 근거 ${rest.length}개`
-    : `${CONTEXTS_TITLE} ${contexts.length}개`;
+  // 접힌 상태에서도 인용했는지 보이게 요약에 묶음 이름을 쓴다(화면 리뷰). 인용이 없으면 모두 참고만 한 근거다
+  const summary = [used.length && `인용한 근거 ${used.length}개`, rest.length && `참고만 한 근거 ${rest.length}개`]
+    .filter(Boolean).join(", ");
   details.append(el("summary", "", summary));
   const items = new Map();
   for (const [title, group] of [["답변에 인용한 근거", used], ["참고만 한 근거", rest]]) {
     if (!group.length) continue;
     if (used.length && rest.length) details.append(el("p", "source-group muted", title));
     for (const c of group) {
-      const name = `${c.date} ${c.committee_name}`;
+      const name = c.name ?? `${c.date} ${c.committee_name}`; // 서버가 회의 목록과 같은 회의 종류를 붙인다
       const source = el("div", "source");
       source.tabIndex = -1; // 답변의 번호를 누르면 초점이 여기로 온다
       const head = el("div", "source-head");
@@ -138,7 +139,7 @@ function renderSources(contexts, text) {
       details.open = true;
       item.source.scrollIntoView({ block: "center", behavior: reduceMotion.matches ? "auto" : "smooth" });
       item.source.focus({ preventScroll: true });
-      item.source.classList.remove("flash");
+      details.querySelector(".flash")?.classList.remove("flash"); // 방금 간 근거만 강조한다
       void item.source.offsetWidth; // 같은 근거를 다시 눌러도 강조가 다시 보이게 한다
       item.source.classList.add("flash");
     });
