@@ -99,29 +99,15 @@ class UsageLimit:
             return None
 
 
-IP_PROBE = "198.51.100.7"  # 임시(S41): 문서용 주소 대역. 확인 요청이 헤더에 넣는 시험 값
-
-
-def ip_header_probe(request) -> None:
-    """임시(S41): 프록시가 x-forwarded-for를 어떻게 넘기는지 본다. 실제 주소는 남기지 않는다."""
-    import ipaddress
-    if request is None:
-        return
-    parts = [x.strip() for x in request.headers.get("x-forwarded-for", "").split(",") if x.strip()]
-    host = request.client.host if request.client else ""
-    try:
-        private = ipaddress.ip_address(host).is_private
-    except ValueError:
-        private = None
-    first, last = bool(parts) and parts[0] == IP_PROBE, bool(parts) and parts[-1] == IP_PROBE
-    print(f"IP 헤더 확인: 주소 {len(parts)}개, 시험 값 맨 앞 {first}, 맨 끝 {last}, "
-          f"접속 주소 사설망 {private}", flush=True)
-
-
 def client_ip(request) -> str:
-    """방문자 IP. Space는 프록시 뒤라 x-forwarded-for의 첫 값을 쓴다. 로그에는 남기지 않는다."""
-    forwarded = request.headers.get("x-forwarded-for", "") if request else ""
-    return forwarded.split(",")[0].strip() or (request.client.host if request else "")
+    """방문자 IP. Space 프록시는 호출자가 보낸 x-forwarded-for를 그대로 두고 실제 접속 주소를
+    맨 끝에 덧붙인다(2026-11-06 비공개 Space에서 시험 값을 넣어 확인: 시험 값이 맨 앞, 주소
+    2개). 그래서 맨 끝 값을 써야 위조로 한도를 피하지 못한다. 로그에는 남기지 않는다."""
+    if request is None:
+        return ""
+    header = request.headers.get("x-forwarded-for", "")
+    forwarded = [x.strip() for x in header.split(",") if x.strip()]
+    return forwarded[-1] if forwarded else (request.client.host if request.client else "")
 
 
 CITATION = re.compile(r"\s*(?:\[\d+\])+")
@@ -322,8 +308,7 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
         yield from chat_events(pipe, cfg, rec, corpus, message, history, rewriter,
                                gate=lambda: limit.check(client_ip(request)))
 
-    def years(request: gr.Request = None) -> list[int]:
-        ip_header_probe(request)  # 임시: IP 헤더 위조 확인(S41). 확인 뒤 지운다
+    def years() -> list[int]:
         return corpus.years()
 
     def examples() -> list[str]:

@@ -423,8 +423,9 @@ def test_chat_events_gate_blocks_without_search(cfg):
     assert list(app.chat_events(pipe, cfg, {}, CORPUS, " ", gate=lambda: 1 / 0)) == []
 
 
-def test_client_ip_uses_first_forwarded_address():
-    req = SimpleNamespace(headers={"x-forwarded-for": "1.2.3.4, 10.0.0.1"},
+def test_client_ip_uses_address_added_by_proxy():
+    """S41. 프록시가 맨 끝에 덧붙인 주소를 쓴다. 호출자가 앞에 넣은 값으로 한도를 피하지 못한다."""
+    req = SimpleNamespace(headers={"x-forwarded-for": "9.9.9.9, 1.2.3.4"},
                           client=SimpleNamespace(host="10.0.0.9"))
     assert app.client_ip(req) == "1.2.3.4"
     direct = SimpleNamespace(headers={}, client=SimpleNamespace(host="5.6.7.8"))
