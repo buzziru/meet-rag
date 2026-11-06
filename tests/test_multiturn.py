@@ -86,22 +86,36 @@ def reuse_pipe(mode):
 
 
 @pytest.mark.parametrize(("mode", "prev", "docs", "chunks", "reused"), [
-    # 앞 근거를 앞자리에 넣고 남은 칸을 이번 근거 순서대로 채운다. 근거 수는 3 그대로다
-    ("decision", [2], ["b", "c", "a"], [2, 3, 1], [True, False, False]),
+    # 이번 결과를 앞자리에 두고 앞 근거를 뒤 칸에 넣는다. 근거 수는 3 그대로다(PR #249)
+    ("decision", [2], ["c", "a", "b"], [3, 1, 2], [False, False, True]),
     # 같은 회의록이어도 이번 검색이 고른 다른 청크(a의 1)는 남긴다(확인용 c10)
-    ("decision", [0], ["a", "c", "a"], [0, 3, 1], [True, False, False]),
-    # 같은 청크는 한 번만 넣는다
-    ("decision", [1], ["a", "c", "d"], [1, 3, 4], [True, False, False]),
+    ("decision", [0], ["c", "a", "a"], [3, 1, 0], [False, False, True]),
+    # 이번 결과에 이미 있는 청크는 다시 넣지 않는다
+    ("decision", [1], ["c", "a", "d"], [3, 1, 4], [False, False, False]),
     # rule은 그 문서가 이번 후보에 다시 나올 때만 넣는다(b는 후보 밖)
-    ("rule", [2, 0], ["a", "c", "a"], [0, 3, 1], [True, False, False]),
+    ("rule", [2, 0], ["c", "a", "a"], [3, 1, 0], [False, False, True]),
     ("rule", [2], ["c", "a", "d"], [3, 1, 4], [False, False, False]),
 ])
-def test_retrieve_puts_previous_chunks_first_and_renumbers(mode, prev, docs, chunks, reused):
+def test_retrieve_puts_previous_chunks_last(mode, prev, docs, chunks, reused):
     out = Pipeline.retrieve(reuse_pipe(mode), "q", None, 3, prev=prev)
     assert [c["doc_id"] for c in out] == docs
     assert [c["chunk_id"] for c in out] == chunks
     assert [c["n"] for c in out] == [1, 2, 3]
     assert [c["stages"].get("reused", False) for c in out] == reused
+
+
+@pytest.mark.parametrize(("prev", "chunks"), [
+    ([0], [1, 3, 4]),  # 0은 1번 칸(a의 1)의 확장이 덮어 다시 넣지 않는다
+    ([2], [1, 3, 2]),  # 2는 1 옆이지만 다른 회의록(b)이라 확장이 덮지 않는다
+])
+def test_reuse_keeps_expansion_on_this_turns_first_chunk(prev, chunks):
+    pipe = reuse_pipe("decision")
+    pipe.expand = SimpleNamespace(top=1, chunks=1)
+    scores, _, stages = pipe.rank("q", None)
+    pipe.rank = lambda query, q_emb, qid=None: (scores, ["a", "c", "d", "e"], stages)
+    out = Pipeline.retrieve(pipe, "q", None, 3, prev=prev)
+    assert [c["chunk_id"] for c in out] == chunks
+    assert out[0]["stages"].get("reused") is None  # 확장이 붙는 1번 칸은 이번 1위다
 
 
 def test_retrieve_without_prev_is_unchanged():

@@ -308,17 +308,23 @@ class Pipeline:
 
     def reuse(self, prev: list[int], picked: list[int], stages: list[dict], docs: list[str],
               k: int) -> tuple[list[int], list[dict]]:
-        """앞 답변이 인용한 청크(prev)를 근거 앞자리에 넣고 남은 자리를 이번 검색 결과로 채운다
-        (S51). 근거 수는 k 그대로라 프롬프트 길이가 늘지 않는다. 판단 방식이 rule이면 그 문서가
-        이번 후보(docs, 상위 top_k)에 다시 나온 청크만 넣는다. 이번 근거는 앞 근거와 같은 청크만
-        빼고, 같은 회의록의 다른 청크는 남긴다. 후속 질문이 같은 회의의 다른 대목을 물으면 그
-        청크가 답이다(확인용 c10, 문서 단위로 빼서 답이 다른 회의로 갔다)."""
+        """이번 검색 결과를 앞자리에 두고, 앞 답변이 인용한 청크(prev)를 뒤 칸에 넣는다(S51).
+        이번 1위가 1번 칸에 남아 생성 기준의 앞뒤 확장(D-70)도 그 칸에 붙는다. 근거 수는 k 그대로라
+        프롬프트 길이가 늘지 않고, 앞 근거 수만큼 이번 결과의 뒤쪽이 빠진다(사용자 결정
+        2026-11-06, PR #249). 판단 방식이 rule이면 그 문서가 이번 후보(docs, 상위 top_k)에 다시
+        나온 청크만 넣는다. 이번 결과에 이미 있거나 확장 칸이 덮는 앞 청크는 다시 넣지 않는다.
+        같은 회의록의 다른 청크는 남긴다(확인용 c10, 문서 단위로 빼서 답이 다른 회의로 갔다)."""
         doc_of = self.retriever.dense_ids
         if self.cfg.app.multiturn.reuse.mode == "rule":
             prev = [r for r in prev if doc_of[r] in docs]
-        pairs = [(r, {"reused": True}) for r in prev]
-        pairs += [(p, st) for p, st in zip(picked, stages[:k], strict=True) if p not in prev]
-        return [p for p, _ in pairs[:k]], [st for _, st in pairs[:k]]
+        n = self.expand.chunks
+        # 확장(store.window)은 같은 회의록의 앞뒤 청크만 붙이므로 같은 회의록일 때만 덮인다고 본다
+        covered = {p + d for p in picked[:self.expand.top] for d in range(-n, n + 1)
+                   if 0 <= p + d < len(doc_of) and doc_of[p + d] == doc_of[p]}
+        prev = [r for r in prev if r not in picked and r not in covered]
+        keep = list(zip(picked, stages[:k], strict=True))[:k - len(prev)]
+        pairs = keep + [(r, {"reused": True}) for r in prev]
+        return [p for p, _ in pairs], [st for _, st in pairs]
 
     @traceable(name="build_messages", process_inputs=lambda i: {"query": i["query"]})
     def messages(self, contexts: list[dict], query: str, history: list[dict] = ()) -> list[dict]:
