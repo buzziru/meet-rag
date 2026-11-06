@@ -98,8 +98,15 @@ const HISTORY_TURNS = 3;
 let history = [];
 
 /** 답변 아래 근거 목록. 답변이 인용한 근거와 참고만 한 근거(검색은 됐지만 인용되지 않음)를 나눈다(S41).
- *  돌려준 cite(n)은 답변 글의 `[n]`에 넣을 버튼을 만든다. 누르면 목록을 열고 그 근거로 옮긴다. */
-function renderSources(contexts, text) {
+ *  돌려준 cite(n)은 답변 글의 `[n]`에 넣을 버튼을 만든다. 누르면 목록을 열고 그 근거로 옮긴다. 근거마다 있는
+ *  "답변으로 돌아가기"는 마지막으로 누른 번호로, 번호를 누르지 않고 왔으면 답변 첫머리로 돌아간다(사용자 의견). */
+function renderSources(contexts, text, answerBody) {
+  let lastCite = null;
+  const back = () => {
+    const target = lastCite?.isConnected ? lastCite : answerBody;
+    target.scrollIntoView({ block: "center", behavior: reduceMotion.matches ? "auto" : "smooth" });
+    if (target === lastCite) target.focus({ preventScroll: true });
+  };
   const cited = new Set([...text.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])));
   const used = contexts.filter((c) => cited.has(c.n));
   const rest = contexts.filter((c) => !cited.has(c.n));
@@ -121,7 +128,10 @@ function renderSources(contexts, text) {
       open.type = "button";
       open.setAttribute("aria-label", `근거 ${c.n} ${name} 원문에서 보기`);
       open.addEventListener("click", () => openDocument(c.doc_id, c.start, c.end, open));
-      head.append(el("strong", "source-title", `[${c.n}] ${name}`), open, originalLink(c.original, name));
+      const toAnswer = el("button", "source-back", "답변으로 돌아가기");
+      toAnswer.type = "button";
+      toAnswer.addEventListener("click", back);
+      head.append(el("strong", "source-title", `[${c.n}] ${name}`), open, originalLink(c.original, name), toAnswer);
       source.append(head);
       fillParagraphs(source, c.body);
       details.append(source);
@@ -136,6 +146,7 @@ function renderSources(contexts, text) {
     button.title = item.name;
     button.setAttribute("aria-label", `근거 ${n}, ${item.name}`);
     button.addEventListener("click", () => {
+      lastCite = button;
       details.open = true;
       item.source.scrollIntoView({ block: "center", behavior: reduceMotion.matches ? "auto" : "smooth" });
       item.source.focus({ preventScroll: true });
@@ -189,7 +200,7 @@ async function ask(message) {
       const item = event.data[0];
       // 클라이언트가 마지막 값을 한 번 더 보내므로 근거는 처음 한 번만 만든다. 답변 글의 번호는 근거가 온
       // 뒤에야 버튼이 된다(스트리밍 중에는 글자다)
-      if (item.done && item.contexts.length && !sources) sources = renderSources(item.contexts, item.text);
+      if (item.done && item.contexts.length && !sources) sources = renderSources(item.contexts, item.text, body);
       showText(item.text, sources?.cite);
       if (item.done) ({ raw, rows = [] } = item);
       if (item.done && item.notice && !answer.querySelector(".notice")) answer.append(el("p", "notice muted", item.notice));

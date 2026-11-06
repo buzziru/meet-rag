@@ -219,6 +219,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
   text-underline-offset: 3px;
 }
 
+/* 근거에서 답변으로 돌아가는 버튼(S41). 근거 머리줄의 오른쪽 끝에 둔다 */
+.source-back { margin-left: auto; padding: 0; background: none; border: 0; cursor: pointer; color: var(--muted); font-size: 0.85rem; text-decoration: underline; text-underline-offset: 3px; }
+
 a { color: inherit; text-underline-offset: 3px; }
 
 .composer { padding: 8px 16px 12px; }
