@@ -130,7 +130,7 @@ PR 1 병합 뒤 Space를 다시 올린다(`CLAUDE.md` Space 배포 명령, 재�
 ## 수정 허용 파일
 
 PR 1: `deploy/web/index.html`, `deploy/web/style.css`, `deploy/web/app.js`, `deploy/space/app.py`, `deploy/space/README.md`, `src/rag/app.py`, `configs/config.yaml`(`app` 절), `tests/test_app.py`, 이 문서, `docs/PLAN.md`. 사용자가 지시서 확인 뒤 PR 1에 더한 범위(아래 "PR 1에 더한 것")로 `src/rag/docs.py`, `tests/test_docs.py`, `docs/slices/39-zerogpu-rerank.md`(보강 한 줄)를 더한다.
-PR 2: `deploy/web/app.js`, `.claude/skills/meet-rag/SKILL.md`("화면 검증" 절), `docs/harness/adr/`, `docs/SPEC.md`(미결 3 표시만), `docs/DECISIONS.md`(D-74·D-79·D-80·D-84 표시, 이 조각의 결정), `README.md`(새 파일, 결정 5), 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/STATUS.md`는 핸드오프 때.
+PR 2: `deploy/web/app.js`, `src/rag/app.py`(`meetings` 삭제), `deploy/space/app.py`(공개 뒤 더한 재정렬 할당량 수정, D-92 결정 7), `.claude/skills/meet-rag/SKILL.md`("화면 검증" 절), `docs/harness/adr/`, `docs/SPEC.md`(미결 3 표시만), `docs/DECISIONS.md`(D-74·D-79·D-80·D-84 표시, 이 조각의 결정), `README.md`(새 파일, 결정 5), 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/STATUS.md`는 핸드오프 때.
 점검 문서(`docs/reviews/2026-11-design-review.md`)는 스냅샷이라 고치지 않는다.
 
 ## 범위 밖
