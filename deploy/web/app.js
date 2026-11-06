@@ -210,7 +210,8 @@ function sync() {
 
 /** 보이는 첫 대상에 초점을 둔다. 연 곳이 접힌 패널 안이면 다음 후보로 간다. */
 function focusFirst(...targets) {
-  const target = targets.find((t) => t?.isConnected && !t.disabled && t.getClientRects().length);
+  const visible = (t) => t.getClientRects().length && !t.closest(".drawer:not(.open)");
+  const target = targets.find((t) => t?.isConnected && !t.disabled && visible(t));
   target?.focus();
 }
 
