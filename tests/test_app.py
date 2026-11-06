@@ -363,3 +363,7 @@ def test_shown_words_refuses_empty_word():
         cfg.app.shown_words = {"": "x"}
     with pytest.raises(SystemExit, match="shown_words"):
         app.shown_words(cfg)
+    with open_dict(cfg):
+        cfg.app.shown_words = {"제공된 회의록": None}  # 새 말을 비우면 None이 된다
+    with pytest.raises(SystemExit, match="shown_words"):
+        app.shown_words(cfg)

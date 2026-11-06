@@ -122,8 +122,8 @@ def shown_words(cfg) -> dict[str, str]:
     """화면 글에서 바꿀 말(S52, app.shown_words). 빈 말은 모든 글자 사이에 새 말을 넣어 화면을
     조용히 망가뜨리므로 읽을 때 멈춘다."""
     words = OmegaConf.to_container(cfg.app.shown_words)
-    if not all(isinstance(k, str) and k for k in words):
-        raise SystemExit(f"app.shown_words의 바꿀 말은 빈 글자일 수 없다: {words}")
+    if not all(isinstance(k, str) and k and isinstance(v, str) for k, v in words.items()):
+        raise SystemExit(f"app.shown_words는 빈 글자가 아닌 말을 글자로 바꾼다: {words}")
     return words
 
 
