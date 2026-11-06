@@ -193,6 +193,10 @@ def main(endpoint: Callable | None = None, scorer: Callable | None = None,
     if cfg.retriever.get("rerank") and cfg.retriever.rerank.enabled and scorer is None:
         raise SystemExit("실시간 재정렬은 Space의 GPU 점수 함수가 있어야 한다(S39). 로컬은 "
                          "retriever.rerank.enabled=false로 실행한다")
+    if cfg.app.concurrency != 1:
+        # 임베딩 프로세스 파이프와 재정렬 멈춤 상태가 질의 하나씩을 전제한다. 둘이 겹치면 오류 없이
+        # 서로의 질의 벡터를 받는다(이슈 #239)
+        raise SystemExit(f"app.concurrency는 1만 지원한다: {cfg.app.concurrency}")
     logging.getLogger("langsmith.client").addHandler(TRACING)
     start = time.perf_counter()
     pipe = Pipeline(cfg, scorer=scorer, embedder=embedder)

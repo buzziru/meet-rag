@@ -89,6 +89,7 @@ def test_stream_ends_with_contexts():
 @pytest.mark.parametrize("args, match", [
     (["+exp=current"], "재정렬"),
     (["+exp=current", "retriever.rerank.enabled=false"], "인덱스 읽음"),
+    (["+exp=current", "retriever.rerank.enabled=false", "app.concurrency=2"], "concurrency"),
 ])
 def test_main_requires_rerank_off_before_loading(monkeypatch, args, match):
     def loaded(cfg, scorer=None, embedder=None):
