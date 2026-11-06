@@ -314,14 +314,10 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
     def examples() -> list[str]:
         return list(cfg.app.examples)
 
-    def meetings(year: int) -> list[list[str]]:
-        return [list(m) for m in corpus.meetings(year)]
-
     def meetings_packed(year: int) -> str:
         # 연도 하나의 회의 목록은 44~72KB이고 Space 응답은 압축되지 않아 전송이 회의 칸
-        # 지연의 대부분이다(S41). 페이지가 풀어 쓴다. 병합 전 페이지가 meetings를 부르므로
-        # 둘 다 연다
-        return packed(meetings(year))
+        # 지연의 대부분이다(S41). 페이지가 풀어 쓴다
+        return packed([list(m) for m in corpus.meetings(year)])
 
     def documents(conference: str) -> list[list[str]]:
         return [list(d) for d in corpus.documents(conference)]
@@ -335,7 +331,7 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
         # 동시 처리 수(app.concurrency)를 chat 그룹에 건다
         gr.api(chat, api_name="chat", concurrency_id="answer", **api)
         # 답변 생성이 큐를 잡고 있어도 문서를 볼 수 있게 문서 함수는 큐를 거치지 않는다
-        for fn in (years, examples, meetings, meetings_packed, documents, document):
+        for fn in (years, examples, meetings_packed, documents, document):
             gr.api(fn, api_name=fn.__name__, queue=False, **api)
     return demo
 

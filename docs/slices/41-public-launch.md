@@ -70,7 +70,7 @@ PR 1 병합 뒤 Space를 다시 올린다(`CLAUDE.md` Space 배포 명령, 재�
 ### 3. 공개 뒤 정리 (PR 2)
 
 - 병합 전 production 페이지를 위해 남긴 압축 안 된 회의 목록 API `meetings`를 지운다(PR 1에 더한 것, `meetings_packed`)
-- S47 토큰 연결 코드(`deploy/web/app.js:33-34`)를 지운다. 공개 Space는 토큰이 필요 없다(D-88 결정 3). 병합·배포 뒤 사용자에게 토큰 폐기 시점을 알린다
+- S47 토큰 연결 코드(`deploy/web/app.js:33-34`)를 지운다. 실제로 지운 곳은 PR 1 뒤 줄 번호로 31\~33줄이다(45c13bd) 공개 Space는 토큰이 필요 없다(D-88 결정 3). 병합·배포 뒤 사용자에게 토큰 폐기 시점을 알린다
 - `meet-rag` 스킬 "화면 검증" 절의 토큰 옮기기 문장을 지운다. 하네스 변경이라 ADR을 하나 더한다(`docs/harness/adr/`)
 - `docs/SPEC.md` 미결 3 줄에 3초는 대화의 첫 질문에만 적용한다는 표시를 붙인다(사용자 결정 2026-11-06)
 - 앞 결정 표시: D-74(공개 API 표시를 끈다 → 목록에서 숨기고 호출은 연다, 페이지가 API를 부르기 때문), D-79·D-80(비공개 Space → 공개), D-84 결정 6. 무엇이 왜 바뀌었는지 적는다
@@ -130,7 +130,7 @@ PR 1 병합 뒤 Space를 다시 올린다(`CLAUDE.md` Space 배포 명령, 재�
 ## 수정 허용 파일
 
 PR 1: `deploy/web/index.html`, `deploy/web/style.css`, `deploy/web/app.js`, `deploy/space/app.py`, `deploy/space/README.md`, `src/rag/app.py`, `configs/config.yaml`(`app` 절), `tests/test_app.py`, 이 문서, `docs/PLAN.md`. 사용자가 지시서 확인 뒤 PR 1에 더한 범위(아래 "PR 1에 더한 것")로 `src/rag/docs.py`, `tests/test_docs.py`, `docs/slices/39-zerogpu-rerank.md`(보강 한 줄)를 더한다.
-PR 2: `deploy/web/app.js`, `.claude/skills/meet-rag/SKILL.md`("화면 검증" 절), `docs/harness/adr/`, `docs/SPEC.md`(미결 3 표시만), `docs/DECISIONS.md`(D-74·D-79·D-80·D-84 표시, 이 조각의 결정), `README.md`(새 파일, 결정 5), 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/STATUS.md`는 핸드오프 때.
+PR 2: `deploy/web/app.js`, `src/rag/app.py`(`meetings` 삭제), `deploy/space/app.py`(공개 뒤 더한 재정렬 할당량 수정, D-92 결정 7), `.claude/skills/meet-rag/SKILL.md`("화면 검증" 절), `docs/harness/adr/`, `docs/SPEC.md`(미결 3 표시만), `docs/DECISIONS.md`(D-74·D-79·D-80·D-84 표시, 이 조각의 결정), `README.md`(새 파일, 결정 5), 이 문서, `docs/PLAN.md`, `docs/PLAN-done.md`, `docs/STATUS.md`는 핸드오프 때.
 점검 문서(`docs/reviews/2026-11-design-review.md`)는 스냅샷이라 고치지 않는다.
 
 ## 범위 밖
@@ -215,3 +215,39 @@ OpenRouter 7번, 약 $0.004(추천 질문 로컬 확인 3번, 미리보기 3번,
 ### 리뷰 반영
 
 - 근거에서 답변으로 돌아가기(PR #252 리뷰, 사용자 의견 2026-11-06, 176fecd): 근거 머리줄 끝에 "답변으로 돌아가기"를 둔다. 답변의 번호를 눌러 왔으면 그 번호로 돌아가 초점을 주고, 목록을 직접 열어 왔으면 답변 첫머리로 간다. 미리보기 확인(질문 1번): `[5]`를 눌러 근거 [5]로 간 뒤 "답변으로 돌아가기"를 누르면 초점이 `[5]`로 돌아오고 화면 안에 있다. OpenRouter 누적 8번, 약 $0.005
+
+## 결과 (2026-11-06, 공개와 PR 2)
+
+커밋: 토큰 연결 코드와 `meetings` 삭제 45c13bd, 소유자 점수 호출의 `x-ip-token` 53b91ea. Space 코드 커밋은 Hub의 b83fb90(공개, `COMMIT` 53b91ea). 결정은 D-92
+
+| # | 결과 |
+| --- | --- |
+| 1 | `uv run pytest -q` 687 통과(PR 1b까지), `uv run ruff check .` 통과 |
+| 4 | Space를 공개로 바꾼 뒤 재시작해 비공개 Dataset 180개 파일 내려받기 완료, 토큰 없는 `years` 28개. Vercel 보호를 미리보기에만 남겨 `meet-rag.vercel.app`·`meet-rag-ig-pr.vercel.app`은 로그인 없이 200, 미리보기는 302. cron 등록 켜짐(`0 18 * * *`). 토큰 없는 Aside 브라우저로 대표 주소에서 문서 열람과 질의 5개(근거 붙음, 첫 글자 1.7\~9.0초) |
+| 5 | 3초 재측정(아래) |
+| 6 | 점수 함수를 밖에서 토큰 없이 직접 부르면 호출자의 익명 할당량으로 매겨져 runs limit 오류가 났다. 소유자 할당량을 쓰지 않는다. 문서 API를 차례로 읽는 것은 막지 않는다(D-74 감수 그대로). 사용 한도는 채팅만 센다 |
+| 7 | 페이지에서 `hf_token`을 지웠다(45c13bd). 토큰 폐기는 이 PR 배포 뒤 사용자에게 알린다 |
+
+### 3초 재측정
+
+공개 직후 토큰 없는 클라이언트(`gradio_client`, 페이지와 같은 경로)로 지어낸 첫 질문 20개와 각각의 후속 질문 1개("그 논의에서 정부 측은 어떻게 답했나요?")를 보냈다. 첫 글자가 올 때까지 잰다.
+
+첫 측정은 판정에 쓰지 않았다. 공개 직후 재정렬 호출 3번 뒤 "You have exceeded your ZeroGPU runs limit"으로 재정렬이 1시간 꺼져 대부분 재정렬 없이 쟀다(첫 질문 중앙값 2.80초, 3초 초과 6개). 그때 소유자 할당량은 300초 중 246초가 남아 있었다. 원인은 `gradio_client`가 Gradio 이벤트 안에서 방문자 요청의 `x-ip-token`을 자기 헤더에 복사해 두는 동작이다(`gradio_client/client.py` `add_zero_gpu_headers`, 사본에 넣지 않고 `self.headers`를 고친다). Space 밖에서 소유자 토큰으로 점수 함수를 부르면 소유자 할당량이 줄었고(`token=` 2.87초, `Authorization` 헤더 2.06초), 토큰 없이 부르면 runs limit 오류가 났다. 소유자 점수 호출에서 이 복사를 끈 뒤 익명 질의 4개가 모두 재정렬을 거쳤고 소유자 할당량이 줄었다. 조사는 opencode worker(crouton)가 공개 문서·소스를 모았고, 판단에 쓴 동작은 설치된 소스와 실험으로 메인이 확인했다.
+
+| 재정렬 켬(두 번째 측정) | 중앙값 | 범위 | 3초 초과 |
+| --- | --- | --- | --- |
+| 첫 질문 첫 글자 | 2.80초 | 2.22\~8.50초 | 20개 중 9개 |
+| 후속 질문 첫 글자 | 3.54초 | 2.78\~42.16초 | 20개 중 18개 |
+| 후속 − 첫 질문 | +0.65초 | | |
+
+판정: 통과(D-30, 중앙값 D-37, 첫 질문만 S40). Space 로그: 재정렬 44번 모두 성공, 중앙값 0.38초, 최대 6.26초, 10초 초과 0번(S45의 10초 초과 1회와 비교). 생성 첫 토큰(서버, 생성 호출부터)은 대부분 0.4\~0.7초이고, 후속 질문 재작성이 0.41\~1.71초 더해진다. 브라우저 쪽과 서버 생성 첫 토큰 사이 약 2초(질의 임베딩·검색, 재정렬, 페이지와 Space 연결)는 나눠 재지 않았다. 문서 찾기의 회의 목록은 서버 계산 4\~6ms이고 나머지는 전송이었다(PR 1에 더한 것의 압축). 늦은 값 8초대는 재시작 뒤 첫 질의와 재정렬이 늘어난 경우이고, 후속 질문 42초 1번은 원인을 보지 않았다. 소유자 할당량은 재정렬 한 번에 약 0.6초를 써 하루 300초면 약 500번이다
+
+OpenRouter: 공개 단계 질의 89개와 재작성 40번, 약 $0.06(승인 범위 안). Space 재시작: 공개 단계 7번(병합 커밋 2번, 공개 확인 1번, 할당량 수정 4번 중 1번은 수정 없이 올린 실수)
+
+### 지시서와 다르게 하거나 더한 것
+
+- 사용 한도와 Space 공개 결정(PR 1b, 위 "1b" 절)
+- 재정렬 할당량 수정(D-92 결정 7)은 지시서에 없던 일이다. 공개 뒤에야 드러나 PR 2에 넣었다
+- `run_history`는 그대로 둔다(D-92 결정 8). `share`(대화를 Discussions에 올리기)는 Space 설정의 구성 요소가 API 17개뿐이라 버튼이 없다(2026-11-06 `/config` 확인)
+- 스킬 "화면 검증" 절의 토큰 옮기기 문장 삭제는 하네스 변경이라 작업 PR과 섞지 않고 F 흐름(`chore/`, ADR)으로 이 PR 뒤에 한다
+- cron이 절전을 막는지 3일 관찰은 STATUS에 남긴다
