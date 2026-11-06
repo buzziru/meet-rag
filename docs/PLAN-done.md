@@ -52,6 +52,7 @@ S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를
   - [x] 전체 파이프라인 점검(사용자 지시 2026-11-05): `docs/CLAUDE.md` "정합 점검" 절차의 DECISIONS 점검과 코드 리뷰(R1 적재\~검색, R2 생성\~평가)를 병렬로 한다. test 전 점검의 낮음 항목도 이때 본다(사용자 결정 2026-10-28). 사용자가 고칠 범위를 정하고, 수정은 SLICE로 나눈다. 기준과 지적은 `docs/reviews/`에 남긴다. test를 다시 돌리지 않는다(D-90) → docs/reviews/2026-11-pipeline-review.md
   - [x] 코드 리뷰 R3 앱·배포: S48 병합 뒤 `app`, `display`, `docs`, `deploy/`를 보고, 평가 설정과 배포 설정의 차이를 대조한다 → docs/reviews/2026-11-pipeline-review.md
   - [x] S50 평가·실행 안전장치: 점검 C 항목 R2-3, R1-2, R1-4, R1-5, R1-8, R2-5를 고친다(`docs/reviews/2026-11-pipeline-review.md`). 결과 값은 바뀌지 않는다. R2-3은 judge 입력 처리에 닿아 D-49 동결 해석을 지시서에서 정한다 → slices/50-run-guards.md
+- [x] S53 judge 변형 시험(사용자 지시·승인 2026-11-06): 답변을 일부러 망가뜨려 judge가 잡는지 잰다. 지시서 `docs/slices/53-judge-perturb.md`, 결과는 회고 성과 주장 범위에 반영 → slices/53-judge-perturb.md
 
 ## 리팩터링 (코드 리뷰 2026-10)
 

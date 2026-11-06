@@ -22,6 +22,7 @@ AI Hub 국회 회의록 데이터로 만드는 한국어 RAG 질의응답 시스
 - 검색: `uv run python -m rag.search [index.scope=full]` (질의 임베딩 캐시가 없을 때: slices/05-retrieve.md)
 - test 1회(S13): 실행을 마쳤고 다시 돌리지 않는다. 절차·명령·결과는 slices/13-test-run.md, D-39
 - 생성 test 1회(S46): 실행을 마쳤고 다시 돌리지 않는다. 절차는 slices/46-gen-test.md, 결과는 D-90
+- judge 변형 시험(S53): `PYTHONUTF8=1 LANGSMITH_TRACING=false doppler run -- uv run python -m rag.gen_eval.perturb +exp=current` (gen-full 표본 답변을 망가뜨려 같은 judge로 다시 채점, slices/53-judge-perturb.md)
 - 생성: `uv run python -m rag.generate +exp=current ask.qid=<dev qid>` (`current`는 지금 기준 EXP의 별칭 `configs/exp/current.yaml`. 검색은 `+exp`의 설정. 재정렬 점수 파일이 있는 dev 질의만, 경로·옵션: slices/06-generate.md, slices/14-gen-eval.md. 5xx는 서버 상태부터 확인)
 - 생성 평가(S14): `uv run python -m rag.gen_eval.generate +exp=current` → `rag.gen_eval.judge` → `rag.gen_eval.report` (같은 override, 기본은 판정용 세트 dev-full 330질의(D-50), 반복은 `gen_eval.gen_rep`·`judge.rep`, 비용·시간: slices/24-variance.md)
 - 블라인드 확인(S25): 1질의 검수 뒤 중단(D-51). 표본·집계 도구 `uv run python -m rag.gen_eval.blind +exp=exp017 [--score]` (S25 기록, slices/25-blind-baseline.md)
