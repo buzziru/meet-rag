@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from langsmith.run_trees import configure
 from langsmith.utils import tracing_is_enabled
+from omegaconf import open_dict
 
 import rag.index
 from rag import app
@@ -352,3 +353,13 @@ def test_shown_replaces_refusal_words_only_on_screen(cfg):
     assert "".join(i for i in items if isinstance(i, str)) == want
     assert items[-1]["answer"] == want and items[-1]["raw"] == "".join(raw)
     assert result["answer"] == "".join(raw)
+
+
+def test_shown_words_refuses_empty_word():
+    """S52. 빈 말을 바꾸면 모든 글자 사이에 새 말이 들어가므로 읽을 때 멈춘다."""
+    assert app.shown_words(load_cfg(["index.scope=full"])) == {"제공된 회의록": "검색된 회의록"}
+    cfg = load_cfg(["index.scope=full"])
+    with open_dict(cfg):
+        cfg.app.shown_words = {"": "x"}
+    with pytest.raises(SystemExit, match="shown_words"):
+        app.shown_words(cfg)

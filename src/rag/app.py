@@ -118,6 +118,15 @@ def chunk_row(pipe, c: dict) -> int:
     return int(store.bounds[store.names.index(c["index"])]) + int(c["chunk_id"])
 
 
+def shown_words(cfg) -> dict[str, str]:
+    """화면 글에서 바꿀 말(S52, app.shown_words). 빈 말은 모든 글자 사이에 새 말을 넣어 화면을
+    조용히 망가뜨리므로 읽을 때 멈춘다."""
+    words = OmegaConf.to_container(cfg.app.shown_words)
+    if not all(isinstance(k, str) and k for k in words):
+        raise SystemExit(f"app.shown_words의 바꿀 말은 빈 글자일 수 없다: {words}")
+    return words
+
+
 def shown(stream: Iterator[str | dict], max_name: int,
           words: dict[str, str] | None = None) -> Iterator[str | dict]:
     """pipe.stream의 답변을 화면 글로 바꾼다(S45). 생성 결과와 추적에는 원문이 남는다. 잡아 둔
@@ -180,7 +189,7 @@ def chat_events(pipe, cfg, rec: dict, corpus, message: str, history=None,
     stream = pipe.stream(message, pipe.embed(search), turns, search, prev,
                          langsmith_extra={"metadata": {**rec, **meta, "turn": turn,
                                                        "prev_rows": len(prev)}})
-    words = OmegaConf.to_container(cfg.app.shown_words)
+    words = shown_words(cfg)
     for item in shown(stream, cfg.app.meeting_info_max_name, words):
         if isinstance(item, dict):
             if item.get("first_token_s") is not None:
@@ -218,6 +227,7 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
 
     # 대화 이어 가기 설정은 첫 질문 동작을 바꾸지 않아 생성 레시피 밖의 추적 메타데이터로 남긴다
     # (S40)
+    shown_words(cfg)  # 시작할 때 설정을 확인한다
     rec = {**recipe(cfg, pipe.index_meta, True),
            "multiturn": OmegaConf.to_container(cfg.app.multiturn)}
     rewriter = follow_up(cfg)
