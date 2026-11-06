@@ -119,15 +119,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* 빈 화면 안내(S41, 점검 UI-6). 눈에 띄는 것은 추천 질문뿐이고 나머지 글은 낮춘다 */
 .scope { margin: 0 0 24px; }
 .examples { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 24px; }
-.examples .ghost-button { max-width: 100%; padding: 10px 14px; border-color: var(--control-line); color: inherit; font: inherit; text-align: left; }
+.examples .ghost-button { max-width: 100%; padding: 10px 14px; border-color: var(--control-line); text-align: left; }
 .examples:empty { display: none; }
 .notice { margin: 8px 0 0; }
 
 /* 목록을 불러오는 동안(S41). 칸이 비활성이어도 금지 표시 대신 진행 표시를 보인다 */
-.loading { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; }
-.loading[hidden] { display: none; }
+.loading { display: flex; align-items: center; gap: 6px; margin: -4px 0 0; font-size: 0.8rem; }
+.loading:empty { display: none; }
 .loading .spinner { width: 12px; height: 12px; }
-.field[aria-busy="true"] :disabled { cursor: progress; }
+.field.busy :disabled { cursor: progress; }
 .intro[hidden] { display: none; }
 
 .messages { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }

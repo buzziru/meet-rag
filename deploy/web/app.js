@@ -137,12 +137,16 @@ async function ask(message) {
     }
     // 답을 만들지 못한 질문은 앞 대화에 넣지 않는다
     if (raw) history = [...history, { question: message, answer: raw, rows }].slice(-HISTORY_TURNS);
-    $("announce").textContent = "답변을 마쳤습니다.";
+    const notice = answer.querySelector(".notice")?.textContent;
+    $("announce").textContent = notice ? `답변을 마쳤습니다. ${notice}` : "답변을 마쳤습니다.";
   } catch {
     // 끝나지 않은 답변은 인용이 빠질 수 있어 지우고, 질문은 다시 보내기 쉽게 입력칸에 되살린다(S41 결정 사항 3)
     showText(FAILED_TEXT);
     $("announce").textContent = FAILED_TEXT;
-    if (!$("input").value.trim()) $("input").value = message;
+    if (!$("input").value.trim()) {
+      $("input").value = message;
+      $("input").dispatchEvent(new Event("input")); // 입력칸 높이를 글에 맞춘다
+    }
     // Space가 재시작했을 수 있어 다음 요청 전에 새로 연결한다
     client = null;
     connecting = null;
@@ -353,6 +357,7 @@ const documents = picker($("document"), $("document-options"), (docId) => openDo
 const meetings = picker($("meeting"), $("meeting-options"), async (conference) => {
   const current = meetingTurn();
   findStatus("");
+  documents.set([]); // 새 목록이 오기 전에 앞 회의의 문서를 고르지 않게 한다(화면 리뷰)
   loading($("document"), true);
   try {
     const list = await call("documents", [conference]);
@@ -392,12 +397,13 @@ async function loadYears() {
   }
 }
 
-/** 목록을 불러오는 동안 칸 옆에 안내와 진행 표시를 둔다(S41, 사용자 결정 2026-11-06). 비활성 칸은 금지 표시
- *  대신 진행 커서가 된다. */
+/** 목록을 불러오는 동안 칸 아래에 안내와 진행 표시를 둔다(S41, 사용자 결정 2026-11-06). 비활성 칸은 금지 표시
+ *  대신 진행 커서가 된다. 안내 칸은 늘 있는 role="status"라 글자를 넣고 비우면 화면 낭독기가 알린다(화면 리뷰). */
 function loading(input, on) {
-  const field = input.closest(".field");
-  field.setAttribute("aria-busy", String(on));
-  field.querySelector(".loading").hidden = !on;
+  input.closest(".field").classList.toggle("busy", on);
+  const status = $(`${input.id}-loading`);
+  if (on) status.replaceChildren(el("span", "spinner"), document.createTextNode(status.dataset.text));
+  else status.replaceChildren();
 }
 
 /** 문서 찾기 패널 안의 안내. 목록 호출이 실패하면 원인과 다음 행동을 적는다(화면 리뷰). */
