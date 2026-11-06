@@ -10,6 +10,7 @@ const RETRY_MS = 5000;
 const CONTEXTS_TITLE = "근거";
 const FAILED_TEXT = "답변을 만들지 못했습니다. 다시 시도해 주세요.";
 const CHUNK_START = "▼ 답변에 쓴 근거";
+const YEAR_SETTLE_MS = 400; // 연도가 이 시간 동안 그대로면 회의 목록을 요청한다
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, className, text) => {
@@ -376,6 +377,10 @@ $("year").addEventListener("change", async () => {
   documents.set([]);
   meetings.set([]);
   findStatus("");
+  // 화살표로 연도를 넘기는 동안은 요청하지 않는다. Space가 목록 요청을 하나씩(약 4초) 처리해, 중간 연도마다
+  // 요청하면 마지막 목록까지 오래 걸렸다(일곱 번 넘기면 약 20초)
+  await new Promise((done) => setTimeout(done, YEAR_SETTLE_MS));
+  if (!current()) return;
   try {
     const list = year ? await call("meetings", [year]) : [];
     if (current()) meetings.set(list);
