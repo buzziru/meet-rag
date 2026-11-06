@@ -177,10 +177,33 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .source { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 0.925rem; }
 .source p { margin: 0 0 8px; overflow-wrap: anywhere; }
 .source-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 8px; }
+/* 인용한 근거와 참고만 한 근거의 묶음 제목(S41) */
+.source-group { margin: 0; padding: 10px 14px 0; border-top: 1px solid var(--line); font-size: 0.85rem; }
+.source-group + .source { border-top: 0; }
+.source:focus { outline: none; }
+/* 답변의 번호를 눌러 옮겨 온 근거. 움직임 줄이기면 사라지는 효과 없이 테두리만 남는다 */
+.source.flash { box-shadow: inset 3px 0 0 var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .source.flash { animation: flash 1.6s ease-out; }
+}
+@keyframes flash { from { background: var(--bubble); } }
+
+/* 답변 글의 근거 번호(S41). 글자 흐름 안의 링크처럼 보이고, 누르면 근거 목록의 그 항목으로 간다 */
+.cite {
+  padding: 0 1px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+@media (hover: hover) {
+  .cite:hover { background: var(--bubble); border-radius: 4px; }
+}
 
 .source-open {
   padding: 0;
-  font-weight: 600;
   text-align: left;
   background: none;
   border: 0;

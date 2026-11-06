@@ -48,8 +48,16 @@ function connect() {
 
 const call = async (name, args = []) => (await (await connect()).predict(`/${name}`, args)).data[0];
 
+/** 글 조각을 넣는다. cite가 있으면 `[n]`을 cite(n)이 돌려준 노드로 바꾼다(없으면 글자 그대로). */
+function appendText(parent, text, cite) {
+  if (!cite) return parent.append(text);
+  for (const [i, piece] of text.split(/\[(\d+)\]/).entries()) {
+    parent.append(i % 2 ? (cite(Number(piece)) ?? `[${piece}]`) : piece);
+  }
+}
+
 /** 줄바꿈으로 나뉜 글을 문단으로 넣는다. 한 문단 전체가 **굵게**이면 표지로 보인다. */
-function fillParagraphs(parent, text, onMark) {
+function fillParagraphs(parent, text, onMark, cite) {
   for (const part of text.split(/\n{2,}/)) {
     const line = part.trim();
     if (!line) continue;
@@ -59,7 +67,13 @@ function fillParagraphs(parent, text, onMark) {
       p.append(el("strong", onMark?.(bold[1]) ? "mark" : "", bold[1]));
     } else {
       for (const [i, piece] of line.split("**").entries()) {
-        p.append(i % 2 ? el("strong", "", piece) : document.createTextNode(piece));
+        if (i % 2) {
+          const strong = el("strong");
+          appendText(strong, piece, cite);
+          p.append(strong);
+        } else {
+          appendText(p, piece, cite);
+        }
       }
     }
     parent.append(p);
@@ -75,23 +89,58 @@ let busy = false;
 const HISTORY_TURNS = 3;
 let history = [];
 
-function renderSources(contexts) {
+/** 답변 아래 근거 목록. 답변이 인용한 근거와 참고만 한 근거(검색은 됐지만 인용되지 않음)를 나눈다(S41).
+ *  돌려준 cite(n)은 답변 글의 `[n]`에 넣을 버튼을 만든다. 누르면 목록을 열고 그 근거로 옮긴다. */
+function renderSources(contexts, text) {
+  const cited = new Set([...text.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])));
+  const used = contexts.filter((c) => cited.has(c.n));
+  const rest = contexts.filter((c) => !cited.has(c.n));
   const details = el("details", "sources");
-  details.append(el("summary", "", `${CONTEXTS_TITLE} ${contexts.length}개`));
-  for (const c of contexts) {
-    const source = el("div", "source");
-    const head = el("div", "source-head");
-    const open = el("button", "source-open", `[${c.n}] ${c.date} ${c.committee_name}`);
-    open.type = "button";
-    open.addEventListener("click", () => openDocument(c.doc_id, c.start, c.end, open));
-    const link = originalLink(c.original, `${c.date} ${c.committee_name}`);
-    head.append(open, link);
-    source.append(head);
-    fillParagraphs(source, c.body);
-    details.append(source);
+  const summary = rest.length && used.length
+    ? `${CONTEXTS_TITLE} ${used.length}개, 참고만 한 근거 ${rest.length}개`
+    : `${CONTEXTS_TITLE} ${contexts.length}개`;
+  details.append(el("summary", "", summary));
+  const items = new Map();
+  for (const [title, group] of [["답변에 인용한 근거", used], ["참고만 한 근거", rest]]) {
+    if (!group.length) continue;
+    if (used.length && rest.length) details.append(el("p", "source-group muted", title));
+    for (const c of group) {
+      const name = `${c.date} ${c.committee_name}`;
+      const source = el("div", "source");
+      source.tabIndex = -1; // 답변의 번호를 누르면 초점이 여기로 온다
+      const head = el("div", "source-head");
+      const open = el("button", "source-open", "원문에서 보기");
+      open.type = "button";
+      open.setAttribute("aria-label", `근거 ${c.n} ${name} 원문에서 보기`);
+      open.addEventListener("click", () => openDocument(c.doc_id, c.start, c.end, open));
+      head.append(el("strong", "source-title", `[${c.n}] ${name}`), open, originalLink(c.original, name));
+      source.append(head);
+      fillParagraphs(source, c.body);
+      details.append(source);
+      items.set(c.n, { source, name });
+    }
   }
-  return details;
+  const cite = (n) => {
+    const item = items.get(n);
+    if (!item) return null;
+    const button = el("button", "cite", `[${n}]`);
+    button.type = "button";
+    button.title = item.name;
+    button.setAttribute("aria-label", `근거 ${n}, ${item.name}`);
+    button.addEventListener("click", () => {
+      details.open = true;
+      item.source.scrollIntoView({ block: "center", behavior: reduceMotion.matches ? "auto" : "smooth" });
+      item.source.focus({ preventScroll: true });
+      item.source.classList.remove("flash");
+      void item.source.offsetWidth; // 같은 근거를 다시 눌러도 강조가 다시 보이게 한다
+      item.source.classList.add("flash");
+    });
+    return button;
+  };
+  return { details, cite };
 }
+
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 async function ask(message) {
   busy = true;
@@ -113,27 +162,30 @@ async function ask(message) {
     status.replaceChildren(el("span", "spinner"), el("span", "", WAIT_TEXT));
   }, WAIT_MS);
   const body = el("div");
-  const showText = (text) => {
+  const showText = (text, cite) => {
     clearTimeout(timer);
     status.remove();
-    if (!body.isConnected) answer.append(body);
+    if (!body.isConnected) answer.prepend(body);
     body.replaceChildren();
-    fillParagraphs(body, text);
+    fillParagraphs(body, text, undefined, cite);
   };
 
   try {
     const job = (await connect()).submit("/chat", [message, history.slice(-HISTORY_TURNS)]);
     let raw = "";
     let rows = [];
+    let sources = null;
     for await (const event of job) {
       if (event.type === "status" && event.stage === "error") throw new Error(event.message);
       if (event.type !== "data") continue;
       const item = event.data[0];
-      showText(item.text);
+      // 클라이언트가 마지막 값을 한 번 더 보내므로 근거는 처음 한 번만 만든다. 답변 글의 번호는 근거가 온
+      // 뒤에야 버튼이 된다(스트리밍 중에는 글자다)
+      if (item.done && item.contexts.length && !sources) sources = renderSources(item.contexts, item.text);
+      showText(item.text, sources?.cite);
       if (item.done) ({ raw, rows = [] } = item);
-      // 클라이언트가 마지막 값을 한 번 더 보내므로 근거는 처음 한 번만 붙인다
       if (item.done && item.notice && !answer.querySelector(".notice")) answer.append(el("p", "notice muted", item.notice));
-      if (item.done && item.contexts.length && !answer.querySelector(".sources")) answer.append(renderSources(item.contexts));
+      if (sources && !sources.details.isConnected) answer.append(sources.details);
     }
     // 답을 만들지 못한 질문은 앞 대화에 넣지 않는다
     if (raw) history = [...history, { question: message, answer: raw, rows }].slice(-HISTORY_TURNS);
@@ -272,13 +324,14 @@ sync();
 
 // 문서 뷰어 -----------------------------------------------------------------
 
-/** 새 탭으로 여는 회의록 원문 링크. 어느 회의의 원문인지 이름에 넣는다(점검 UI-12). */
+/** 새 탭으로 여는 회의록 PDF 링크. 어느 회의인지 이름에 넣는다(점검 UI-12). 화면 안 문서를 여는 "원문에서 보기"와
+ *  헷갈리지 않게 "PDF"로 부른다(S41). */
 function originalLink(href, meeting) {
-  const link = el("a", "muted", "회의록 원문");
+  const link = el("a", "muted", "회의록 PDF");
   link.href = href;
   link.target = "_blank";
   link.rel = "noopener noreferrer";
-  link.setAttribute("aria-label", `${meeting} 회의록 원문(새 탭)`);
+  link.setAttribute("aria-label", `${meeting} 회의록 PDF(새 탭)`);
   return link;
 }
 
@@ -304,7 +357,7 @@ async function openDocument(docId, start = -1, end = -1, opener = document.activ
     const doc = await call("document", [docId, start, end]);
     const link = $("viewer-original");
     link.href = doc.original;
-    link.setAttribute("aria-label", `${doc.name} 회의록 원문(새 탭)`);
+    link.setAttribute("aria-label", `${doc.name} 회의록 PDF(새 탭)`);
     link.hidden = false;
     $("viewer-title").textContent = doc.name;
     view.replaceChildren(agendaBlock(doc.agenda), el("hr"));
