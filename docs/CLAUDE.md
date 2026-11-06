@@ -8,11 +8,11 @@
 
 | 방식 | 문서 | 고치는 법 |
 | --- | --- | --- |
-| 진행 문서 | `STATUS.md`, `PLAN.md` | 지금 상태로 고친다. 지난 내용은 지우거나(STATUS) `PLAN-done.md`로 옮긴다(PLAN). `이후 변경` 표시는 쓰지 않는다 |
+| 진행 문서 | `STATUS.md`, `PLAN.md`, `retrospective/`(회고는 공개·대화에 따라 고쳐 쓴다, 사용자 2026-11-06) | 지금 상태로 고친다. 지난 내용은 지우거나(STATUS) `PLAN-done.md`로 옮긴다(PLAN). `이후 변경` 표시는 쓰지 않는다 |
 | 현재 규칙 문서 | `SPEC.md`, `data.md`, `gen-eval-criteria.md`, `harness/adr/README.md`의 머리 문단 | 그 자리에서 고치고, 고친 곳에 근거(결정 번호, 실측, ADR)를 괄호로 단다 |
 | 누적 기록 | `DECISIONS.md`, `EXPERIMENTS.md`, `PLAN-done.md`, `harness/adr/NNNN.md`와 README 목록 표 | 덧붙이기만 한다. 앞 줄에는 아래 표시만 붙인다. 예외는 DECISIONS 머리 줄 "현재 기준 설정"과 ADR 상태(파일의 상태 줄, 목록 표의 상태 칸)로, 지금에 맞게 고친다 |
 | 조각·실험 문서 | `slices/`, `experiments/` | 조각·실험을 끝낸 PR(SLICE는 구현, EXP는 결과·결론)이 병합되기 전에는 고친다. 병합 뒤에는 당시 기록이다 |
-| 스냅샷 | `reviews/`, `research/`, `retrospective/`, `search-stage-summary.md`, 옮긴 뒤의 `drafts/` | 쓴 PR이 병합된 뒤에는 당시 기록이다 |
+| 스냅샷 | `reviews/`, `research/`, `search-stage-summary.md`, 옮긴 뒤의 `drafts/` | 쓴 PR이 병합된 뒤에는 당시 기록이다 |
 
 ADR README를 머리 문단(현재 규칙)과 목록 표(누적 기록)로 나눈 것은 사용자 결정이다(2026-10-29, 이슈 #182).
 
