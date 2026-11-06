@@ -13,7 +13,9 @@ import json
 import logging
 import re
 import sys
+import threading
 import time
+from collections import defaultdict, deque
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -60,6 +62,52 @@ class TracingSwitch(logging.Handler):
 
 
 TRACING = TracingSwitch()
+
+
+class UsageLimit:
+    """질문 수 한도(S41). 공개 Space는 누구나 부를 수 있어 같은 IP의 1시간·하루 질문 수와 하루 전체
+    질문 수를 센다. 셈은 메모리에 두어 재시작하면 처음부터 센다. 하루는 Space 시계(UTC) 기준이다.
+    check는 넘었으면 안내 글을, 아니면 None을 돌려주고 그 질문을 센다."""
+
+    def __init__(self, limits, now: Callable[[], float] = time.time,
+                 today: Callable[[], date] = date.today):
+        # 설정 값을 시작할 때 읽어, 키가 빠지면 첫 질문이 아니라 앱 시작에서 멈춘다
+        self.per_ip_hour, self.per_ip_day = int(limits.per_ip_hour), int(limits.per_ip_day)
+        self.per_day = int(limits.per_day)
+        self.per_ip_text, self.per_day_text = str(limits.per_ip_text), str(limits.per_day_text)
+        self.now, self.today = now, today
+        self.by_ip: dict[str, deque] = defaultdict(deque)
+        self.day, self.count = None, 0
+        self.ip_day: dict[str, int] = defaultdict(int)
+        self.lock = threading.Lock()
+
+    def check(self, ip: str) -> str | None:
+        with self.lock:
+            if self.day != self.today():
+                self.day, self.count = self.today(), 0
+                self.ip_day.clear()
+            if self.count >= self.per_day:
+                return self.per_day_text
+            t, seen = self.now(), self.by_ip[ip]
+            while seen and seen[0] <= t - 3600:
+                seen.popleft()
+            if len(seen) >= self.per_ip_hour or self.ip_day[ip] >= self.per_ip_day:
+                return self.per_ip_text
+            seen.append(t)
+            self.ip_day[ip] += 1
+            self.count += 1
+            return None
+
+
+def client_ip(request) -> str:
+    """방문자 IP. Space 프록시는 호출자가 보낸 x-forwarded-for를 그대로 두고 실제 접속 주소를
+    맨 끝에 덧붙인다(2026-11-06 비공개 Space에서 시험 값을 넣어 확인: 시험 값이 맨 앞, 주소
+    2개). 그래서 맨 끝 값을 써야 위조로 한도를 피하지 못한다. 로그에는 남기지 않는다."""
+    if request is None:
+        return ""
+    header = request.headers.get("x-forwarded-for", "")
+    forwarded = [x.strip() for x in header.split(",") if x.strip()]
+    return forwarded[-1] if forwarded else (request.client.host if request.client else "")
 
 
 CITATION = re.compile(r"\s*(?:\[\d+\])+")
@@ -166,7 +214,8 @@ def context_payload(c: dict, corpus) -> dict:
 
 def chat_events(pipe, cfg, rec: dict, corpus, message: str, history=None,
                 rewriter: Callable[[str, list[dict]], tuple[str, dict]] | None = None,
-                log: dict | None = None) -> Iterator[dict]:
+                log: dict | None = None,
+                gate: Callable[[], str | None] | None = None) -> Iterator[dict]:
     """정적 페이지의 채팅. 지금까지의 답변을 조각마다 보내고 마지막에 근거와 생성 원문(raw)을
     붙인다. 페이지는 raw와 인용한 근거의 청크 번호(rows, S51)를 앞 대화로 들고 있다가 다음 질문에
     보낸다(S40). 앞 대화가 없으면
@@ -176,6 +225,10 @@ def chat_events(pipe, cfg, rec: dict, corpus, message: str, history=None,
         return
     if len(message) > cfg.app.max_query_chars:  # 검색과 유료 생성을 부르지 않는다(S49)
         yield {"text": cfg.app.query_too_long, "done": True, "contexts": [], "raw": "", "rows": []}
+        return
+    if gate and (note := gate()):  # 사용 한도(S41). 검색과 유료 생성을 부르지 않는다
+        print(f"사용 한도: {note}", flush=True)
+        yield {"text": note, "done": True, "contexts": [], "raw": "", "rows": []}
         return
     TRACING.refresh()
     turns = clean_history(history, cfg)
@@ -246,9 +299,14 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
     rewriter = follow_up(cfg)
     api = {"api_visibility": "undocumented"}
 
-    def chat(message: str, history: list | None = None) -> Iterator[dict]:
-        # history는 앞 대화(S40). 기본값이 있어 앞 대화를 보내지 않는 페이지도 그대로 동작한다
-        yield from chat_events(pipe, cfg, rec, corpus, message, history, rewriter)
+    limit = UsageLimit(cfg.app.limits)
+
+    def chat(message: str, history: list | None = None,
+             request: gr.Request = None) -> Iterator[dict]:
+        # history는 앞 대화(S40). 기본값이 있어 앞 대화를 보내지 않는 페이지도 그대로 동작한다.
+        # request는 Gradio가 넣는 특수 인자라 API 입력에 나오지 않는다
+        yield from chat_events(pipe, cfg, rec, corpus, message, history, rewriter,
+                               gate=lambda: limit.check(client_ip(request)))
 
     def years() -> list[int]:
         return corpus.years()
