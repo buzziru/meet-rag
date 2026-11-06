@@ -8,6 +8,7 @@ const WAIT_TEXT = "근거를 찾아 답변을 준비하고 있습니다.";
 const CONNECTING_TEXT = "서버에 연결하고 있습니다. 잠시만 기다려 주세요.";
 const RETRY_MS = 5000;
 const CONTEXTS_TITLE = "근거";
+const FAILED_TEXT = "답변을 만들지 못했습니다. 다시 시도해 주세요.";
 const CHUNK_START = "▼ 답변에 쓴 근거";
 
 const $ = (id) => document.getElementById(id);
@@ -31,7 +32,7 @@ function connect() {
         const token = localStorage.getItem("hf_token") ?? undefined;
         client = await Client.connect(SPACE, { events: ["data", "status"], token });
         $("connection").hidden = true;
-        loadYears();
+        loadYears().catch(() => findStatus("회의록 목록을 불러오지 못했습니다. 페이지를 새로 고쳐 주세요."));
         return client;
       } catch {
         $("connection").textContent = CONNECTING_TEXT;
@@ -133,15 +134,16 @@ async function ask(message) {
     }
     // 답을 만들지 못한 질문은 앞 대화에 넣지 않는다
     if (raw) history = [...history, { question: message, answer: raw, rows }].slice(-HISTORY_TURNS);
+    $("announce").textContent = "답변을 마쳤습니다.";
   } catch {
-    showText("답변을 만들지 못했습니다. 다시 시도해 주세요.");
+    showText(FAILED_TEXT);
+    $("announce").textContent = FAILED_TEXT;
     // Space가 재시작했을 수 있어 다음 요청 전에 새로 연결한다
     client = null;
     connecting = null;
     connect();
   } finally {
     clearTimeout(timer);
-    $("announce").textContent = "답변을 마쳤습니다.";
     busy = false;
     updateSend();
   }
@@ -274,6 +276,7 @@ async function openDocument(docId, start = -1, end = -1, opener = document.activ
   viewerOpener = opener;
   openPanel(viewer);
   $("viewer-original").hidden = true;
+  $("viewer-title").textContent = "";
   view.replaceChildren(el("p", "muted", "문서를 불러오고 있습니다."));
   try {
     const doc = await call("document", [docId, start, end]);
@@ -281,7 +284,8 @@ async function openDocument(docId, start = -1, end = -1, opener = document.activ
     link.href = doc.original;
     link.setAttribute("aria-label", `${doc.name} 회의록 원문(새 탭)`);
     link.hidden = false;
-    view.replaceChildren(el("h2", "", doc.name), agendaBlock(doc.agenda), el("hr"));
+    $("viewer-title").textContent = doc.name;
+    view.replaceChildren(agendaBlock(doc.agenda), el("hr"));
     fillParagraphs(view, doc.body, (text) => text.startsWith("▼") || text.startsWith("▲"));
     if (start >= 0) {
       const first = [...view.querySelectorAll("strong.mark")].find((s) => s.textContent === CHUNK_START);
@@ -315,7 +319,13 @@ function picker(input, list, onPick) {
 
 const documents = picker($("document"), $("document-options"), (docId) => openDocument(docId, -1, -1, $("document")));
 const meetings = picker($("meeting"), $("meeting-options"), async (conference) => {
-  documents.set(await call("documents", [conference]));
+  findStatus("");
+  try {
+    documents.set(await call("documents", [conference]));
+  } catch {
+    findStatus("문서 목록을 불러오지 못했습니다. 회의를 다시 골라 주세요.");
+    return;
+  }
   $("document").focus();
 });
 
@@ -335,10 +345,21 @@ async function loadYears() {
   $("year").disabled = false;
 }
 
+/** 문서 찾기 패널 안의 안내. 목록 호출이 실패하면 원인과 다음 행동을 적는다(화면 리뷰). */
+function findStatus(text) {
+  $("find-status").textContent = text;
+}
+
 $("year").addEventListener("change", async () => {
   const year = Number($("year").value);
   documents.set([]);
-  meetings.set(year ? await call("meetings", [year]) : []);
+  findStatus("");
+  try {
+    meetings.set(year ? await call("meetings", [year]) : []);
+  } catch {
+    meetings.set([]);
+    findStatus("회의 목록을 불러오지 못했습니다. 연도를 다시 골라 주세요.");
+  }
 });
 
 $("reset").addEventListener("click", resetSelection);

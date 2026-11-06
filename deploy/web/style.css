@@ -1,4 +1,6 @@
 :root {
+  /* 다크 모드에서 입력칸 placeholder·select 목록·스크롤바도 어둡게 그린다(화면 리뷰, 대비 3.49:1이었다) */
+  color-scheme: light dark;
   --bg: #ffffff;
   --side: #f7f7f8;
   --line: #e5e5e6;
@@ -58,11 +60,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .viewer { border-left: 1px solid var(--line); }
 .viewer .panel-head { padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.viewer-title { flex: 1; min-width: 0; margin: 0; font-size: 1rem; line-height: 1.4; overflow-wrap: anywhere; }
+#find-status:empty { display: none; }
 .viewer .doc { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 20px 24px 48px; }
 
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 0.875rem; color: var(--muted); }
 
+/* iPad Safari는 16px보다 작은 입력칸에 초점을 주면 확대한다. 가로 iPad(1024px 이상)도 같다(점검 UI-8) */
 .field select, .field input {
+  font-size: 1rem;
   width: 100%;
   padding: 8px 10px;
   color: var(--text);
@@ -237,8 +243,6 @@ a { color: inherit; text-underline-offset: 3px; }
   .scrim { position: fixed; z-index: 10; inset: 0; background: rgb(0 0 0 / 40%); }
   .intro { margin-top: 12vh; }
   .user { max-width: 90%; }
-  /* iPad Safari는 16px보다 작은 입력칸에 초점을 주면 확대한다(점검 UI-8) */
-  .field select, .field input { font-size: 1rem; }
 }
 
 /* 서랍 움직임은 움직임 줄이기 설정이 없을 때만(점검 UI-4). 닫힐 때는 움직임이 끝난 뒤 숨긴다 */

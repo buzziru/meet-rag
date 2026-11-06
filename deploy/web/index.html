@@ -26,6 +26,7 @@
     </label>
     <datalist id="document-options"></datalist>
     <button id="reset" class="ghost-button" type="button">선택 초기화</button>
+    <p id="find-status" class="muted" role="status"></p>
   </aside>
   <div id="scrim" class="scrim" hidden></div>
 
@@ -52,6 +53,7 @@
 
   <aside id="viewer" class="drawer viewer" aria-label="문서 뷰어">
     <div class="panel-head">
+      <h2 id="viewer-title" class="viewer-title"></h2>
       <a id="viewer-original" class="muted" target="_blank" rel="noopener noreferrer" hidden>회의록 원문</a>
       <button id="close-viewer" class="icon-button" type="button" aria-label="문서 뷰어 닫기">✕</button>
     </div>
