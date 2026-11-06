@@ -397,8 +397,8 @@ def test_packed_round_trips_korean_json():
 
 
 def limits(**kw):
-    return SimpleNamespace(**{"per_ip_hour": 2, "per_day": 3, "per_ip_text": "IP 한도",
-                              "per_day_text": "하루 한도", **kw})
+    return SimpleNamespace(**{"per_ip_hour": 2, "per_ip_day": 9, "per_day": 3,
+                              "per_ip_text": "IP 한도", "per_day_text": "하루 한도", **kw})
 
 
 def test_usage_limit_counts_per_ip_hour_and_per_day():
@@ -429,3 +429,15 @@ def test_client_ip_uses_first_forwarded_address():
     assert app.client_ip(req) == "1.2.3.4"
     direct = SimpleNamespace(headers={}, client=SimpleNamespace(host="5.6.7.8"))
     assert app.client_ip(direct) == "5.6.7.8"
+
+
+def test_usage_limit_counts_per_ip_day():
+    """같은 IP는 시간 한도를 지켜도 하루 per_ip_day개까지. 다른 IP는 따로 센다."""
+    now = [0.0]
+    limit = app.UsageLimit(limits(per_ip_hour=1, per_ip_day=2, per_day=10), now=lambda: now[0],
+                           today=lambda: date(2026, 11, 7))
+    for _ in range(2):
+        assert limit.check("a") is None
+        now[0] += 3601
+    assert limit.check("a") == "IP 한도"
+    assert limit.check("b") is None

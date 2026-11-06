@@ -65,34 +65,57 @@ TRACING = TracingSwitch()
 
 
 class UsageLimit:
-    """질문 수 한도(S41). 공개 Space는 누구나 부를 수 있어 같은 IP의 1시간 질문 수와 하루 전체
+    """질문 수 한도(S41). 공개 Space는 누구나 부를 수 있어 같은 IP의 1시간·하루 질문 수와 하루 전체
     질문 수를 센다. 셈은 메모리에 두어 재시작하면 처음부터 센다. 하루는 Space 시계(UTC) 기준이다.
     check는 넘었으면 안내 글을, 아니면 None을 돌려주고 그 질문을 센다."""
 
     def __init__(self, limits, now: Callable[[], float] = time.time,
                  today: Callable[[], date] = date.today):
         # 설정 값을 시작할 때 읽어, 키가 빠지면 첫 질문이 아니라 앱 시작에서 멈춘다
-        self.per_ip_hour, self.per_day = int(limits.per_ip_hour), int(limits.per_day)
+        self.per_ip_hour, self.per_ip_day = int(limits.per_ip_hour), int(limits.per_ip_day)
+        self.per_day = int(limits.per_day)
         self.per_ip_text, self.per_day_text = str(limits.per_ip_text), str(limits.per_day_text)
         self.now, self.today = now, today
         self.by_ip: dict[str, deque] = defaultdict(deque)
         self.day, self.count = None, 0
+        self.ip_day: dict[str, int] = defaultdict(int)
         self.lock = threading.Lock()
 
     def check(self, ip: str) -> str | None:
         with self.lock:
             if self.day != self.today():
                 self.day, self.count = self.today(), 0
+                self.ip_day.clear()
             if self.count >= self.per_day:
                 return self.per_day_text
             t, seen = self.now(), self.by_ip[ip]
             while seen and seen[0] <= t - 3600:
                 seen.popleft()
-            if len(seen) >= self.per_ip_hour:
+            if len(seen) >= self.per_ip_hour or self.ip_day[ip] >= self.per_ip_day:
                 return self.per_ip_text
             seen.append(t)
+            self.ip_day[ip] += 1
             self.count += 1
             return None
+
+
+IP_PROBE = "198.51.100.7"  # 임시(S41): 문서용 주소 대역. 확인 요청이 헤더에 넣는 시험 값
+
+
+def ip_header_probe(request) -> None:
+    """임시(S41): 프록시가 x-forwarded-for를 어떻게 넘기는지 본다. 실제 주소는 남기지 않는다."""
+    import ipaddress
+    if request is None:
+        return
+    parts = [x.strip() for x in request.headers.get("x-forwarded-for", "").split(",") if x.strip()]
+    host = request.client.host if request.client else ""
+    try:
+        private = ipaddress.ip_address(host).is_private
+    except ValueError:
+        private = None
+    first, last = bool(parts) and parts[0] == IP_PROBE, bool(parts) and parts[-1] == IP_PROBE
+    print(f"IP 헤더 확인: 주소 {len(parts)}개, 시험 값 맨 앞 {first}, 맨 끝 {last}, "
+          f"접속 주소 사설망 {private}", flush=True)
 
 
 def client_ip(request) -> str:
@@ -299,7 +322,8 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
         yield from chat_events(pipe, cfg, rec, corpus, message, history, rewriter,
                                gate=lambda: limit.check(client_ip(request)))
 
-    def years() -> list[int]:
+    def years(request: gr.Request = None) -> list[int]:
+        ip_header_probe(request)  # 임시: IP 헤더 위조 확인(S41). 확인 뒤 지운다
         return corpus.years()
 
     def examples() -> list[str]:
