@@ -78,6 +78,8 @@ paths:
   gen_runs: data/gen_eval/runs/${retriever.run_name}-${prompt.version}-${gen_eval.queries}${ctx:${gen_eval.contexts}}${spk:${speakers.mode}}${rep:${gen_eval.gen_rep}}.jsonl
   gen_judge: data/gen_eval/judge/${retriever.run_name}-${prompt.version}-${gen_eval.queries}${ctx:${gen_eval.contexts}}${spk:${speakers.mode}}${rep:${gen_eval.gen_rep}}-${judge.name}-${judge.prompt.version}${rep:${judge.rep}}.jsonl
   gen_judge_cache: data/gen_eval/judge_cache
+  # judge 변형 시험(S53) 결과. 기준 judge 기록과 같은 이름에 표본 수와 seed를 붙인다
+  gen_perturb: data/gen_eval/perturb/${retriever.run_name}-${prompt.version}-${gen_eval.queries}${ctx:${gen_eval.contexts}}${spk:${speakers.mode}}${rep:${gen_eval.gen_rep}}-${judge.name}-${judge.prompt.version}${rep:${judge.rep}}-n${gen_eval.perturb.n}-s${gen_eval.perturb.seed}.jsonl
   # 같은 표본의 검색 지표(S46, rag.gen_eval.retrieval)
   gen_retrieval: data/gen_eval/retrieval/${retriever.run_name}-${gen_eval.queries}-n${gen_eval.n}.json
   gen_dev_queries: configs/gen_eval/dev_queries.yaml  # judge 지시 개발에 쓴 질의. dev-full 표본에서 뺀다(S22)
@@ -336,6 +338,13 @@ gen_eval:
   # 블라인드 확인(S25, rag.gen_eval.blind): 판정용 결과(base)에 없고 풀 결과(pool)에만 있는 질의에서
   # m개를 고른다. 실패 없는 질의를 clean_share만큼 넣어 TNR을 낸다. 한 회의는 한 질의만 넣는다.
   # 질의 원문이 있어 검수 문서·정답 키는 data/ 아래에 쓴다
+  # judge 변형 시험(S53, rag.gen_eval.perturb): 기준 답변을 망가뜨려 같은 judge가 잡는지 본다. 변형마다
+  # 충실성·관련성이 계산된 기준 질의에서 seed로 n개를 뽑는다. unsupported는 아래 문장을 답변 끝에 붙인다
+  perturb:
+    n: 50
+    seed: ${seed}
+    kinds: [unsupported, speaker_swap, off_topic]
+    unsupported_sentence: 이 안건은 같은 날 본회의에서 재석 의원 전원의 찬성으로 원안대로 가결되었습니다 [1].
   blind:
     base: data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v2-dev-full-deepseek_go_mixed-j_v8-n330.jsonl
     pool: data/gen_eval/judge/hybrid-cond-filter-law-ms256-k20-ce-v2-dev-full-deepseek_go_mixed-j_v8-n430.jsonl
