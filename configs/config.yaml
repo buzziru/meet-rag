@@ -73,6 +73,9 @@ paths:
   rewrites: data/rewrites/${rewriter.name}-${rewriter.prompt.version}.json
   # 생성 호출 기록. 호출마다 JSON 하나
   generate_dir: data/runs/generate
+  # 대화 이어 가기 확인용 지어낸 대화 표본과 실행 기록(S51). 평가 질의가 아니고 판정에 쓰지 않는다
+  multiturn_set: data/multiturn/conversations-v1.jsonl
+  multiturn_runs: data/multiturn/runs/${app.multiturn.check.split}-${app.multiturn.format}-${app.multiturn.reuse.mode}${app.multiturn.check.tag}.jsonl
   # 생성 평가(S14). 일괄 생성 기록(질의마다 한 줄), judge 결과, judge 응답 저장(요청 본문 해시마다 파일 하나)
   # 반복 번호(gen_eval.gen_rep, judge.rep)는 0이면 붙지 않는다(rep resolver, S24)
   gen_runs: data/gen_eval/runs/${retriever.run_name}-${prompt.version}-${gen_eval.queries}${ctx:${gen_eval.contexts}}${spk:${speakers.mode}}${rep:${gen_eval.gen_rep}}.jsonl
@@ -211,6 +214,29 @@ app:
       timeout_s: 10
       max_tokens: 256
       max_chars: 300  # 재작성 질의 길이 상한. 넘으면 질문 그대로 검색한다
+    # 앞 대화 형식(S51). turns는 assistant 차례로 넣는다(S40). block은 마지막 user 메시지 앞에 글 묶음과
+    # "앞 대화는 이해에만 쓰고 답과 인용은 이번 근거로" 지시를 붙인다. 앞 대화가 없으면 둘 다 첫 질문과 같다
+    format: turns
+    block: configs/multiturn/block_v1.yaml
+    # 앞 근거 다시 쓰기(S51). 직전 답변이 인용한 청크(최대 max_chunks개)를 근거 칸 안에 다시 넣는다.
+    # 넣을지 판단: "off" 넣지 않음, rule 그 문서가 이번 후보에 다시 나올 때, rewrite 재작성 응답의 표시
+    # (rewrite.prompt가 flag를 내는 지시여야 한다), decision 판단 모델을 재작성과 병렬로 부름
+    reuse:
+      mode: "off"
+      max_chunks: 3
+      decision:
+        url: https://openrouter.ai/api/alpha/decisions  # OpenRouter Decisions API(D-48 파일럿과 같은 경로)
+        model: microsoft/microsoft-decision-1
+        prompt: configs/multiturn/decide_v1.yaml
+        timeout_s: 10
+        min_prob: 0.5  # "앞 근거가 필요하다" 확률이 이 값 이상이면 넣는다
+    # 지어낸 대화 표본 실행(S51, rag.multiturn_check). split은 dev·check, tag는 같은 설정을 다시 돌릴 때 붙인다
+    check:
+      split: dev
+      tag: ""
+      # 앞 답변과 이번 답변(인용 번호를 지운 글)의 문자열 유사도가 이 값 이상이면 되풀이로 본다. 되풀이인데
+      # 거부 문장이 없으면 위반이다. 사용자 대화의 2번째 턴처럼 앞 답을 거의 그대로 옮긴 경우를 잡는 값이다
+      repeat_min: 0.6
 
 # Space 배포(S38, S39). 진입점 deploy/space/app.py가 speakers_from_file을 켜고 rerank를 쓴다
 deploy:

@@ -52,14 +52,20 @@ RETRY_AFTER = re.compile(r"Try again in (?:(\d+) days?, )?(\d+):(\d+):(\d+)")
 
 
 def build_messages(prompt, contexts: list[dict], query: str,
-                   history: list[dict] = ()) -> list[dict]:
+                   history: list[dict] = (), block=None) -> list[dict]:
     """근거에 번호와 회의 정보를 붙여 메시지를 만든다. URL은 넣지 않는다. 발언자 표시(speakers)가
     있으면 text 자리에 렌더링한 문자열을 넣는다(S29, judge의 format_contexts와 같은 함수).
-    history(앱의 앞 대화, S40)는 질문·답변을 그대로 앞에 넣고 근거는 이번 검색 결과만 넣는다."""
+    history(앱의 앞 대화, S40)는 근거 없이 질문·답변만 넣고 근거는 이번 검색 결과만 넣는다.
+    block(S51 대화 지시)이 없으면 앞 대화를 assistant 차례로 넣고, 있으면 마지막 user 메시지 앞에
+    글 묶음으로 넣는다. 앞 대화가 없으면 어느 쪽이든 두 메시지가 지금과 같다."""
     blocks = [prompt.context.format(n=c["n"], text=render(c),
                                     **{k: c[k] for k in CONTEXT_META if k != "original"})
               for c in contexts]
     user = prompt.user.format(contexts="\n\n".join(blocks), query=query)
+    if history and block is not None:
+        past = "\n\n".join(block.turn.format(**t) for t in history)
+        return [{"role": "system", "content": prompt.system},
+                {"role": "user", "content": block.user.format(history=past, rest=user)}]
     turns = [m for t in history for m in ({"role": "user", "content": t["question"]},
                                           {"role": "assistant", "content": t["answer"]})]
     return [{"role": "system", "content": prompt.system}, *turns,
@@ -183,6 +189,11 @@ class Pipeline:
                  embedder: Callable[[str], np.ndarray] | None = None):
         self.cfg = cfg
         self.embedder = embedder
+        # 앱 후속 질문의 앞 대화 형식(S51). turns면 assistant 차례, block이면 글 묶음 지시를 읽는다
+        mt = cfg.app.multiturn
+        if mt.format not in ("turns", "block"):
+            raise SystemExit(f"app.multiturn.format은 turns·block 중 하나다: {mt.format}")
+        self.block = OmegaConf.load(ROOT / mt.block) if mt.format == "block" else None
         r = cfg.retriever
         if r.get("rewrite") and r.rewrite.enabled:  # 생성 경로에는 재작성이 없다(EXP-013 기각, S16)
             raise SystemExit("생성은 retriever.rewrite를 지원하지 않는다. "
@@ -262,13 +273,14 @@ class Pipeline:
         got = self.gate([[query, texts[c]] for c in picked])
         return None if got is None else dict(zip(head, got, strict=True))
 
-    @traceable(name="retrieve", process_inputs=lambda i: {"k": i["k"]})
+    @traceable(name="retrieve", process_inputs=lambda i: {"k": i["k"], "prev": i.get("prev")})
     def retrieve(self, query: str, q_emb: np.ndarray, k: int, qid: str | None = None,
-                 gold: str | None = None, contexts: str = "retrieved") -> list[dict] | None:
+                 gold: str | None = None, contexts: str = "retrieved",
+                 prev: list[int] = ()) -> list[dict] | None:
         """상위 k개 문서의 근거. score는 문서 순위를 정한 최종 점수(hybrid면 RRF, dense면 청크
         점수)이고, 근거 청크의 dense 점수와 단계별 순위를 함께 남긴다(PR #71 코멘트).
         contexts가 retrieved가 아니면 정답 문서(gold)로 근거를 바꾸고(swap_gold, S26), 바뀌지
-        않으면 None이다."""
+        않으면 None이다. prev는 앱 후속 질문의 앞 근거 청크다(S51, reuse)."""
         scores, docs, stages = self.rank(query, q_emb, qid)
         if contexts != "retrieved":
             swapped = swap_gold(docs, stages, k, gold, contexts)
@@ -276,6 +288,8 @@ class Pipeline:
                 return None
             docs, stages = swapped
         picked = best_chunks(scores, self.doc_chunks, docs[:k])
+        if prev:
+            picked, stages = self.reuse(list(prev), picked, stages, docs, k)
         rows = [self.store.window(i, self.expand.chunks if n < self.expand.top else 0)
                 for n, i in enumerate(picked)]
         out = []
@@ -291,9 +305,23 @@ class Pipeline:
                     r["start"], r["end"], self.speakers)
         return out
 
+    def reuse(self, prev: list[int], picked: list[int], stages: list[dict], docs: list[str],
+              k: int) -> tuple[list[int], list[dict]]:
+        """앞 답변이 인용한 청크(prev)를 근거 앞자리에 넣고 남은 자리를 이번 검색 결과로 채운다
+        (S51). 근거 수는 k 그대로라 프롬프트 길이가 늘지 않는다. 판단 방식이 rule이면 그 문서가
+        이번 후보(docs, 상위 top_k)에 다시 나온 청크만 넣는다. 같은 문서의 이번 근거는 뺀다."""
+        doc_of = self.retriever.dense_ids
+        if self.cfg.app.multiturn.reuse.mode == "rule":
+            prev = [r for r in prev if doc_of[r] in docs]
+        kept = {doc_of[r] for r in prev}
+        pairs = [(r, {"reused": True}) for r in prev]
+        pairs += [(p, st) for p, st in zip(picked, stages[:k], strict=True)
+                  if doc_of[p] not in kept]
+        return [p for p, _ in pairs[:k]], [st for _, st in pairs[:k]]
+
     @traceable(name="build_messages", process_inputs=lambda i: {"query": i["query"]})
     def messages(self, contexts: list[dict], query: str, history: list[dict] = ()) -> list[dict]:
-        return build_messages(self.cfg.prompt, contexts, query, history)
+        return build_messages(self.cfg.prompt, contexts, query, history, self.block)
 
     @traceable(name="generate", process_inputs=lambda i: {"stream": i["stream"]})
     def generate(self, messages: list[dict], stream: bool, echo: bool = True) -> dict:
@@ -359,12 +387,13 @@ class Pipeline:
                                                      "search": i.get("search")},
                reduce_fn=lambda items: items[-1])
     def stream(self, query: str, q_emb: np.ndarray, history: list[dict] = (),
-               search: str | None = None) -> Iterator[str | dict]:
+               search: str | None = None, prev: list[int] = ()) -> Iterator[str | dict]:
         """자유 질의의 검색 → 프롬프트 → 생성. 답변 조각을 내보내고 마지막에 근거를 더한 결과
         dict를 내보낸다(S35). 재정렬 점수 파일이 있는 구성에서는 rank가 멈춘다. 앞 대화가 있으면
-        재작성한 검색 질의(search)로 찾고 q_emb는 그 임베딩이다. 프롬프트의 질문은 query다(S40)."""
+        재작성한 검색 질의(search)로 찾고 q_emb는 그 임베딩이다. 프롬프트의 질문은 query다(S40).
+        prev는 근거에 다시 넣을 앞 근거 청크 번호다(S51)."""
         search = search or query
-        contexts = self.retrieve(search, q_emb, self.cfg.generator.context_docs)
+        contexts = self.retrieve(search, q_emb, self.cfg.generator.context_docs, prev=prev)
         for item in self.tokens(self.messages(contexts, query, history)):
             yield {"contexts": contexts, **item} if isinstance(item, dict) else item
 

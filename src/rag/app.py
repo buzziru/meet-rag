@@ -12,6 +12,7 @@ import re
 import sys
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 from langsmith.run_trees import configure
@@ -19,9 +20,10 @@ from omegaconf import OmegaConf
 
 from rag.display import MeetingInfoMover, move_meeting_info
 from rag.docs import Corpus, doc_body, doc_name, readable
+from rag.gen_eval.checks import CITE
 from rag.generate import Pipeline, recipe
 from rag.index import load_cfg
-from rag.rewrite import FollowUpRewriter
+from rag.rewrite import FollowUpRewriter, PrevDecider
 from rag.speakers import render
 
 
@@ -75,6 +77,47 @@ def clean_history(history, cfg) -> list[dict]:
     return turns[max(0, len(turns) - m.max_turns):]
 
 
+def last_rows(history, cfg, n_chunks: int) -> list[int]:
+    """직전 답변이 인용한 근거의 청크 번호(S51). 페이지가 마지막 턴의 rows로 보낸다. 믿지 않으므로
+    정수이고 인덱스 범위 안인 것만 앞에서부터 max_chunks개 남긴다. 원문은 서버가 다시 읽는다."""
+    if not isinstance(history, list) or not history or not isinstance(history[-1], dict):
+        return []
+    rows = history[-1].get("rows")
+    if not isinstance(rows, list):
+        return []
+    ok = [r for r in rows if type(r) is int and 0 <= r < n_chunks]
+    return list(dict.fromkeys(ok))[:cfg.app.multiturn.reuse.max_chunks]
+
+
+def follow_up(cfg) -> Callable[[str, list[dict]], tuple[str, dict]]:
+    """후속 질문의 재작성(S40)과 앞 근거 판단(S51). decision이면 판단 모델을 재작성과 병렬로 불러
+    지연이 둘 중 긴 쪽만큼만 든다. rewrite면 재작성 지시가 표시(flag)를 내야 한다."""
+    mode = cfg.app.multiturn.reuse.mode
+    if mode not in ("off", "rule", "rewrite", "decision"):
+        raise SystemExit(f"app.multiturn.reuse.mode는 off·rule·rewrite·decision 중 하나다: {mode}")
+    rewriter = FollowUpRewriter(cfg)
+    if mode == "rewrite" and not rewriter.prompt.get("flag"):
+        raise SystemExit("reuse.mode=rewrite는 표시(flag)를 내는 재작성 지시가 필요하다: "
+                         f"{cfg.app.multiturn.rewrite.prompt}")
+    if mode != "decision":
+        return rewriter
+    decider = PrevDecider(cfg)
+    pool = ThreadPoolExecutor(2)
+
+    def both(message: str, turns: list[dict]) -> tuple[str, dict]:
+        decided = pool.submit(decider, message, turns)
+        search, meta = rewriter(message, turns)
+        return search, {**meta, **decided.result()}
+
+    return both
+
+
+def chunk_row(pipe, c: dict) -> int:
+    """근거의 dense 청크 번호(ChunkStore 순서). 인덱스 이름과 그 인덱스 안의 번호로 계산한다."""
+    store = pipe.store
+    return int(store.bounds[store.names.index(c["index"])]) + int(c["chunk_id"])
+
+
 def shown(stream: Iterator[str | dict], max_name: int) -> Iterator[str | dict]:
     """pipe.stream의 답변을 화면 글로 바꾼다(S45). 생성 결과와 추적에는 원문이 남는다. 잡아 둔
     동안은 내보내지 않고, 첫 원문 조각과 첫 표시 글자 사이의 시간을 로그에 남긴다."""
@@ -106,15 +149,16 @@ def context_payload(c: dict, corpus) -> dict:
 
 def chat_events(pipe, cfg, rec: dict, corpus, message: str, history=None,
                 rewriter: Callable[[str, list[dict]], tuple[str, dict]] | None = None,
-                ) -> Iterator[dict]:
+                log: dict | None = None) -> Iterator[dict]:
     """정적 페이지의 채팅. 지금까지의 답변을 조각마다 보내고 마지막에 근거와 생성 원문(raw)을
-    붙인다. 페이지는 raw를 앞 대화로 들고 있다가 다음 질문에 보낸다(S40). 앞 대화가 없으면
+    붙인다. 페이지는 raw와 인용한 근거의 청크 번호(rows, S51)를 앞 대화로 들고 있다가 다음 질문에
+    보낸다(S40). 앞 대화가 없으면
     재작성하지 않고 지금과 같은 프롬프트로 처리한다. API를 직접 불러 빈 질문을 보내면 생성을
-    부르지 않는다."""
+    부르지 않는다. log를 주면 검색 질의·판단 값·앞 근거·근거를 담는다(표본 실행, S51)."""
     if not message.strip():
         return
     if len(message) > cfg.app.max_query_chars:  # 검색과 유료 생성을 부르지 않는다(S49)
-        yield {"text": cfg.app.query_too_long, "done": True, "contexts": [], "raw": ""}
+        yield {"text": cfg.app.query_too_long, "done": True, "contexts": [], "raw": "", "rows": []}
         return
     TRACING.refresh()
     turns = clean_history(history, cfg)
@@ -122,15 +166,29 @@ def chat_events(pipe, cfg, rec: dict, corpus, message: str, history=None,
     search, meta = (message, {}) if not turns else rewriter(message, turns)
     if meta:  # 질의 원문은 로그에 남기지 않는다
         print(f"턴 {turn}: 재작성 {meta['rewrite_s']:.3f}초({meta['rewrite_status']})", flush=True)
+    if "decision_s" in meta:
+        print(f"턴 {turn}: 판단 {meta['decision_s']:.3f}초({meta['decision_status']})", flush=True)
+    mode = cfg.app.multiturn.reuse.mode
+    # rule은 retrieve가 후보로 거르고, rewrite·decision은 판단이 필요하다고 할 때만 넘긴다(S51)
+    prev = (last_rows(history, cfg, pipe.index_meta["n_chunks"])
+            if turns and (mode == "rule" or (mode != "off" and meta.get("needs_prev"))) else [])
     text = ""
-    stream = pipe.stream(message, pipe.embed(search), turns, search,
-                         langsmith_extra={"metadata": {**rec, **meta, "turn": turn}})
+    stream = pipe.stream(message, pipe.embed(search), turns, search, prev,
+                         langsmith_extra={"metadata": {**rec, **meta, "turn": turn,
+                                                       "prev_rows": len(prev)}})
     for item in shown(stream, cfg.app.meeting_info_max_name):
         if isinstance(item, dict):
             if item.get("first_token_s") is not None:
                 print(f"턴 {turn}: 첫 토큰 {item['first_token_s']:.3f}초", flush=True)
+            ctx = item["contexts"]
+            if log is not None:
+                log.update(search=search, meta=meta, prev=prev, contexts=ctx,
+                           first_token_s=item.get("first_token_s"))
+            # 페이지가 다음 질문에 보낼 청크 번호: 이 답변이 인용한 근거만(S51). 끄면 보내지 않는다
+            cited = sorted({int(n) for n in CITE.findall(item["raw"]) if 1 <= int(n) <= len(ctx)})
+            rows = [chunk_row(pipe, ctx[n - 1]) for n in cited] if mode != "off" else []
             yield {"text": item["answer"] or cfg.app.no_answer, "done": True, "raw": item["raw"],
-                   "contexts": [context_payload(c, corpus) for c in item["contexts"]]}
+                   "rows": rows, "contexts": [context_payload(c, corpus) for c in ctx]}
         else:
             text += item
             yield {"text": text, "done": False}
@@ -157,7 +215,7 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
     # (S40)
     rec = {**recipe(cfg, pipe.index_meta, True),
            "multiturn": OmegaConf.to_container(cfg.app.multiturn)}
-    rewriter = FollowUpRewriter(cfg)
+    rewriter = follow_up(cfg)
     api = {"api_visibility": "undocumented"}
 
     def chat(message: str, history: list | None = None) -> Iterator[dict]:

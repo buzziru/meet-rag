@@ -1,0 +1,8 @@
+# 앞 근거 필요 판단 지시 v1 (S51, reuse.mode=decision). 판단 모델(OpenRouter Decisions API)의 noul 질문 하나다.
+# 상태는 앞 대화(질문·답변)와 후속 질문이다. 근거 원문은 보내지 않는다
+version: decide_v1
+turn: "질문: {question}\n답변: {answer}"
+instructions: 후속 질문에 답하려면 앞 답변이 근거로 쓴 회의록 발언을 다시 봐야 하는가?
+criteria:
+  "true": 후속 질문이 앞 답변에 나온 발언이나 회의의 내용(누가 무엇을 말했는지, 그 발언의 이유·세부·반응, 같은 회의의 다른 발언)을 더 묻는다.
+  "false": 후속 질문이 다른 회의나 다른 주제를 묻거나, 앞 대화와 상관없는 새 질문이다.
