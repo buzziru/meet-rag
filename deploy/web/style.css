@@ -40,6 +40,10 @@ body {
 
 button, input, select, textarea { font: inherit; color: inherit; }
 
+/* 브라우저 기본 placeholder(#757575)는 다크 배경에서 3.49:1이라 흐린 글자 토큰을 쓴다(화면 리뷰).
+   --muted는 밝은 모드 4.70:1, 다크 모드 5.23:1 이상이다(디자인 점검 계산) */
+::placeholder { color: var(--muted); opacity: 1; }
+
 .muted { color: var(--muted); font-size: 0.9rem; }
 
 /* 패널 공통: 문서 찾기(왼쪽)와 문서 뷰어(오른쪽) */
