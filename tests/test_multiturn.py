@@ -242,3 +242,10 @@ def test_reading_doc_has_only_questions_and_shown_answers():
     doc = multiturn_check.reading_doc(rows)
     assert "질문" in doc and "답변(회의)" in doc
     assert "원문" not in doc and "doc_id" not in doc
+
+
+def test_block_v2_fills_refusal_from_prompt(cfg):
+    """block_v2는 거부 문구를 글자로 두지 않고 생성 프롬프트의 refusal로 채운다."""
+    block = OmegaConf.load(ROOT / "configs/multiturn/block_v2.yaml")
+    user = build_messages(cfg.prompt, [CTX], "질문", TURNS, block)[1]["content"]
+    assert f"은 {cfg.prompt.refusal}." in user and "{refusal}" not in user

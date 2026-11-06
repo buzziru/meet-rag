@@ -65,7 +65,8 @@ def build_messages(prompt, contexts: list[dict], query: str,
     if history and block is not None:
         past = "\n\n".join(block.turn.format(**t) for t in history)
         return [{"role": "system", "content": prompt.system},
-                {"role": "user", "content": block.user.format(history=past, rest=user)}]
+                {"role": "user", "content": block.user.format(
+                    history=past, rest=user, refusal=prompt.get("refusal", ""))}]
     turns = [m for t in history for m in ({"role": "user", "content": t["question"]},
                                           {"role": "assistant", "content": t["answer"]})]
     return [{"role": "system", "content": prompt.system}, *turns,
