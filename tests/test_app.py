@@ -380,3 +380,14 @@ def test_shown_words_refuses_empty_word():
         cfg.app.shown_words = {"제공된 회의록": None}  # 새 말을 비우면 None이 된다
     with pytest.raises(SystemExit, match="shown_words"):
         app.shown_words(cfg)
+
+
+def test_packed_round_trips_korean_json():
+    """S41. 페이지가 gzip을 풀어 같은 값을 얻는다(base64 → gzip → UTF-8 JSON)."""
+    import base64
+    import gzip
+    import json
+
+    value = [["2019년 10월 25일(금) 정무위원회 제371회 제1차", "049488"]]
+    raw = gzip.decompress(base64.b64decode(app.packed(value))).decode("utf-8")
+    assert json.loads(raw) == value

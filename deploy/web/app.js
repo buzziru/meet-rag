@@ -48,6 +48,13 @@ function connect() {
 
 const call = async (name, args = []) => (await (await connect()).predict(`/${name}`, args)).data[0];
 
+/** 서버가 gzip으로 줄여 base64로 보낸 JSON을 푼다(S41). Space 응답은 압축되지 않아 큰 목록은 전송이 느리다. */
+async function callPacked(name, args = []) {
+  const bytes = Uint8Array.from(atob(await call(name, args)), (c) => c.charCodeAt(0));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return JSON.parse(await new Response(stream).text());
+}
+
 /** 글 조각을 넣는다. cite가 있으면 `[n]`을 cite(n)이 돌려준 노드로 바꾼다(없으면 글자 그대로). */
 function appendText(parent, text, cite) {
   if (!cite) return parent.append(text);
@@ -479,7 +486,7 @@ $("year").addEventListener("change", async () => {
   await new Promise((done) => setTimeout(done, YEAR_SETTLE_MS));
   if (!current()) return;
   try {
-    const list = await call("meetings", [year]);
+    const list = await callPacked("meetings_packed", [year]);
     if (current()) meetings.set(list);
   } catch {
     if (current()) findStatus("회의 목록을 불러오지 못했습니다. 연도를 다시 골라 주세요.");
