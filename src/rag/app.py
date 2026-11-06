@@ -18,7 +18,7 @@ from datetime import date
 from langsmith.run_trees import configure
 from omegaconf import OmegaConf
 
-from rag.display import MeetingInfoMover, move_meeting_info
+from rag.display import MeetingInfoMover, WordReplacer, move_meeting_info, replace_words
 from rag.docs import Corpus, doc_body, doc_name, readable
 from rag.gen_eval.checks import CITE
 from rag.generate import Pipeline, recipe
@@ -118,19 +118,32 @@ def chunk_row(pipe, c: dict) -> int:
     return int(store.bounds[store.names.index(c["index"])]) + int(c["chunk_id"])
 
 
-def shown(stream: Iterator[str | dict], max_name: int) -> Iterator[str | dict]:
+def shown_words(cfg) -> dict[str, str]:
+    """화면 글에서 바꿀 말(S52, app.shown_words). 빈 말은 모든 글자 사이에 새 말을 넣어 화면을
+    조용히 망가뜨리므로 읽을 때 멈춘다."""
+    words = OmegaConf.to_container(cfg.app.shown_words)
+    if not all(isinstance(k, str) and k and isinstance(v, str) for k, v in words.items()):
+        raise SystemExit(f"app.shown_words는 빈 글자가 아닌 말을 글자로 바꾼다: {words}")
+    return words
+
+
+def shown(stream: Iterator[str | dict], max_name: int,
+          words: dict[str, str] | None = None) -> Iterator[str | dict]:
     """pipe.stream의 답변을 화면 글로 바꾼다(S45). 생성 결과와 추적에는 원문이 남는다. 잡아 둔
-    동안은 내보내지 않고, 첫 원문 조각과 첫 표시 글자 사이의 시간을 로그에 남긴다."""
+    동안은 내보내지 않고, 첫 원문 조각과 첫 표시 글자 사이의 시간을 로그에 남긴다. words가 있으면
+    회의 정보를 옮긴 뒤 그 말을 바꾼다(S52, 거부 문구의 "제공된 회의록" 등)."""
     mover = MeetingInfoMover(max_name)
+    words = words or {}
+    replacer = WordReplacer(words)
     raw_at = None
     logged = False
     for item in stream:
         if isinstance(item, dict):
-            out = {**item, "answer": move_meeting_info(item["answer"], max_name),
-                   "raw": item["answer"]}
+            out = {**item, "answer": replace_words(move_meeting_info(item["answer"], max_name),
+                                                   words), "raw": item["answer"]}
         else:
             raw_at = raw_at or time.perf_counter()
-            out = mover.feed(item)
+            out = replacer.feed(mover.feed(item))
         if out:
             if raw_at and not logged:
                 print(f"첫 글자 지연: {time.perf_counter() - raw_at:.3f}초", flush=True)
@@ -176,7 +189,8 @@ def chat_events(pipe, cfg, rec: dict, corpus, message: str, history=None,
     stream = pipe.stream(message, pipe.embed(search), turns, search, prev,
                          langsmith_extra={"metadata": {**rec, **meta, "turn": turn,
                                                        "prev_rows": len(prev)}})
-    for item in shown(stream, cfg.app.meeting_info_max_name):
+    words = shown_words(cfg)
+    for item in shown(stream, cfg.app.meeting_info_max_name, words):
         if isinstance(item, dict):
             if item.get("first_token_s") is not None:
                 print(f"턴 {turn}: 첫 토큰 {item['first_token_s']:.3f}초", flush=True)
@@ -213,6 +227,7 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
 
     # 대화 이어 가기 설정은 첫 질문 동작을 바꾸지 않아 생성 레시피 밖의 추적 메타데이터로 남긴다
     # (S40)
+    shown_words(cfg)  # 시작할 때 설정을 확인한다
     rec = {**recipe(cfg, pipe.index_meta, True),
            "multiturn": OmegaConf.to_container(cfg.app.multiturn)}
     rewriter = follow_up(cfg)

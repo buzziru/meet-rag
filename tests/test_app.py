@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from langsmith.run_trees import configure
 from langsmith.utils import tracing_is_enabled
+from omegaconf import open_dict
 
 import rag.index
 from rag import app
@@ -339,3 +340,30 @@ def test_clean_history_drops_malformed_turns(cfg, history):
 def test_clean_history_keeps_valid_turns_among_malformed(cfg):
     history = [{"question": "q"}, {"question": "앞", "answer": "답", "extra": "x"}, 3]
     assert app.clean_history(history, cfg) == [{"question": "앞", "answer": "답"}]
+
+
+def test_shown_replaces_refusal_words_only_on_screen(cfg):
+    """S52. 화면 글만 바꾸고 생성 원문(raw)과 Pipeline 결과 dict는 그대로 둔다. S45 회의 정보 변환과
+    함께 써도 글자가 사라지지 않는다."""
+    words = dict(cfg.app.shown_words)
+    raw = MOVED_RAW + [" 나머지는 제공", "된 회의록에서 답을 찾지 못했습니다."]
+    result = {"answer": "".join(raw), "contexts": []}
+    items = list(app.shown(iter([*raw, result]), cfg.app.meeting_info_max_name, words))
+    want = MOVED + " 나머지는 검색된 회의록에서 답을 찾지 못했습니다."
+    assert "".join(i for i in items if isinstance(i, str)) == want
+    assert items[-1]["answer"] == want and items[-1]["raw"] == "".join(raw)
+    assert result["answer"] == "".join(raw)
+
+
+def test_shown_words_refuses_empty_word():
+    """S52. 빈 말을 바꾸면 모든 글자 사이에 새 말이 들어가므로 읽을 때 멈춘다."""
+    assert app.shown_words(load_cfg(["index.scope=full"])) == {"제공된 회의록": "검색된 회의록"}
+    cfg = load_cfg(["index.scope=full"])
+    with open_dict(cfg):
+        cfg.app.shown_words = {"": "x"}
+    with pytest.raises(SystemExit, match="shown_words"):
+        app.shown_words(cfg)
+    with open_dict(cfg):
+        cfg.app.shown_words = {"제공된 회의록": None}  # 새 말을 비우면 None이 된다
+    with pytest.raises(SystemExit, match="shown_words"):
+        app.shown_words(cfg)

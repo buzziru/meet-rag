@@ -8,7 +8,9 @@ const WAIT_TEXT = "근거를 찾아 답변을 준비하고 있습니다.";
 const CONNECTING_TEXT = "서버에 연결하고 있습니다. 잠시만 기다려 주세요.";
 const RETRY_MS = 5000;
 const CONTEXTS_TITLE = "근거";
+const FAILED_TEXT = "답변을 만들지 못했습니다. 다시 시도해 주세요.";
 const CHUNK_START = "▼ 답변에 쓴 근거";
+const YEAR_SETTLE_MS = 400; // 연도가 이 시간 동안 그대로면 회의 목록을 요청한다
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, className, text) => {
@@ -31,7 +33,7 @@ function connect() {
         const token = localStorage.getItem("hf_token") ?? undefined;
         client = await Client.connect(SPACE, { events: ["data", "status"], token });
         $("connection").hidden = true;
-        loadYears();
+        loadYears().catch(() => findStatus("회의록 목록을 불러오지 못했습니다. 페이지를 새로 고쳐 주세요."));
         return client;
       } catch {
         $("connection").textContent = CONNECTING_TEXT;
@@ -80,11 +82,8 @@ function renderSources(contexts) {
     const head = el("div", "source-head");
     const open = el("button", "source-open", `[${c.n}] ${c.date} ${c.committee_name}`);
     open.type = "button";
-    open.addEventListener("click", () => openDocument("evidence", c.doc_id, c.start, c.end));
-    const link = el("a", "muted", "회의록");
-    link.href = c.original;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
+    open.addEventListener("click", () => openDocument(c.doc_id, c.start, c.end, open));
+    const link = originalLink(c.original, `${c.date} ${c.committee_name}`);
     head.append(open, link);
     source.append(head);
     fillParagraphs(source, c.body);
@@ -106,6 +105,7 @@ async function ask(message) {
   answer.append(status);
   $("messages").append(question, answer);
   question.scrollIntoView({ block: "start" });
+  $("announce").textContent = "답변을 준비하고 있습니다.";
 
   // 첫 토큰이 늦으면 답변 밖 표시만 바꾼다. 답변 글에는 넣지 않는다
   const timer = setTimeout(() => {
@@ -135,8 +135,10 @@ async function ask(message) {
     }
     // 답을 만들지 못한 질문은 앞 대화에 넣지 않는다
     if (raw) history = [...history, { question: message, answer: raw, rows }].slice(-HISTORY_TURNS);
+    $("announce").textContent = "답변을 마쳤습니다.";
   } catch {
-    showText("답변을 만들지 못했습니다. 다시 시도해 주세요.");
+    showText(FAILED_TEXT);
+    $("announce").textContent = FAILED_TEXT;
     // Space가 재시작했을 수 있어 다음 요청 전에 새로 연결한다
     client = null;
     connecting = null;
@@ -153,13 +155,12 @@ const updateSend = () => {
   $("new-chat").disabled = busy;
 };
 
-/** 대화 칸과 앞 대화를 비운다. 문서 탭과 사이드바 선택은 그대로 둔다. Space를 부르지 않는다. */
+/** 대화 칸과 앞 대화를 비운다. 문서 뷰어와 문서 찾기 선택은 그대로 둔다. Space를 부르지 않는다. */
 $("new-chat").addEventListener("click", () => {
   if (busy) return;
   history = [];
   $("messages").replaceChildren();
   $("intro").hidden = false;
-  showTab("chat");
 });
 
 function submit() {
@@ -190,96 +191,165 @@ $("input").addEventListener("input", () => {
   updateSend();
 });
 
-// 탭 -----------------------------------------------------------------------
+// 패널 ---------------------------------------------------------------------
+// 넓은 화면: 문서 찾기와 문서 뷰어가 대화 옆에 붙는다. 뷰어를 열면 문서 찾기가 접힌다(S52).
+// 좁은 화면(태블릿 세로): 두 패널이 화면을 덮는 서랍이다. 열면 초점을 서랍 안으로 옮기고 뒤 화면을
+// inert로 막는다. Esc나 닫기로 닫으면 연 곳으로 초점을 돌린다(점검 UI-3).
 
-function showTab(name) {
-  for (const tab of document.querySelectorAll(".tab")) {
-    tab.setAttribute("aria-selected", String(tab.dataset.tab === name));
-  }
-  for (const panel of ["chat", "doc", "evidence"]) {
-    $(`panel-${panel}`).hidden = panel !== name;
-  }
+const narrow = window.matchMedia("(max-width: 1023.98px)");
+const sidebar = $("sidebar");
+const viewer = $("viewer");
+let viewerOpener = null;
+
+const isOpen = (panel) => panel.classList.contains("open");
+const drawer = () => (narrow.matches ? [sidebar, viewer].find(isOpen) ?? null : null);
+
+function sync() {
+  const open = drawer();
+  $("scrim").hidden = !open;
+  for (const node of [sidebar, $("chat"), viewer]) node.inert = Boolean(open) && node !== open;
+  $("open-sidebar").hidden = isOpen(sidebar) && !narrow.matches;
 }
 
-for (const tab of document.querySelectorAll(".tab")) {
-  tab.addEventListener("click", () => showTab(tab.dataset.tab));
+/** 보이는 첫 대상에 초점을 둔다. 연 곳이 접힌 패널 안이면 다음 후보로 간다. */
+function focusFirst(...targets) {
+  const visible = (t) => t.getClientRects().length && !t.closest(".drawer:not(.open)");
+  const target = targets.find((t) => t?.isConnected && !t.disabled && visible(t));
+  target?.focus();
 }
 
-// 문서 ---------------------------------------------------------------------
+function openPanel(panel) {
+  const lost = sidebar.contains(document.activeElement);
+  if (narrow.matches) for (const other of [sidebar, viewer]) other.classList.remove("open");
+  else if (panel === viewer) sidebar.classList.remove("open");
+  panel.classList.add("open");
+  sync();
+  // 서랍이거나, 문서 찾기에서 열어 초점이 접힌 칸에 남으면 뷰어 안으로 옮긴다
+  if (narrow.matches || (lost && !isOpen(sidebar))) panel.querySelector(".panel-head button").focus();
+}
 
-async function openDocument(tab, docId, start = -1, end = -1) {
-  const view = $(tab === "doc" ? "doc-view" : "evidence-view");
-  showTab(tab);
-  closeSidebar();
+function closePanel(panel) {
+  panel.classList.remove("open");
+  sync();
+  const back = panel === sidebar ? [] : [viewerOpener];
+  focusFirst(...back, $("open-sidebar"), $("input"));
+}
+
+$("open-sidebar").addEventListener("click", () => openPanel(sidebar));
+$("close-sidebar").addEventListener("click", () => closePanel(sidebar));
+$("close-viewer").addEventListener("click", () => closePanel(viewer));
+$("scrim").addEventListener("click", () => closePanel(drawer()));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && drawer()) closePanel(drawer());
+});
+narrow.addEventListener("change", () => {
+  if (narrow.matches) sidebar.classList.remove("open");
+  sync();
+});
+if (narrow.matches) sidebar.classList.remove("open");
+sync();
+
+// 문서 뷰어 -----------------------------------------------------------------
+
+/** 새 탭으로 여는 회의록 원문 링크. 어느 회의의 원문인지 이름에 넣는다(점검 UI-12). */
+function originalLink(href, meeting) {
+  const link = el("a", "muted", "회의록 원문");
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.setAttribute("aria-label", `${meeting} 회의록 원문(새 탭)`);
+  return link;
+}
+
+/** 안건 문자열을 번호(숫자.) 앞에서 나눈 목록으로 넣는다. 번호가 없으면 문단 하나다(점검 UI-7). */
+function agendaBlock(text) {
+  // 번호로 시작하는 안건만 나눈다. 본문 속 날짜("2020. 1.")에서 나누지 않게 하려는 것이다
+  if (!/^\s*\d{1,2}\.(?!\d)/.test(text)) return el("p", "", text);
+  const items = text.split(/(?:^|(?<=[\s)]))(?=\d{1,2}\.(?!\d))/).map((s) => s.trim()).filter(Boolean);
+  if (items.length < 2) return el("p", "", text);
+  const list = el("ul", "agenda");
+  for (const item of items) list.append(el("li", "", item));
+  return list;
+}
+
+async function openDocument(docId, start = -1, end = -1, opener = document.activeElement) {
+  const view = $("viewer-body");
+  viewerOpener = opener;
+  openPanel(viewer);
+  $("viewer-original").hidden = true;
+  $("viewer-title").textContent = "";
   view.replaceChildren(el("p", "muted", "문서를 불러오고 있습니다."));
   try {
     const doc = await call("document", [docId, start, end]);
-    const link = el("a", "", "회의록");
+    const link = $("viewer-original");
     link.href = doc.original;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    const original = el("p");
-    original.append(link);
-    view.replaceChildren(el("h2", "", doc.name), el("p", "", doc.agenda), original, el("hr"));
+    link.setAttribute("aria-label", `${doc.name} 회의록 원문(새 탭)`);
+    link.hidden = false;
+    $("viewer-title").textContent = doc.name;
+    view.replaceChildren(agendaBlock(doc.agenda), el("hr"));
     fillParagraphs(view, doc.body, (text) => text.startsWith("▼") || text.startsWith("▲"));
     if (start >= 0) {
       const first = [...view.querySelectorAll("strong.mark")].find((s) => s.textContent === CHUNK_START);
       first?.scrollIntoView({ block: "start" });
     } else {
-      view.parentElement.scrollTop = 0;
+      view.scrollTop = 0;
     }
   } catch {
     view.replaceChildren(el("p", "muted", "문서를 불러오지 못했습니다. 다시 시도해 주세요."));
   }
 }
 
-/** 입력해 거르는 선택 칸. 조합 중인 한글도 input 이벤트로 거른다. */
-function combobox(input, list, onPick) {
-  let items = [];
-  const render = () => {
-    const query = input.value.trim().toLowerCase();
-    const shown = items.filter(([name]) => name.toLowerCase().includes(query));
-    list.replaceChildren();
-    for (const [name, value] of shown) {
-      const li = el("li", "", name);
-      li.addEventListener("mousedown", (event) => {
-        event.preventDefault(); // 입력칸의 blur가 먼저 목록을 닫지 않게 한다
-        input.value = name;
-        list.hidden = true;
-        onPick(value);
-      });
-      list.append(li);
-    }
-    if (!shown.length) list.append(el("li", "empty", "일치하는 항목이 없습니다"));
-  };
-  input.addEventListener("focus", () => {
-    render();
-    list.hidden = false;
-  });
+// 문서 찾기 -----------------------------------------------------------------
+
+/** 입력해 거르는 선택 칸. 브라우저 목록(datalist)이라 키보드로 고를 수 있다(점검 UI-1). 이름이 목록의
+ *  항목과 같아지면 고른 것으로 본다. */
+function picker(input, list, onPick) {
+  let byName = new Map();
   input.addEventListener("input", () => {
-    render();
-    list.hidden = false;
-  });
-  input.addEventListener("blur", () => {
-    list.hidden = true;
+    if (byName.has(input.value)) onPick(byName.get(input.value));
   });
   return {
-    set(next) {
-      items = next;
+    set(items) {
+      byName = new Map(items);
+      list.replaceChildren(...items.map(([name]) => Object.assign(el("option"), { value: name })));
       input.value = "";
-      input.disabled = !next.length;
-      list.hidden = true;
+      input.disabled = !items.length;
     },
   };
 }
 
-const documents = combobox($("document"), $("document-list"), (docId) => openDocument("doc", docId));
-const meetings = combobox($("meeting"), $("meeting-list"), async (conference) => {
-  documents.set(await call("documents", [conference]));
+/** 마지막 요청의 응답만 쓰게 한다. Windows의 선택 칸은 화살표를 누를 때마다 change가 나서 목록 요청이
+ *  겹치고 응답이 순서를 바꿔 도착한다. 늦게 온 다른 연도의 응답이 목록을 덮고 고르던 값을 지웠다(사용자 확인
+ *  2026-11-06, PR #251). turn()은 새 요청을 시작하고, 돌려준 함수는 그 요청이 아직 마지막인지 알려 준다. */
+function latestOnly() {
+  let last = 0;
+  return () => {
+    const mine = ++last;
+    return () => mine === last;
+  };
+}
+
+const yearTurn = latestOnly();
+const meetingTurn = latestOnly();
+
+const documents = picker($("document"), $("document-options"), (docId) => openDocument(docId, -1, -1, $("document")));
+const meetings = picker($("meeting"), $("meeting-options"), async (conference) => {
+  const current = meetingTurn();
+  findStatus("");
+  try {
+    const list = await call("documents", [conference]);
+    if (!current()) return;
+    documents.set(list);
+  } catch {
+    if (current()) findStatus("문서 목록을 불러오지 못했습니다. 회의를 다시 골라 주세요.");
+    return;
+  }
   $("document").focus();
 });
 
 function resetSelection() {
+  yearTurn();
+  meetingTurn();
   $("year").value = "";
   meetings.set([]);
   documents.set([]);
@@ -295,27 +365,31 @@ async function loadYears() {
   $("year").disabled = false;
 }
 
+/** 문서 찾기 패널 안의 안내. 목록 호출이 실패하면 원인과 다음 행동을 적는다(화면 리뷰). */
+function findStatus(text) {
+  $("find-status").textContent = text;
+}
+
 $("year").addEventListener("change", async () => {
+  const current = yearTurn();
+  meetingTurn(); // 앞 연도의 문서 목록 요청도 버린다
   const year = Number($("year").value);
   documents.set([]);
-  meetings.set(year ? await call("meetings", [year]) : []);
+  meetings.set([]);
+  findStatus("");
+  // 화살표로 연도를 넘기는 동안은 요청하지 않는다. Space가 목록 요청을 하나씩(약 4초) 처리해, 중간 연도마다
+  // 요청하면 마지막 목록까지 오래 걸렸다(일곱 번 넘기면 약 20초)
+  await new Promise((done) => setTimeout(done, YEAR_SETTLE_MS));
+  if (!current()) return;
+  try {
+    const list = year ? await call("meetings", [year]) : [];
+    if (current()) meetings.set(list);
+  } catch {
+    if (current()) findStatus("회의 목록을 불러오지 못했습니다. 연도를 다시 골라 주세요.");
+  }
 });
 
 $("reset").addEventListener("click", resetSelection);
-
-// 좁은 화면의 사이드바 -------------------------------------------------------
-
-function closeSidebar() {
-  $("sidebar").classList.remove("open");
-  $("scrim").hidden = true;
-}
-
-$("open-sidebar").addEventListener("click", () => {
-  $("sidebar").classList.add("open");
-  $("scrim").hidden = false;
-});
-$("close-sidebar").addEventListener("click", closeSidebar);
-$("scrim").addEventListener("click", closeSidebar);
 
 updateSend();
 connect();

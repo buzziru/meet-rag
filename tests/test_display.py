@@ -1,8 +1,8 @@
-"""회의 정보 괄호 표시(S45). 합성 답변으로 본다."""
+"""회의 정보 괄호 표시(S45)와 거부 문구 화면 표시(S52). 합성 답변으로 본다."""
 
 import pytest
 
-from rag.display import MeetingInfoMover, move_meeting_info
+from rag.display import MeetingInfoMover, WordReplacer, move_meeting_info, replace_words
 
 MAX_NAME = 40
 HEAD = "2018년 10월 10일 국방위원회"
@@ -73,3 +73,24 @@ def test_body_is_released_while_it_arrives():
     assert mover.feed("서 A는 답") == "A는 답"
     assert mover.feed("했습니다") == "했습니다"
     assert mover.feed(" [1") == f"{PAREN} [1"
+
+
+# 거부 문구 화면 표시(S52) -------------------------------------------------------
+
+WORDS = {"제공된 회의록": "검색된 회의록"}
+REFUSAL = "A는 답했습니다 [1]. 나머지는 제공된 회의록에서 답을 찾지 못했습니다."
+SHOWN = "A는 답했습니다 [1]. 나머지는 검색된 회의록에서 답을 찾지 못했습니다."
+
+
+@pytest.mark.parametrize("cut", range(1, len(REFUSAL)))
+def test_word_replacer_gives_same_text_however_pieces_are_split(cut):
+    replacer = WordReplacer(WORDS)
+    out = replacer.feed(REFUSAL[:cut]) + replacer.feed(REFUSAL[cut:])
+    assert out == SHOWN == replace_words(REFUSAL, WORDS)
+
+
+def test_word_replacer_holds_only_a_possible_start_of_the_word():
+    replacer = WordReplacer(WORDS)
+    assert replacer.feed("나머지는 제공") == "나머지는 "  # "제공"만 잡아 둔다
+    assert replacer.feed("된 회의록에서") == "검색된 회의록에서"
+    assert replacer.feed("제출된 자료") == "제출된 자료"  # 바꿀 말이 아니면 바로 낸다
