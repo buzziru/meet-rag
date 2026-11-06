@@ -15,7 +15,8 @@ from rag.generate import Pipeline, build_messages
 from rag.index import load_cfg
 
 CTX = {"n": 1, "doc_id": "a1", "date": "2020-01-02", "committee_name": "법제사법위원회",
-       "original": "http://example/1", "text": "본문 <b>굵게</b>"}
+       "original": "http://example/1", "text": "본문 <b>굵게</b>", "index": "idx", "chunk_id": 0}
+STORE = SimpleNamespace(names=["idx"], bounds=[0, 10])  # 인용한 근거의 청크 번호(S51)
 CORPUS = SimpleNamespace(chunk_span=lambda doc_id, text: (3, 3 + len(text)))
 
 
@@ -41,7 +42,8 @@ def fake_pipe(parts, seen=None):
         yield from parts
         yield {"answer": "".join(parts), "contexts": [CTX]}
 
-    return SimpleNamespace(embed=lambda q: q, stream=stream)
+    return SimpleNamespace(embed=lambda q: q, stream=stream, store=STORE,
+                           index_meta={"n_chunks": 10})
 
 
 @pytest.fixture
@@ -263,6 +265,7 @@ def recording_pipe(cfg):
     pipe.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     pipe.embed = lambda q: seen.setdefault("embedded", q)
     pipe.retrieve = lambda query, q_emb, k, prev=(): seen.setdefault("search", query) and [FULL_CTX]
+    pipe.store, pipe.index_meta = STORE, {"n_chunks": 10}
     return pipe, seen
 
 
@@ -285,7 +288,10 @@ def test_first_question_keeps_messages_and_search_without_rewrite(cfg, history):
     assert events[-1]["raw"] == "답변 [1]."  # 페이지가 앞 대화로 들고 있을 생성 원문
 
 
-def test_follow_up_searches_rewritten_query_and_puts_turns_before_contexts(cfg, capsys):
+def test_follow_up_searches_rewritten_query_and_puts_turns_before_contexts(capsys):
+    # S40의 turns 형식을 본다. 기본값(S51 block, rule)의 형식은 tests/test_multiturn.py가 본다
+    cfg = load_cfg(["index.scope=full", "app.multiturn.format=turns",
+                    "app.multiturn.reuse.mode=off"])
     pipe, seen = recording_pipe(cfg)
     calls = []
 
