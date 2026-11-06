@@ -201,8 +201,11 @@ def chat_events(pipe, cfg, rec: dict, corpus, message: str, history=None,
             # 페이지가 다음 질문에 보낼 청크 번호: 이 답변이 인용한 근거만(S51). 끄면 보내지 않는다
             cited = sorted({int(n) for n in CITE.findall(item["raw"]) if 1 <= int(n) <= len(ctx)})
             rows = [chunk_row(pipe, ctx[n - 1]) for n in cited] if mode != "off" else []
+            # 길이 제한으로 끝난 답변은 페이지가 답변 아래에 알린다(S41)
+            notice = cfg.app.cut_notice if item.get("finish_reason") == "length" else ""
             yield {"text": item["answer"] or cfg.app.no_answer, "done": True, "raw": item["raw"],
-                   "rows": rows, "contexts": [context_payload(c, corpus) for c in ctx]}
+                   "rows": rows, "notice": notice,
+                   "contexts": [context_payload(c, corpus) for c in ctx]}
         else:
             text += item
             yield {"text": text, "done": False}
@@ -240,6 +243,9 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
     def years() -> list[int]:
         return corpus.years()
 
+    def examples() -> list[str]:
+        return list(cfg.app.examples)
+
     def meetings(year: int) -> list[list[str]]:
         return [list(m) for m in corpus.meetings(year)]
 
@@ -255,7 +261,7 @@ def build(cfg, pipe, corpus, endpoint: Callable | None = None):
         # 동시 처리 수(app.concurrency)를 chat 그룹에 건다
         gr.api(chat, api_name="chat", concurrency_id="answer", **api)
         # 답변 생성이 큐를 잡고 있어도 문서를 볼 수 있게 문서 함수는 큐를 거치지 않는다
-        for fn in (years, meetings, documents, document):
+        for fn in (years, examples, meetings, documents, document):
             gr.api(fn, api_name=fn.__name__, queue=False, **api)
     return demo
 

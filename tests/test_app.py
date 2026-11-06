@@ -207,6 +207,19 @@ def test_chat_events_show_no_answer_notice_when_empty(cfg):
     assert list(app.chat_events(pipe, cfg, {}, CORPUS, "질의"))[-1]["text"] == cfg.app.no_answer
 
 
+@pytest.mark.parametrize(("finish", "expected"), [("length", True), ("stop", False), (None, False)])
+def test_chat_events_notice_only_when_cut_by_length(cfg, finish, expected):
+    """S41. 길이 제한으로 끝난 답변만 페이지가 알릴 글을 받는다."""
+    def stream(query, q_emb, history=(), search=None, prev=(), langsmith_extra=None):
+        yield "답변"
+        yield {"answer": "답변", "contexts": [CTX], "finish_reason": finish}
+
+    pipe = SimpleNamespace(embed=lambda q: q, stream=stream)
+    last = list(app.chat_events(pipe, cfg, {}, CORPUS, "질의"))[-1]
+    assert last["notice"] == (cfg.app.cut_notice if expected else "")
+    assert last["text"] == "답변"  # 답변 글에는 붙이지 않는다
+
+
 def test_doc_payload_returns_one_document_with_chunk_marks_and_no_labels(cfg):
     doc = {"doc_id": "a1", "date": "2020-01-02", "committee_name": "법제사법위원회",
            "meeting_number": "제1회", "session_number": "제2차", "agenda": "1. 안건",

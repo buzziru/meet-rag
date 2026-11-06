@@ -34,6 +34,7 @@ function connect() {
         client = await Client.connect(SPACE, { events: ["data", "status"], token });
         $("connection").hidden = true;
         loadYears().catch(() => findStatus("회의록 목록을 불러오지 못했습니다. 페이지를 새로 고쳐 주세요."));
+        loadExamples().catch(() => {}); // 추천 질문이 없어도 입력칸으로 물을 수 있다
         return client;
       } catch {
         $("connection").textContent = CONNECTING_TEXT;
@@ -131,14 +132,17 @@ async function ask(message) {
       showText(item.text);
       if (item.done) ({ raw, rows = [] } = item);
       // 클라이언트가 마지막 값을 한 번 더 보내므로 근거는 처음 한 번만 붙인다
+      if (item.done && item.notice && !answer.querySelector(".notice")) answer.append(el("p", "notice muted", item.notice));
       if (item.done && item.contexts.length && !answer.querySelector(".sources")) answer.append(renderSources(item.contexts));
     }
     // 답을 만들지 못한 질문은 앞 대화에 넣지 않는다
     if (raw) history = [...history, { question: message, answer: raw, rows }].slice(-HISTORY_TURNS);
     $("announce").textContent = "답변을 마쳤습니다.";
   } catch {
+    // 끝나지 않은 답변은 인용이 빠질 수 있어 지우고, 질문은 다시 보내기 쉽게 입력칸에 되살린다(S41 결정 사항 3)
     showText(FAILED_TEXT);
     $("announce").textContent = FAILED_TEXT;
+    if (!$("input").value.trim()) $("input").value = message;
     // Space가 재시작했을 수 있어 다음 요청 전에 새로 연결한다
     client = null;
     connecting = null;
@@ -162,6 +166,19 @@ $("new-chat").addEventListener("click", () => {
   $("messages").replaceChildren();
   $("intro").hidden = false;
 });
+
+/** 빈 화면의 추천 질문(S41). 질문 글은 Space 설정(app.examples)에서 받는다. 누르면 바로 보낸다. */
+async function loadExamples() {
+  if ($("examples").childElementCount) return; // 다시 연결해도 두 번 넣지 않는다
+  for (const text of await call("examples")) {
+    const button = el("button", "ghost-button", text);
+    button.type = "button";
+    button.addEventListener("click", () => {
+      if (!busy) ask(text);
+    });
+    $("examples").append(button);
+  }
+}
 
 function submit() {
   const message = $("input").value.trim();
@@ -336,6 +353,7 @@ const documents = picker($("document"), $("document-options"), (docId) => openDo
 const meetings = picker($("meeting"), $("meeting-options"), async (conference) => {
   const current = meetingTurn();
   findStatus("");
+  loading($("document"), true);
   try {
     const list = await call("documents", [conference]);
     if (!current()) return;
@@ -343,6 +361,8 @@ const meetings = picker($("meeting"), $("meeting-options"), async (conference) =
   } catch {
     if (current()) findStatus("문서 목록을 불러오지 못했습니다. 회의를 다시 골라 주세요.");
     return;
+  } finally {
+    if (current()) loading($("document"), false);
   }
   $("document").focus();
 });
@@ -350,6 +370,8 @@ const meetings = picker($("meeting"), $("meeting-options"), async (conference) =
 function resetSelection() {
   yearTurn();
   meetingTurn();
+  loading($("meeting"), false);
+  loading($("document"), false);
   $("year").value = "";
   meetings.set([]);
   documents.set([]);
@@ -357,12 +379,25 @@ function resetSelection() {
 
 async function loadYears() {
   if ($("year").options.length > 1) return; // 다시 연결해도 두 번 넣지 않는다
-  for (const year of await call("years")) {
+  const years = await call("years");
+  for (const year of years) {
     const option = el("option", "", String(year));
     option.value = year;
     $("year").append(option);
   }
   $("year").disabled = false;
+  // 질문 범위는 적재한 연도에서 채운다(점검 UI-6). 글에 연도를 박지 않는다
+  if (years.length) {
+    $("scope").textContent = `${Math.min(...years)}~${Math.max(...years)}년 국회 회의록에서 찾아 답하고, 답변마다 근거 원문을 붙입니다.`;
+  }
+}
+
+/** 목록을 불러오는 동안 칸 옆에 안내와 진행 표시를 둔다(S41, 사용자 결정 2026-11-06). 비활성 칸은 금지 표시
+ *  대신 진행 커서가 된다. */
+function loading(input, on) {
+  const field = input.closest(".field");
+  field.setAttribute("aria-busy", String(on));
+  field.querySelector(".loading").hidden = !on;
 }
 
 /** 문서 찾기 패널 안의 안내. 목록 호출이 실패하면 원인과 다음 행동을 적는다(화면 리뷰). */
@@ -377,15 +412,20 @@ $("year").addEventListener("change", async () => {
   documents.set([]);
   meetings.set([]);
   findStatus("");
+  loading($("document"), false);
+  loading($("meeting"), Boolean(year));
+  if (!year) return;
   // 화살표로 연도를 넘기는 동안은 요청하지 않는다. Space가 목록 요청을 하나씩(약 4초) 처리해, 중간 연도마다
   // 요청하면 마지막 목록까지 오래 걸렸다(일곱 번 넘기면 약 20초)
   await new Promise((done) => setTimeout(done, YEAR_SETTLE_MS));
   if (!current()) return;
   try {
-    const list = year ? await call("meetings", [year]) : [];
+    const list = await call("meetings", [year]);
     if (current()) meetings.set(list);
   } catch {
     if (current()) findStatus("회의 목록을 불러오지 못했습니다. 연도를 다시 골라 주세요.");
+  } finally {
+    if (current()) loading($("meeting"), false);
   }
 });
 
