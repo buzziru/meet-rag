@@ -19,7 +19,7 @@ from langsmith.run_trees import configure
 from omegaconf import OmegaConf
 
 from rag.display import MeetingInfoMover, WordReplacer, move_meeting_info, replace_words
-from rag.docs import Corpus, doc_body, doc_name, readable
+from rag.docs import Corpus, doc_body, doc_name, readable, shown_date
 from rag.gen_eval.checks import CITE
 from rag.generate import Pipeline, recipe
 from rag.index import load_cfg
@@ -155,7 +155,7 @@ def context_payload(c: dict, corpus) -> dict:
     """정적 페이지(S39b)에 주는 근거 하나. 값을 골라 내 라벨·분할 정보가 나가지 않는다. 본문은
     페이지가 글자로 넣으므로 이스케이프를 푼다."""
     start, end = corpus.chunk_span(c["doc_id"], c["text"]) or (-1, -1)
-    return {"n": c["n"], "date": c["date"], "committee_name": c["committee_name"],
+    return {"n": c["n"], "date": shown_date(c), "committee_name": c["committee_name"],
             "original": c["original"], "doc_id": c["doc_id"], "start": start, "end": end,
             "body": html.unescape(readable(render(c)))}
 

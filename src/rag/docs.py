@@ -7,6 +7,7 @@ import html
 import json
 import re
 from collections import defaultdict
+from datetime import date
 
 from rag.index import ROOT, corpus_meta
 from rag.speakers import chunk_speakers, render
@@ -16,12 +17,19 @@ CHUNK_START, CHUNK_END = "", ""
 
 
 def doc_name(d: dict) -> str:
-    return f"{d['date']} {d['committee_name']} {d['meeting_number']} {d['session_number']}"
+    return f"{shown_date(d)} {d['committee_name']} {d['meeting_number']} {d['session_number']}"
 
 
 def date_key(d: dict) -> tuple[int, ...]:
     """(연, 월, 일). 원천 날짜에 `2018년4월9일(월)`, `2000年6月28日(水)`, 공백이 섞여 있다."""
     return tuple(map(int, re.match(r"(\d{4})\D+(\d+)\D+(\d+)", d["date"]).groups()))
+
+
+def shown_date(d: dict) -> str:
+    """화면에 보이는 날짜. 원천의 여러 형식을 `2000년 6월 28일(수)` 하나로 맞춘다(S41). 모델 입력은
+    원천 그대로다."""
+    y, m, day = date_key(d)
+    return f"{y}년 {m}월 {day}일({'월화수목금토일'[date(y, m, day).weekday()]})"
 
 
 def readable(rendered: str) -> str:

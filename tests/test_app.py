@@ -230,7 +230,7 @@ def test_doc_payload_returns_one_document_with_chunk_marks_and_no_labels(cfg):
     labels = cfg.app.labels
     out = app.doc_payload(pipe, cfg, corpus, "a1", 2, 12)
     assert set(out) == {"name", "agenda", "original", "body"}
-    assert "2020-01-02 법제사법위원회 제1회 제2차" == out["name"]
+    assert "2020년 1월 2일(목) 법제사법위원회 제1회 제2차" == out["name"]
     assert f"**{labels.chunk_start}**" in out["body"] and "<b>근거</b>" in out["body"]
     assert labels.chunk_start not in app.doc_payload(pipe, cfg, corpus, "a1", -1, -1)["body"]
 
