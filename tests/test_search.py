@@ -1,4 +1,5 @@
 import json
+import sys
 
 import numpy as np
 import pytest
@@ -22,6 +23,7 @@ from rag.retrieve import (
     top_docs,
     weighted_doc_scores,
 )
+from rag.search import main as search_main
 from rag.search import query_files, query_list, write_run
 
 
@@ -366,3 +368,39 @@ def test_query_embeddings_never_embeds_locally(tmp_path, monkeypatch):
     with pytest.raises(SystemExit, match="캐시가 없다"):
         search.query_embeddings(cfg, ["q1"], new)
     assert not new.exists()
+
+
+def test_embed_queries_stops_before_embedding_when_cache_exists(tmp_path, monkeypatch):
+    vm, emb = tmp_path / "vm.jsonl", tmp_path / "queries.npz"
+    vm.write_text(json.dumps({"qid": "q1", "query": "질의"}) + "\n", encoding="utf-8")
+    emb.write_bytes(b"colab")
+    args = ["index.scope=full", "search.mode=embed-queries",
+            f"paths.queries_dev='{vm.as_posix()}'", f"paths.query_emb='{emb.as_posix()}'"]
+    monkeypatch.setattr("rag.search.embed_queries", lambda cfg, texts: pytest.fail("임베딩했다"))
+    monkeypatch.setattr("rag.search.ROOT", tmp_path)
+    monkeypatch.setattr(sys, "argv", ["rag.search", *args])
+    with pytest.raises(SystemExit, match="search.overwrite"):
+        search_main()
+    assert emb.read_bytes() == b"colab"
+    seen = []
+    monkeypatch.setattr("rag.search.embed_queries", lambda cfg, texts: seen.append(texts) or "e")
+    monkeypatch.setattr("rag.search.save_query_emb", lambda cfg, path, qids, e: seen.append(qids))
+    monkeypatch.setattr(sys, "argv", ["rag.search", *args, "search.overwrite=true"])
+    search_main()
+    assert seen == [["질의"], ["q1"]]
+
+
+def test_retriever_stops_when_bm25_rows_differ_from_chunks(tmp_path):
+    cfg = _tmp_cfg(tmp_path, ["+exp=exp001", "retriever.fusion.depth=3",
+                              "retriever.bm25.name=test"])
+    d = tmp_path / "kure-v1-512" / "dev-small"
+    _write_text_index(d, [("a", "예산 심사"), ("b", "국정감사 질의")], [[0.9, 0.0], [0.5, 0.0]])
+    Retriever(cfg)  # BM25 인덱스를 만든다
+    rows = [("a", "예산 심사"), ("b", "국정감사 질의"), ("c", "법안 처리")]
+    (d / "chunks.jsonl").write_text(
+        "\n".join(json.dumps({"chunk_id": i, "doc_id": doc, "text": text}, ensure_ascii=False)
+                  for i, (doc, text) in enumerate(rows)) + "\n", encoding="utf-8")
+    np.save(d / "emb" / "part-00000.npy",
+            np.asarray([[0.9, 0.0], [0.5, 0.0], [0.1, 0.0]], dtype=np.float32))
+    with pytest.raises(SystemExit, match="청크 3개와 BM25 2행"):
+        Retriever(cfg)

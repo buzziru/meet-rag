@@ -248,11 +248,13 @@ def same_statements(rows, statements: list[str]) -> bool:
 
 def valid_verdicts(statements: list[str]):
     """verdicts 응답이 입력 진술을 같은 순서로 담고 값이 정해진 값 안인지. speaker_unclear는
-    진술을 뒷받침한 근거 내용의 발언자를 구분할 수 없다는 표시다(기준 문서 F7)."""
+    진술을 뒷받침한 근거 내용의 발언자를 구분할 수 없다는 표시다(기준 문서 F7). reason은
+    report가 발언자 불일치를 셀 때 읽어, 없으면 judge를 마친 뒤 멈추므로 여기서 본다(S50)."""
     def ok(out: dict) -> bool:
         vs = out.get("verdicts")
         return same_statements(vs, statements) and all(
-            v.get("verdict") in (0, 1) and isinstance(v.get("speaker_unclear"), bool) for v in vs)
+            v.get("verdict") in (0, 1) and isinstance(v.get("speaker_unclear"), bool)
+            and isinstance(v.get("reason"), str) for v in vs)
     return ok
 
 

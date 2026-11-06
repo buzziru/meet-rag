@@ -72,3 +72,11 @@ def test_latency_stops_before_measuring_when_output_exists(tmp_path, monkeypatch
                                       f"paths.rerank_latency='{latency.as_posix()}'"])
     with pytest.raises(SystemExit, match="search.overwrite"):
         rerank_main()
+
+
+def test_test_pairs_need_explicit_allow(tmp_path, monkeypatch):
+    monkeypatch.setattr("rag.rerank.jev_score", lambda cfg: pytest.fail("후보 쌍을 보냈다"))
+    monkeypatch.setattr(sys, "argv", ["rag.rerank", *_rerank_args(tmp_path), "index.scope=full",
+                                      "search.queries=test", "retriever.rerank.backend=jev"])
+    with pytest.raises(SystemExit, match="allow_test"):
+        rerank_main()

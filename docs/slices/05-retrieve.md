@@ -27,7 +27,7 @@ S4의 512/64 인덱스로 dev-small·dev-full 질의를 검색해 순위 파일�
 - `search.mode`로 실행 방식을 고른다
   - `run`(기본): 검색과 순위 파일 쓰기. 질의 임베딩 캐시를 읽기만 한다. 캐시가 없거나 질의 목록이 다르면 로컬에서 임베딩하지 않고 멈춘다(사용자 결정 2026-10-26, 이슈 #142. 로컬 CPU 임베딩은 적은 규모도 오래 걸리고, 캐시 값이 바뀌어 검색 결과와 생성 평가가 흔들리는 것을 막는다). 캐시는 Colab `embed-queries`로 만든다. 지금 `embed-queries`는 `index.scope=full`에서만 돌아 dev-small 캐시를 Colab에서 만들려면 범위를 넓혀야 한다(생성 단계에서 dev-small을 다시 쓸 계획이 없어 지금 넓히지 않음)
   - `export-queries`(로컬): dev 질의를 `paths.queries_dev`(`data/processed/queries_summary_q.dev.jsonl`)로 내보낸다. jsonl에 `qid`·`query` 키만 쓰고(답변 등 다른 필드는 VM에 보내지 않는다) dev-full 채점 순서(`load_gold`)를 따른다. `test` 질의는 들어가지 않는다
-  - `embed-queries`(VM): `paths.queries_dev`만 읽어 임베딩하고 `paths.query_emb`에 저장한다. 원본 질의 파일과 분할 파일을 읽지 않아 VM에 둘 필요가 없다. `index.scope=full`에서만 쓴다
+  - `embed-queries`(VM): `paths.queries_dev`만 읽어 임베딩하고 `paths.query_emb`에 저장한다. 원본 질의 파일과 분할 파일을 읽지 않아 VM에 둘 필요가 없다. `index.scope=full`에서만 쓴다 이후 변경: S50부터 캐시가 있으면 `search.overwrite=true` 없이 멈춘다. 로컬에서 실행하면 Colab 캐시가 CPU 값으로 조용히 바뀌었기 때문이다(점검 R1-2)
 - VM에 올리는 입력은 `queries_summary_q.dev.jsonl` 하나다. `colab_job.py upload`가 모든 `qid`가 dev인지 확인한다. 코퍼스·인덱스는 올리지 않는다
 - 캐시는 `data/index/{임베딩}/queries-{범위}.npz`다. dev-small 캐시(`queries-dev-small.npz`)는 경로가 그대로라 S4 결과를 다시 쓴다
 - (S21) 캐시 옆에 지문 `queries-{범위}.npz.basis.json`(model, revision, query_prompt)을 함께 쓰고 읽을 때 대조한다. VM에서 만든 캐시는 지문 파일도 함께 내려받는다. 지문 없는 캐시는 `adopt_basis=true`로 지문만 쓴다(`docs/slices/21-eval-guards.md`)

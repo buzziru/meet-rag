@@ -17,7 +17,7 @@ import pandas as pd
 from rag.conditions import build_extractor
 from rag.eval.metrics import load_gold
 from rag.eval_multi.metrics import frozen_path
-from rag.index import ROOT, encoder, load_cfg, load_model, write_guarded
+from rag.index import ROOT, encoder, load_cfg, load_model, refuse_existing, write_guarded
 from rag.retrieve import (
     ChunkStore,
     Retriever,
@@ -133,6 +133,8 @@ def export_queries(cfg) -> None:
 def embed_vm_queries(cfg) -> None:
     """VM 업로드 파일만 읽어 임베딩한다. 원본 질의·분할·동결 세트 파일이 없는 VM에서 쓴다."""
     files = query_files(cfg)
+    # 로컬에서 실행하면 Colab 캐시가 CPU 값으로 바뀌고 지문 대조도 지난다(S50)
+    refuse_existing(files["emb"], cfg.search.overwrite)
     with files["vm"].open(encoding="utf-8") as f:
         rows = [json.loads(line) for line in f]
     qids = [r["qid"] for r in rows]

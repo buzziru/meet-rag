@@ -97,6 +97,10 @@ class BM25Retriever:
                 )
         self.model = bm25s.BM25.load(out, load_vocab=True)
 
+    @property
+    def num_docs(self) -> int:
+        return self.model.scores["num_docs"]
+
     def query_ids(self, texts: list[str]) -> list[list[int]]:
         return [self.model.get_tokens_ids(doc) for doc in forms(self.kiwi, texts, self.tags)]
 
