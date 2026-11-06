@@ -44,3 +44,31 @@
 ## 노트북과 결정의 순서
 
 결정을 내리는 조각이 아니다. 결과는 회고의 성과 주장 범위에 사실로 적는다. 결과로 judge나 기준을 바꾸지 않는다.
+
+## 결과 (2026-11-06)
+
+커밋: 구현 5f4fafd, 감사 반영 cb70640
+
+실행: `PYTHONUTF8=1 LANGSMITH_TRACING=false doppler run -- uv run python -m rag.gen_eval.perturb +exp=current`(gen-full, judge j_v13). judge API 호출 723회(모두 200), 저장된 응답 415회. 출력 `paths.gen_perturb`와 같은 이름의 `.summary.json`
+
+| 변형 | 본 지표 | 표본 | 채점 | 기준 평균 → 변형 평균 | 나빠짐 / 같음 / 나아짐 |
+| --- | --- | ---: | ---: | --- | --- |
+| unsupported | 충실성 | 50 | 49 | 1.000 → 0.686 | 49 / 0 / 0 |
+| speaker_swap | 발언자 불일치 비율 | 50 | 50 | 0.007 → 0.753 | 50 / 0 / 0 |
+| off_topic | 답변 관련성 | 50 | 50 | 0.91 → 0.00 | 50 / 0 / 0 |
+
+- 세 유형 모두 놓친 것이 없다. 표본 50이라 검출률 95% 구간(Wilson) 하한은 약 93%다
+- 충실성은 근거 없는 진술 하나로 평균 0.31 떨어졌다. 같은 설정 재실행 반폭(0.031, D-53)의 약 10배다
+- unsupported에서 채점되지 않은 1건은 judge가 `verdicts` 형식을 재요청 뒤에도 맞추지 못한 경우다(`verdicts 형식 오류`). 오류를 놓친 것이 아니다
+- 표본 대상: 충실성·관련성이 계산된 기준 질의 321개, 그중 speaker_swap이 가능한 질의 216개
+- 보여 주지 못한 것: 변형이 일부러 뚜렷하다. 미묘한 오류(숫자 하나, 부정 뒤집기, 근거 일부만 옮기기)의 검출률과 맞는 답을 깎는 비율은 모른다. 해석과 성과 주장 범위는 `docs/retrospective/project-rag.md` 3.4·11절(PR #248)
+
+검증
+
+- `uv run pytest -q` 585 passed(감사 반영 뒤 새 테스트 8개 포함), `uv run ruff check .` 통과
+- `slice-verifier`: 실행 항목 외 완료 기준 통과. 망가뜨린 사본(비교 방향 부호를 뒤집는 pytest 플러그인)에서 요약 테스트가 실패했다
+- `protocol-auditor`: 위반 없음. 보고 둘(요약 파일을 시작할 때 보지 않음, n이 대상보다 크거나 1이면 표본이 조용히 줄거나 off_topic이 자기 답변을 넣음)을 cb70640에서 고쳤다
+
+### 실행 중 있었던 일
+
+첫 실행 명령을 `doppler run -- env PYTHONUTF8=1 LANGSMITH_TRACING=false uv run …`으로 써서 전역 거부 규칙 `doppler run -- env:*`(비밀 값 출력 방지)에 세 번 걸렸다. 메인이 원인을 확인하지 않고 판정기 탓으로 추론해 사용자에게 권한 완화를 권했고, 사용자 지적으로 설정을 확인해 원인을 찾았다. 환경 변수를 `doppler` 앞에 두는 CLAUDE.md 형태로 실행했다. 경위는 `docs/retrospective/harness-and-operations.md` "Claude가 저지른 큰 실수 두 가지"(PR #248)
