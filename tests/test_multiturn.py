@@ -264,3 +264,22 @@ def test_block_v2_fills_refusal_from_prompt(cfg):
     block = OmegaConf.load(ROOT / "configs/multiturn/block_v2.yaml")
     user = build_messages(cfg.prompt, [CTX], "질문", TURNS, block)[1]["content"]
     assert f"은 {cfg.prompt.refusal}." in user and "{refusal}" not in user
+
+
+@pytest.mark.parametrize(("first", "follow"), [("", False), ("앞 답 [1].", True)])
+def test_run_conversation_treats_turn_after_empty_answer_as_first(cfg, monkeypatch, first, follow):
+    """앞 턴 답이 비어 앞 대화에 못 들어가면 다음 턴은 첫 질문이다.
+    되풀이·앞 근거 검사를 하지 않는다."""
+    answers = {"첫": first, "둘": "답 [1]."}
+
+    def fake_events(pipe, cfg, rec, corpus, q, history, follow_fn, log):
+        log["contexts"] = []
+        yield {"raw": answers[q], "text": answers[q], "rows": []}
+
+    monkeypatch.setattr(multiturn_check, "chat_events", fake_events)
+    conv = {"cid": "c01", "turns": [{"q": "첫"}, {"q": "둘", "needs_prev": False}]}
+    rows = multiturn_check.run_conversation(None, cfg, {}, None, None, conv)
+    second = rows[1]
+    assert second["follow"] is follow
+    assert ("repeat" in second["checks"]) is follow
+    assert ("reuse_match" in second["checks"]) is follow

@@ -47,14 +47,16 @@ def run_conversation(pipe, cfg, rec: dict, corpus, follow, conv: dict) -> list[d
         prev_raw = history[-1]["answer"] if history else None
         ctx = log.get("contexts", [])
         reused = [c["doc_id"] for c in ctx if c["stages"].get("reused")]
-        row = {"cid": conv["cid"], "turn": i + 1, "q": turn["q"], "label": turn,
+        # 앞 턴이 앞 대화에 들어가지 못했으면 앱은 이 턴을 첫 질문으로 처리한다
+        row = {"cid": conv["cid"], "turn": i + 1, "follow": bool(history), "q": turn["q"],
+               "label": turn,
                "search": log.get("search"), "meta": log.get("meta"), "prev_rows": log.get("prev"),
                "reused_docs": reused, "first_token_s": log.get("first_token_s"),
                "contexts": [{"n": c["n"], "doc_id": c["doc_id"], "date": c["date"],
                              "committee_name": c["committee_name"]} for c in ctx],
                "raw": final["raw"], "shown": final["text"],
                "checks": checks(cfg, final["raw"], prev_raw, len(ctx))}
-        if i and "needs_prev" in turn:
+        if history and "needs_prev" in turn:
             row["checks"]["reuse_match"] = bool(reused) == turn["needs_prev"]
         out.append(row)
         if final["raw"]:  # 페이지와 같이 답을 만들지 못한 턴은 앞 대화에 넣지 않는다
@@ -103,7 +105,7 @@ def main() -> None:
         with out.open("w", encoding="utf-8", newline="\n") as f:
             f.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
         doc.write_text(reading_doc(rows), encoding="utf-8", newline="\n")
-    follow_rows = [r for r in rows if r["turn"] > 1]
+    follow_rows = [r for r in rows if r["follow"]]
     c = [r["checks"] for r in follow_rows]
     print(f"{out.relative_to(ROOT)}: 대화 {len(convs)}개, 후속 답변 {len(c)}개, "
           f"인용 누락 {sum(x['uncited'] for x in c)}, "
