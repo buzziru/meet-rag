@@ -53,6 +53,7 @@ S5 완료 후 베이스라인 dev-full 점수로 SPEC 미결 2(수치 목표)를
   - [x] 코드 리뷰 R3 앱·배포: S48 병합 뒤 `app`, `display`, `docs`, `deploy/`를 보고, 평가 설정과 배포 설정의 차이를 대조한다 → docs/reviews/2026-11-pipeline-review.md
   - [x] S50 평가·실행 안전장치: 점검 C 항목 R2-3, R1-2, R1-4, R1-5, R1-8, R2-5를 고친다(`docs/reviews/2026-11-pipeline-review.md`). 결과 값은 바뀌지 않는다. R2-3은 judge 입력 처리에 닿아 D-49 동결 해석을 지시서에서 정한다 → slices/50-run-guards.md
 - [x] S53 judge 변형 시험(사용자 지시·승인 2026-11-06): 답변을 일부러 망가뜨려 judge가 잡는지 잰다. 지시서 `docs/slices/53-judge-perturb.md`, 결과는 회고 성과 주장 범위에 반영 → slices/53-judge-perturb.md
+- [x] 회고 보강(S41 뒤): `docs/retrospective/`의 두 편에 공개 뒤 첫 토큰 지연, 공개 주소, 11/5 이후 작업일 분포를 더한다(사용자 결정 2026-11-06, 지금 쓰고 공개 뒤 보강). 회고는 진행 문서라 본문을 그대로 고친다(`docs/CLAUDE.md` 문서 종류 표) → docs/retrospective/
 
 ## 리팩터링 (코드 리뷰 2026-10)
 
