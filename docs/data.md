@@ -97,7 +97,7 @@ data/
 | `Validation/02.라벨링데이터/VL_특별위원회.zip` | `089a069190c6ad4716065a1e0b57fef168bff1e30a1a0c6ad5cd4a434771708e` |
 | `데이터설명서.hwp` | `578c67bce3202d046dfa9de70b8bd81609e74f6a65df619dd3bdf5c95bfe6a89` |
 
-적재 산출물 중 저장소에 지문이 없던 두 파일도 같은 때 쟀다. 같은 때 잰 코퍼스(`processed/corpus_context.jsonl`)는 D-20 값 `98080d59…`과 같았다.
+처리 산출물 중 저장소에 지문이 없던 두 파일도 같은 때 쟀다. 질의 파일은 `rag.ingest`가, 발언 구간 파일은 `rag.speakers --export-spans`가 같은 라벨 zip에서 만든다. 같은 때 잰 코퍼스(`processed/corpus_context.jsonl`)는 D-20 값 `98080d59…`과 같았다.
 
 | 파일(`data/` 아래) | SHA-256 |
 | --- | --- |
