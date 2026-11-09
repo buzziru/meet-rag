@@ -25,7 +25,7 @@ S35·S36의 로컬 앱을 비공개 HF Space에 올린다. 재정렬을 끈 구�
 | `processed/speaker_spans.json`, `processed/speaker_spans.json.basis.json` | 약 10MB |
 
 - **Space 저장소**: `deploy/space/`에 진입점 `app.py`, Space 카드 `README.md`, `requirements.txt`를 두고, `src/`, `configs/`와 함께 올린다. 데이터 파일은 넣지 않는다(D-74). 진입점은 `rag.app`과 같은 구성(`+exp=current`, `retriever.rerank.enabled=false`)으로 시작하고, 시작 시간과 최고 메모리를 로그에 남긴다 이후 변경: S39부터 재정렬을 켠 구성으로 시작한다(D-84)
-- **시크릿과 추적**: 생성 API 키와 LangSmith 값을 `doppler run -- hf …`와 `--secrets NAME`으로 넣어 값을 명령에 적지 않는다. 비공개 볼륨에 토큰이 따로 필요하면 Dataset 읽기 토큰도 같게 넣는다(문서에 적혀 있지 않아 완료 기준 1에서 본다). `LANGSMITH_TRACING=true`는 Space 변수로 둔다(D-71) 이후 변경: S49부터 `COMMIT`도 함께 올린다. Space 코드를 `main`과 대조하려고 더했다
+- **시크릿과 추적**: 생성 API 키와 LangSmith 값을 `doppler run -- hf …`와 `--secrets NAME`으로 넣어 값을 명령에 적지 않는다. 비공개 볼륨에 토큰이 따로 필요하면 Dataset 읽기 토큰도 같게 넣는다(문서에 적혀 있지 않아 완료 기준 1에서 본다). `LANGSMITH_TRACING=true`는 Space 변수로 둔다(D-71) 이후 변경: S49부터 `COMMIT`도 함께 올린다. Space 코드를 `main`과 대조하려고 더했다. 이후 변경: S41(D-92 결정 4)부터 공개 Space는 `LANGSMITH_TRACING=false`다. Space를 공개해 방문자 질문을 외부에 쌓지 않으려는 것이다
 - **설정**: 저장소 이름은 `configs/config.yaml`의 `deploy` 키에, 구간 파일 경로는 `paths`에 둔다. 코드에 직접 쓰지 않는다
 - **결정 기록**: 잰 값으로 호스팅과 벡터스토어(전수 검색 유지 여부)를 정해 DECISIONS에 적고, `docs/SPEC.md` 자원 제약의 "HF Spaces 무료 CPU"를 고친다
 
