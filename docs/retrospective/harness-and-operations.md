@@ -134,7 +134,7 @@ RAG·생성 평가 개념, PR로 에이전트와 일하는 방식에 적응하�
 | 점검표 스킬 | `protocol-guard`(P1\~P13), `exp-judgment` |
 | 훅 | 커밋 타입, 병합된 브랜치 push 차단, `data/` 삭제 차단, 파일 손상 검사, 세션 소식, 마무리 알림 |
 | 규약 | 루트 CLAUDE.md(명령, 금지, 문서 위치), `src/`·`tests/`·`docs/` CLAUDE.md, `.claude/rules/`(git, 세션 병행, 노트북) |
-| 자동화 | GitHub Actions 일일 종합 이슈와 일일 코드 리뷰 |
+| 자동화 | GitHub Actions 일일 종합 이슈와 일일 코드 리뷰(프로젝트 종료로 2026-11-09에 껐다) |
 | 기록 | `docs/harness/adr/`(결정 하나에 파일 하나), `_workspace/`(진행 기록, 대기 목록, 세션 공유 기록) |
 | 전역 | `~/.claude/rules/`, 디자인 스킬(ADR-0106) |
 | worker | opencode worker 절차는 이 저장소의 `.claude/skills/meet-rag/references/worker-pool.md`(ADR-0105, 0107). 전역이 아니라 옮겨 가야 한다 |
@@ -176,6 +176,7 @@ RAG·생성 평가 개념, PR로 에이전트와 일하는 방식에 적응하�
 | 작성과 검증의 분리 | 에이전트 넷 | 역할만 가져가고 점검 항목은 새로 쓴다 |
 | 폴더별 규약 | `src/`, `tests/`, `docs/` CLAUDE.md | 틀만 가져가고 내용은 새로 쓴다 |
 | 코드 리뷰 | PR 전 리뷰는 판정 코드만(코드 PR의 약 20%, ADR-0104), 나머지는 일일 리뷰(ADR-0080, 0081, 0104) | 첫날부터 켠다. 범위를 위험도가 아닌 경로로 정한다 |
+| 일일 종합·코드 리뷰 워크플로 | `.github/workflows/daily-pr-digest.yml`, `.github/scripts/daily_pr_digest.py`와 테스트, `.github/prompts/` 지시 둘. 종합과 코드 리뷰를 Messages API로 따로 부르고(도구 없음), 인증은 워크로드 ID federation(secret 4개). 2026-11-09 프로젝트 종료로 껐다 | 템플릿 없이 이 저장소에서 가져와 고친다. 리뷰 범위(`CODE_DIRS`, `CODE_EXTS`)와 지시 둘은 새로 쓰고, 콘솔에서 새 저장소용 federation 규칙을 만든다. 시행착오는 ADR-0046(공개 저장소의 외부 PR 거르기, subject가 변경 불가 형식 `repo:소유자@ID/저장소@ID:ref:…`라 prefix가 맞지 않던 일), ADR-0047(`claude-code-action`이 프로모션 크레딧을 못 써 `billing_error`, 구독 OAuth 토큰 안은 보안 우려로 닫음) |
 | 바뀌는 값은 한 곳 | `configs/exp/current.yaml`, ADR-0076 | 기준 설정이 있으면 그대로 |
 | 미룬 일의 기록처 | ADR-0078 | PR 본문만 기록처로 쓰지 않는다 |
 | PR 리뷰 가이드 | `pr-briefer`, 판단할 곳에 결정 표시 | 그대로 |
