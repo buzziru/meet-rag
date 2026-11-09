@@ -53,6 +53,12 @@ def test_documents_are_named_by_meeting_and_numbered_only_when_needed(corpus):
     assert corpus.documents("B") == [("2018년 11월 7일(수) 법제사법위원회 제1회 제1차", "b1")]
 
 
+def test_unknown_meeting_returns_nothing_and_stores_nothing(corpus):
+    before = len(corpus.docs)
+    assert corpus.documents("없는 회의") == []
+    assert len(corpus.docs) == before
+
+
 def test_read_returns_the_chosen_document_from_file(corpus):
     assert corpus.read("a2")["context"] == "둘째 문서"
     assert corpus.read("c1")["context"] == "앞선 해"

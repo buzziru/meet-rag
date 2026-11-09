@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import time
 from datetime import date
 from types import SimpleNamespace
 
@@ -351,6 +352,14 @@ def test_clean_history_strips_citations_and_caps_turns_and_length(cfg):
 ])
 def test_clean_history_drops_malformed_turns(cfg, history):
     assert app.clean_history(history, cfg) == []
+
+
+def test_clean_history_handles_long_whitespace_quickly(cfg):
+    history = [{"question": "q", "answer": " " * 200_000 + "답 [1][2] 끝 [3]."}]
+    start = time.perf_counter()
+    out = app.clean_history(history, cfg)
+    assert time.perf_counter() - start < 1  # 예전 정규식은 공백 2만 자에 약 9초
+    assert out == [{"question": "q", "answer": "답 끝."}]
 
 
 def test_clean_history_keeps_valid_turns_among_malformed(cfg):

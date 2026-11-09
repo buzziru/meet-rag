@@ -110,7 +110,9 @@ def client_ip(request) -> str:
     return forwarded[-1] if forwarded else (request.client.host if request.client else "")
 
 
-CITATION = re.compile(r"\s*(?:\[\d+\])+")
+# 공백 구간의 첫 글자에서만 맞춰 본다. 앞 대화는 방문자가 보내 긴 공백이 오면 `\s*`가 위치마다
+# 다시 훑어 시간이 길이의 제곱으로 늘고, 동시 처리 1인 채팅이 그동안 막힌다(완료 전 코드 리뷰)
+CITATION = re.compile(r"(?<!\s)\s*(?:\[\d+\])+")
 
 
 def clean_history(history, cfg) -> list[dict]:

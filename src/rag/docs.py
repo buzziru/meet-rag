@@ -84,7 +84,7 @@ class Corpus:
 
     def documents(self, conf: str) -> list[tuple[str, str]]:
         """(이름, 문서 번호). 같은 회의의 문서는 이름이 같아 순번으로 구별한다."""
-        docs = self.docs[conf]
+        docs = self.docs.get(conf, [])  # 공개 API라 없는 회의 번호로 빈 항목을 쌓지 않는다
         return [(doc_name(d) if len(docs) == 1 else f"{doc_name(d)} #{i}", d["doc_id"])
                 for i, d in enumerate(docs, 1)]
 
