@@ -68,6 +68,42 @@ data/
 | `Validation/01.원천데이터/VS_*` | 1,792 / 139 / 1,801 / 230 / 438 | xlsx | 7.9 / 0.6 / 7.7 / 1.0 / 2.0 |
 | `Validation/02.라벨링데이터/VL_*` | 위와 동일 | json | 6.9 / 0.9 / 6.6 / 1.0 / 1.8 |
 
+### 원천 지문 **[실측]**
+
+프로젝트를 마치며 로컬 `data/`를 지우기 전에 쟀다(2026-11-09). 원천 파일의 수정 시각은 모두 2026-08-06이다(받은 날짜로 추정한다). AI Hub 화면의 버전 표기는 기록하지 않았다. 다시 받은 원천의 SHA-256이 아래와 같으면 같은 판이다. 다르면 `rag.ingest`를 다시 돌려 코퍼스 SHA를 D-20 값과 대조한다. 적재는 라벨 zip(`TL_*`, `VL_*`)만 읽으므로(`src/rag/ingest.py`) 원천 xlsx나 Sublabel만 다르면 처리 결과는 같다.
+
+| 파일(`data/` 아래) | SHA-256 |
+| --- | --- |
+| `Sublabel/SbL.zip` | `b888e4cae700e82c3e75aa6e6d328855078e5f4fe4f75c8b6fcebcd057be4a6e` |
+| `Training/01.원천데이터/TS_국정감사.zip` | `4091246c86ecf4e3190e0ff868fa336d1f18561f00d5233a4822d1473a5149d7` |
+| `Training/01.원천데이터/TS_본회의.zip` | `4e70732235626e945f1bdea50946c2fef708d4a4d0962bf22a76d583aa6c8f8c` |
+| `Training/01.원천데이터/TS_소위원회.zip` | `f2be215690914e30ddcee5c46a70e8e067563ca792bab63ed7bd216e0325ee44` |
+| `Training/01.원천데이터/TS_예산결산특별위원회.zip` | `ccf3840aded7487d4fcee96b5f1a67644fce2f54d2eabc13acca8c2c1a329c28` |
+| `Training/01.원천데이터/TS_특별위원회.zip` | `a827c38217304b10e1cd3193bf4d45162db24591b3114f092cd9c7cca4fc0a52` |
+| `Training/02.라벨링데이터/TL_국정감사.zip` | `248d60ff26f37c71b7f07196c112bc2fab1eb1f1bfa4a3c41ed413248fa0a0a3` |
+| `Training/02.라벨링데이터/TL_본회의.zip` | `4156d71a3a3d865c373f23d4925a3201066413616f10b1fc09e6d5f3cc9a36a1` |
+| `Training/02.라벨링데이터/TL_소위원회.zip` | `5a20bbe12365faf9a8829dd5102ab40c715c974b6b53b10ade8652fe8f46062b` |
+| `Training/02.라벨링데이터/TL_예산결산특별위원회.zip` | `842a214ae657b17cd96a026cb33aaa7ceae5e4f175ba95cf28820d05498bfed9` |
+| `Training/02.라벨링데이터/TL_특별위원회.zip` | `0586797e901acf23f2e5863d12ea2a5ea53f0a87690f815193a9ce75c39c811b` |
+| `Validation/01.원천데이터/VS_국정감사.zip` | `b2b6b7370cb442950b6528ae6729297d9b3a6d4c6a7716a0927f2480c2ba7d5f` |
+| `Validation/01.원천데이터/VS_본회의.zip` | `681fee4a12ef9200e6646bd678d6cc99beb3357b03423bc1fcbb42f7754f4ed9` |
+| `Validation/01.원천데이터/VS_소위원회.zip` | `f5a97e44792ed55e128014afde96012ddbb9316868b64ee8c0452fdeca84b003` |
+| `Validation/01.원천데이터/VS_예산결산특별위원회.zip` | `c0a23d77f4c1a0f3b9e35f09524be86fd676701a47ebb2b50b9ed6f2308a06be` |
+| `Validation/01.원천데이터/VS_특별위원회.zip` | `bd3fcfc242075a76dca428ef72a6d8e292b2db57ac8f21323e43c198d4e6b676` |
+| `Validation/02.라벨링데이터/VL_국정감사.zip` | `82568fa9a3d1e4c8de6c986f7bfb4b68d72341b97eda2e7794cbbb6d0c039094` |
+| `Validation/02.라벨링데이터/VL_본회의.zip` | `d3572d66c2f9531e9fdea34e3210147d6aa60bdfa05485ae2e92dbec8a45f96f` |
+| `Validation/02.라벨링데이터/VL_소위원회.zip` | `4eebd5bb8fa4e632b62dcc434998294cf3a5dc9fab423cbd8a4e1c226c91c014` |
+| `Validation/02.라벨링데이터/VL_예산결산특별위원회.zip` | `bbd2abec093d064ad745de4fb21bddd02fe014f2d56487f2523b53f2f1b7f392` |
+| `Validation/02.라벨링데이터/VL_특별위원회.zip` | `089a069190c6ad4716065a1e0b57fef168bff1e30a1a0c6ad5cd4a434771708e` |
+| `데이터설명서.hwp` | `578c67bce3202d046dfa9de70b8bd81609e74f6a65df619dd3bdf5c95bfe6a89` |
+
+처리 산출물 중 저장소에 지문이 없던 두 파일도 같은 때 쟀다. 질의 파일은 `rag.ingest`가, 발언 구간 파일은 `rag.speakers --export-spans`가 같은 라벨 zip에서 만든다. 같은 때 잰 코퍼스(`processed/corpus_context.jsonl`)는 D-20 값 `98080d59…`과 같았다.
+
+| 파일(`data/` 아래) | SHA-256 |
+| --- | --- |
+| `processed/queries_summary_q.jsonl` | `1643b0478292c975a2bc2e9067689cfc1c4a85993e667aa7cf417140badc7b96` |
+| `processed/speaker_spans.json` | `94bf9f9e9d927f77ad7317b78064997bd8d36f965d53b3f028023a4f8e64ae44` |
+
 **압축을 풀 필요가 없다.** `zipfile`로 아카이브 안에서 파일명 목록과 개별 파일을 바로 읽을 수 있다.
 라벨 전건(39,633개)을 열어 `json.loads`까지 8.0초다. **[전수]**
 
